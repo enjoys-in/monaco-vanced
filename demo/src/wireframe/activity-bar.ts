@@ -51,11 +51,6 @@ export function wireActivityBar(
     const svgEl = btn.querySelector("svg");
     if (svgEl) svgEl.style.cssText = "width:22px;height:22px;";
     btn.addEventListener("click", () => {
-      if (id === "settings-gear") {
-        eventBus.emit("file:open", { uri: "settings.json", label: "Settings" });
-        return;
-      }
-      if (!isTop) return;
       if (activeId === id) {
         apis.sidebar?.toggle();
       } else {
@@ -68,10 +63,21 @@ export function wireActivityBar(
   }
 
   function updateAll() {
+    // Update top buttons
     const topBtns = dom.activityBar.children;
     for (let i = 0; i < topBtns.length; i++) {
       const btn = topBtns[i] as HTMLElement;
       const icon = ICONS[i];
+      if (!icon) continue;
+      const isActive = icon.id === activeId;
+      btn.style.color = isActive ? C.activeIcon : C.inactiveIcon;
+      btn.style.borderLeft = `2px solid ${isActive ? C.fgBright : "transparent"}`;
+    }
+    // Update bottom buttons
+    const bottomBtns = dom.activityBottom.children;
+    for (let i = 0; i < bottomBtns.length; i++) {
+      const btn = bottomBtns[i] as HTMLElement;
+      const icon = BOTTOM_ICONS[i];
       if (!icon) continue;
       const isActive = icon.id === activeId;
       btn.style.color = isActive ? C.activeIcon : C.inactiveIcon;

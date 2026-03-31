@@ -10,22 +10,12 @@ export function buildShell(root: HTMLElement): DOMRefs {
 
   // ── Title Bar ──────────────────────────────────────────────
   const titleBar = el("div", {
-    style: `display:flex;align-items:center;height:30px;min-height:30px;background:${C.titleBg};padding:0;-webkit-app-region:drag;user-select:none;border-bottom:1px solid ${C.border};`,
+    style: `display:flex;align-items:center;height:30px;min-height:30px;background:${C.titleBg};padding:0;-webkit-app-region:drag;user-select:none;border-bottom:1px solid ${C.border};backdrop-filter:saturate(180%) blur(20px);`,
   });
-
-  // macOS traffic lights spacer
-  const trafficSpacer = el("div", {
-    style: "width:70px;min-width:70px;-webkit-app-region:no-drag;display:flex;align-items:center;padding-left:8px;gap:8px;",
-  });
-  // Decorative traffic light dots
-  for (const color of ["#ff5f57", "#febc2e", "#28c840"]) {
-    const dot = el("div", { style: `width:12px;height:12px;border-radius:50%;background:${color};` });
-    trafficSpacer.appendChild(dot);
-  }
 
   // Menu bar
   const titleMenuBar = el("div", {
-    style: "display:flex;align-items:center;gap:0;-webkit-app-region:no-drag;padding:0 4px;",
+    style: "display:flex;align-items:center;gap:0;-webkit-app-region:no-drag;padding:0 4px 0 8px;",
   });
 
   const titleText = el("span", {
@@ -45,7 +35,7 @@ export function buildShell(root: HTMLElement): DOMRefs {
     style: "display:flex;gap:2px;align-items:center;-webkit-app-region:no-drag;padding-right:8px;",
   });
 
-  titleBar.append(trafficSpacer, titleMenuBar, titleText, titleCenter, titleActions);
+  titleBar.append(titleMenuBar, titleText, titleCenter, titleActions);
 
   // ── Main Area ──────────────────────────────────────────────
   const mainArea = el("div", { style: "display:flex;flex:1;overflow:hidden;" });
@@ -134,12 +124,13 @@ export function buildShell(root: HTMLElement): DOMRefs {
   const contextMenuEl = el("div", { style: "position:fixed;display:none;z-index:9999;" });
 
   const commandPalette = el("div", {
-    style: `position:fixed;top:0;left:50%;transform:translateX(-50%);width:600px;max-width:80vw;display:none;flex-direction:column;z-index:9998;margin-top:0;background:${C.sidebarBg};border:1px solid ${C.border};border-top:none;border-radius:0 0 6px 6px;box-shadow:0 8px 30px rgba(0,0,0,0.5);overflow:hidden;`,
+    style: `position:fixed;top:0;left:50%;transform:translateX(-50%);width:600px;max-width:80vw;display:none;flex-direction:column;z-index:9998;margin-top:0;background:${C.menuBg};border:1px solid ${C.borderLight};border-top:none;border-radius:0 0 8px 8px;box-shadow:0 8px 40px rgba(0,0,0,0.55);overflow:hidden;`,
   });
   const commandInput = el("input", {
     type: "text",
     placeholder: ">",
-    style: `width:100%;padding:6px 14px;background:${C.bg};color:${C.fg};border:none;outline:none;font-size:13px;border-bottom:1px solid ${C.border};box-sizing:border-box;`,
+    class: "vsc-input",
+    style: `width:100%;padding:8px 14px;background:${C.inputBg};border:none;border-bottom:1px solid ${C.border};border-radius:0;font-size:13px;box-sizing:border-box;`,
   }) as HTMLInputElement;
   const commandList = el("div", { style: "max-height:300px;overflow-y:auto;" });
   commandPalette.append(commandInput, commandList);

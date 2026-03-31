@@ -35,7 +35,7 @@ function renderContextMenu(dom: DOMRefs, apis: WireframeAPIs, items: MenuItem[],
   const cx = Math.min(x, maxX);
   const cy = Math.min(y, Math.max(0, maxY));
 
-  dom.contextMenuEl.style.cssText = `position:fixed;left:${cx}px;top:${cy}px;z-index:9999;background:${C.menuBg};border:1px solid ${C.borderLight};border-radius:4px;padding:4px 0;min-width:200px;box-shadow:0 4px 16px rgba(0,0,0,0.4);`;
+  dom.contextMenuEl.style.cssText = `position:fixed;left:${cx}px;top:${cy}px;z-index:9999;background:${C.menuBg};border:1px solid ${C.borderLight};border-radius:6px;padding:4px 0;min-width:200px;box-shadow:0 6px 24px rgba(0,0,0,0.5);backdrop-filter:saturate(180%) blur(8px);`;
 
   items.forEach((item) => {
     if (item.type === "separator") {
@@ -61,7 +61,7 @@ function renderContextMenu(dom: DOMRefs, apis: WireframeAPIs, items: MenuItem[],
     }
 
     if (!item.disabled) {
-      row.addEventListener("mouseenter", () => { row.style.background = C.accent; row.style.color = "#fff"; });
+      row.addEventListener("mouseenter", () => { row.style.background = C.listActive; row.style.color = C.fg; });
       row.addEventListener("mouseleave", () => { row.style.background = "transparent"; row.style.color = C.fg; });
       row.addEventListener("click", () => {
         if (item.command) apis.command?.execute(item.command);

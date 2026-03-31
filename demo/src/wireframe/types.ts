@@ -72,25 +72,26 @@ export interface VirtualFile {
   icon?: string;
 }
 
-// ── Colors (VS Code Dark+ defaults) ────────────────────────
+// ── Colors (VS Code Dark+ defaults — modernized) ───────────
 export const C = {
   bg: "#1e1e1e",
   editorBg: "#1e1e1e",
   sidebarBg: "#252526",
   activityBg: "#333333",
-  titleBg: "#3c3c3c",
-  menuBg: "#252526",
+  titleBg: "#323233",
+  menuBg: "#2d2d30",
   tabBg: "#1e1e1e",
   tabActiveBg: "#1e1e1e",
   tabInactiveBg: "#2d2d2d",
   statusBg: "#007acc",
   statusFg: "#ffffff",
-  border: "#3c3c3c",
-  borderLight: "#444444",
+  border: "#2b2b2b",
+  borderLight: "#3e3e42",
   fg: "#cccccc",
   fgDim: "#858585",
   fgBright: "#ffffff",
   accent: "#007acc",
+  accentAlt: "#0098ff",
   hover: "#2a2d2e",
   listHover: "#2a2d2e",
   listActive: "#04395e",
@@ -104,4 +105,14 @@ export const C = {
   badgeFg: "#ffffff",
   buttonBg: "#0e639c",
   buttonHoverBg: "#1177bb",
+  inputBg: "#313131",
+  inputBorder: "#3c3c3c",
+  focusBorder: "#007fd4",
+  cardBg: "#2d2d30",
+  cardBorder: "#3e3e42",
+  successGreen: "#73c991",
+  warningYellow: "#cca700",
+  errorRed: "#f14c4c",
+  textLink: "#3794ff",
+  separator: "#ffffff14",
 } as const;

@@ -31,6 +31,21 @@ import { createContextMenuPlugin } from "@enjoys/monaco-vanced/layout/context-me
 import { createEditorPlugin } from "@enjoys/monaco-vanced/editor/editor-module";
 import { createTabsPlugin } from "@enjoys/monaco-vanced/editor/tabs-module";
 
+// ── Plugins: Extensions ──────────────────────────────────────
+import { createExtensionPlugin } from "@enjoys/monaco-vanced/extensions/extension-module";
+import { createMarketplacePlugin } from "@enjoys/monaco-vanced/extensions/marketplace-module";
+import { createVSIXPlugin } from "@enjoys/monaco-vanced/extensions/vsix-module";
+
+// ── Plugins: Filesystem ──────────────────────────────────────
+import { createSearchPlugin } from "@enjoys/monaco-vanced/filesystem/search-module";
+
+// ── Plugins: SCM ─────────────────────────────────────────────
+import { createGitPlugin } from "@enjoys/monaco-vanced/scm/git-module";
+
+// ── Plugins: Devtools ────────────────────────────────────────
+import { createTerminalPlugin } from "@enjoys/monaco-vanced/devtools/terminal-module";
+import { createDebugPlugin } from "@enjoys/monaco-vanced/devtools/debugger-module";
+
 // ── Monaco Workers ────────────────────────────────────────────
 
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
@@ -298,7 +313,7 @@ const { plugin: notificationPlugin, api: notificationApi } = createNotificationP
 const { plugin: dialogPlugin, api: dialogApi } = createDialogPlugin();
 
 // Theming
-const { plugin: themePlugin } = createThemePlugin();
+const { plugin: themePlugin, api: themeApi } = createThemePlugin();
 const { plugin: iconPlugin } = createIconPlugin();
 
 // Layout
@@ -315,6 +330,21 @@ const { plugin: contextMenuPlugin, api: contextMenuApi } = createContextMenuPlug
 const editorPlugin = createEditorPlugin({ defaultLanguage: "typescript" });
 const tabsPlugin = createTabsPlugin();
 
+// Extensions
+const { plugin: extensionPlugin } = createExtensionPlugin();
+const { plugin: marketplacePlugin } = createMarketplacePlugin();
+const { plugin: vsixPlugin } = createVSIXPlugin();
+
+// Filesystem
+const { plugin: searchPlugin } = createSearchPlugin();
+
+// SCM
+const { plugin: gitPlugin } = createGitPlugin();
+
+// Devtools
+const { plugin: terminalPlugin } = createTerminalPlugin();
+const { plugin: debugPlugin } = createDebugPlugin();
+
 // ── All plugins ──────────────────────────────────────────────
 const allPlugins = [
   commandPlugin, keybindingPlugin, settingsPlugin, notificationPlugin, dialogPlugin,
@@ -322,6 +352,9 @@ const allPlugins = [
   layoutPlugin, headerPlugin, sidebarPlugin, statusbarPlugin, titlePlugin,
   navigationPlugin, uiPlugin, contextMenuPlugin,
   editorPlugin, tabsPlugin,
+  extensionPlugin, marketplacePlugin, vsixPlugin,
+  searchPlugin, gitPlugin,
+  terminalPlugin, debugPlugin,
 ];
 
 // ── API bag for the wireframe ────────────────────────────────
