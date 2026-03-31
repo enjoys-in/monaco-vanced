@@ -1,6 +1,6 @@
 {
   "name": "@enjoys/monaco-vanced",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "A plugin-based, event-driven IDE built on Monaco Editor",
   "main": "./dist/index.cjs",
@@ -68,7 +68,19 @@
     "editor",
     "ide",
     "plugin",
-    "vscode"
+    "vscode",
+    "code-editor",
+    "web-ide",
+    "typescript",
+    "lsp",
+    "ai",
+    "copilot",
+    "extensions",
+    "theming",
+    "collaboration",
+    "git",
+    "terminal",
+    "debugger"
   ],
   "license": "MIT",
   "devDependencies": {

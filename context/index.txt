@@ -34,33 +34,33 @@ is the only shared runtime. Everything else communicates through events.
   1.  tech-stack.txt                       90   ✅ Done     Bun, Vite, Rolldown, ESM+CJS, package exports, directory layout
   2.  plugin-contract.txt                  68   ✅ Done     Core philosophy, Plugin interface, ModuleContext, EventBus contract
   3.  layout-shell.txt                   1000   ✅ Done     Visual frame: header, title, sidebar, editor, panels, status bar, webviews
-  4.  auth-module.txt                      97   Pending     GitHub & Gmail OAuth, PKCE, token storage, route protection
-  5.  fs-connections.txt                  678   Pending     FSAdapter interface, 5 adapters (SFTP/API/Local/OPFS/IndexedDB), AI gating
-  6.  modules-core.txt                    254   Partial     23 core modules + 19 advanced modules (42 module summaries)
+  4.  auth-module.txt                      97   ✅ Done     GitHub & Gmail OAuth, PKCE, token storage, route protection
+  5.  fs-connections.txt                  678   ✅ Done     FSAdapter interface, 5 adapters (SFTP/API/Local/OPFS/IndexedDB), AI gating
+  6.  modules-core.txt                    254   ✅ Done     23 core modules + 19 advanced modules (42 module summaries)
   7.  event-bus.txt                       178   ✅ Done     Full event catalogue (~140 events across 18 domains)
   8.  wiring-patterns.txt                 208   ✅ Done     User-side handler patterns, registration order, data flow walkthroughs
-  9.  settings-module.txt                 292   Pending     VSCode-style configuration: layers, API, UI, snippets, JSON, events
-  10. symbol-providers.txt                500   Pending     Symbol index + 6 Monaco providers (definition, reference, hover, rename)
+  9.  settings-module.txt                 292   ✅ Done     VSCode-style configuration: layers, API, UI, snippets, JSON, events
+  10. symbol-providers.txt                500   ✅ Done     Symbol index + 6 Monaco providers (definition, reference, hover, rename)
   11. registry-enums.txt                  340   ✅ Done     Full module registry (78 modules, 12 categories) + event name enums
 
   EXTENDED SPECIFICATIONS:
   ──  ────────────────────────────────  ──────  ──────────  ─────────────────────────────────────
-  12. advanced-modules.txt               1999   Pending     Phase 1/2/3 — 26 new modules (#47-#72), 16 expansions
-  13. filesystem-advanced.txt             666   Pending     Strategy Pattern handlers, lifecycle hooks, FS context menu system
+  12. advanced-modules.txt               1999   ✅ Done     Phase 1/2/3 — 26 new modules (#47-#72), 16 expansions
+  13. filesystem-advanced.txt             666   ✅ Done     Strategy Pattern handlers, lifecycle hooks, FS context menu system
   14. plugin-lifecycle.txt                323   ✅ Done     Mount lifecycle (onReady/onFailed), universal operation callbacks
-  15. webview-triggers.txt                706   Pending     WebviewPanel API, lazy registration, 8 trigger mechanisms
+  15. webview-triggers.txt                706   ✅ Done     WebviewPanel API, lazy registration, 8 trigger mechanisms
                                                             + File preview system (markdown, image, audio, video, PDF, font, HTML, JSON, CSV)
-  16. custom-context-enginge.txt          365   Pending     Context Engine — CDN language packs, 25 providers, Dexie storage
+  16. custom-context-enginge.txt          365   ✅ Done     Context Engine — CDN language packs, 25 providers, Dexie storage
   17. custom-plugins.txt                  246   ✅ Done     Plugin system TypeScript interfaces — PluginContext, MonacoPlugin
 
   COMMAND & EXTENSION SYSTEM:
   ──  ────────────────────────────────  ──────  ──────────  ─────────────────────────────────────
-  18. monaco-command-system.txt           678   Pending     Command palette + editor context menu, preconditions, when-clauses
-  19. custom-extension-host.txt          1022   Pending     Extension host: OPFS VFS, Dexie.js index, contribution parser, webview panels
+  18. monaco-command-system.txt           678   ✅ Done     Command palette + editor context menu, preconditions, when-clauses
+  19. custom-extension-host.txt          1022   ✅ Done     Extension host: OPFS VFS, Dexie.js index, contribution parser, webview panels
 
   INTERACTION & PREVIEW SYSTEM:
   ──  ────────────────────────────────  ──────  ──────────  ─────────────────────────────────────
-  20. custom-dialog.txt                  1516   Partial     TWO SEPARATE SYSTEMS: Notification system (toasts, user-configurable)
+  20. custom-dialog.txt                  1516   ✅ Done     TWO SEPARATE SYSTEMS: Notification system (toasts, user-configurable)
                                                             + Dialog system (modals: confirm/input/trust/auth/permission/custom/wizard)
                                                             + File preview system (markdown, image, audio, video, PDF, font, HTML, JSON, CSV)
 
@@ -97,18 +97,31 @@ is the only shared runtime. Everything else communicates through events.
     core/events/virtualize.events.ts     (DOM virtualization)
 
   Implementation status:
-    ✅ Core Engine:    8 files — types, event-bus, disposable-store, language-registry,
-                       error-boundary, plugin-context, plugin-engine, facade
-    ✅ Event Enums:    40 files — 37 domain enums + 3 new (decoration, snippet, virtualize) + barrel
-    ✅ Editor Section: 6 modules, 30 files — editor, tabs, decorations, snippets,
-                       preview (10 providers), virtualization
-    ✅ Language Section: 9 modules, 63 files — language-detection, language-config,
-                       monarch-grammars, diagnostics, symbol-index, context,
-                       prettier, eslint, lsp-bridge (24 providers, V1+V2)
+    ✅ Core Engine:        8 files — types, event-bus, disposable-store, language-registry,
+                           error-boundary, plugin-context, plugin-engine, facade
+    ✅ Event Enums:        40 files — 37 domain enums + 3 new (decoration, snippet, virtualize) + barrel
+    ✅ Editor Section:     6 modules, 30 files — editor, tabs, decorations, snippets,
+                           preview (10 providers), virtualization
+    ✅ Language Section:   9 modules, 63 files — language-detection, language-config,
+                           monarch-grammars, diagnostics, symbol-index, context,
+                           prettier, eslint, lsp-bridge (24 providers, V1+V2)
     ✅ Filesystem Section: 4 modules, 29 files — fs-module (12), indexer (6), search (5), workspace (6)
     ✅ Layout Section:     8 modules, 42 files — layout, sidebar, header, title, statusbar,
                            navigation, context-menu, ui-module (with 5 headless components)
-    ❌ All other sections:  Not started
+    ✅ AI Section:         10 modules, 60 files — ai, rag, memory, eval, agent, knowledge-graph,
+                           context-fusion, intent, predictive, ai-memory
+    ✅ SCM Section:        5 modules, 35 files — git, collab, review, snapshot, sync
+    ✅ Devtools Section:   6 modules, 30 files — terminal, debugger, test, profiler, notebook, task
+    ✅ Extensions Section: 4 modules, 38 files — embed, extension, marketplace, vsix
+    ✅ Theming Section:    2 modules, 13 files — theme (5 builtin themes), icon
+    ✅ Infrastructure:     8 modules, 45 files — auth, command, keybinding, settings,
+                           notification, dialog, storage, deep-link
+    ✅ Platform Section:   9 modules, 60 files — concurrency, crash-recovery, fallback,
+                           feature-flags, performance, resource, security, streaming, worker
+    ✅ Enterprise Section: 9 modules, 85 files — api-stability, audit, billing, context-engine,
+                           policy, realtime, saas-tenant, secrets, telemetry
+
+    ALL 79 COMPONENTS IMPLEMENTED — 12 categories, 80 modules, 569+ files
 
 ================================================================================
   HOW TO USE THIS INDEX
