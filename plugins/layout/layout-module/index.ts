@@ -156,6 +156,36 @@ export function createLayoutPlugin(
       splitManager.removeGroup(groupId);
       emitStateChange();
     },
+
+    mountWebview(
+      id: string,
+      location: PanelViewLocation,
+      container: HTMLElement,
+      title: string,
+      icon?: string,
+    ): void {
+      const view: PanelView = {
+        id: `webview:${id}`,
+        label: title,
+        icon,
+        location,
+        isWebview: true,
+        webviewContainer: container,
+      };
+      panelManager.registerView(view);
+      ctx?.emit("layout:webview-mounted", { id, location });
+    },
+
+    unmountWebview(id: string): void {
+      panelManager.unregisterView(`webview:${id}`);
+      ctx?.emit("layout:webview-unmounted", { id });
+    },
+
+    getWebviewViews(location: PanelViewLocation): PanelView[] {
+      return panelManager
+        .getViews(location)
+        .filter((v) => v.isWebview === true);
+    },
   };
 
   const plugin: MonacoPlugin = {
@@ -222,6 +252,31 @@ export function createLayoutPlugin(
         ctx.on(PanelEvents.RightViewActivate, (data) => {
           const { viewId } = data as { viewId: string };
           panelManager.setActiveView("right", viewId);
+        }),
+      );
+
+      // Listen for webview mount/unmount events from webview-module
+      ctx.addDisposable(
+        ctx.on("layout:webview-mount", (data) => {
+          const { id, location, container, title, icon } = data as {
+            id: string;
+            location: string;
+            container?: HTMLElement;
+            title: string;
+            icon?: string;
+          };
+          // Map webview locations to panel view locations
+          const loc = location === "editor" ? "right" : (location as PanelViewLocation);
+          if (container) {
+            api.mountWebview(id, loc, container, title, icon);
+          }
+        }),
+      );
+
+      ctx.addDisposable(
+        ctx.on("layout:webview-unmount", (data) => {
+          const { id } = data as { id: string };
+          api.unmountWebview(id);
         }),
       );
     },

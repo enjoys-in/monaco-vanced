@@ -33,6 +33,13 @@ export interface PanelView {
    * Plugins register the id; the host maps id → component.
    */
   readonly render?: () => unknown;
+  /**
+   * If set, this view hosts a webview iframe instead of a React component.
+   * The container is a DOM element created by webview-module.
+   */
+  readonly webviewContainer?: HTMLElement;
+  /** Whether this view is a webview panel (iframe-isolated) */
+  readonly isWebview?: boolean;
 }
 
 export interface LayoutState {
@@ -76,4 +83,10 @@ export interface LayoutModuleAPI {
   focusGroup(groupId: string): void;
   addEditorGroup(): string;
   removeEditorGroup(groupId: string): void;
+  /** Mount a webview container into a layout slot */
+  mountWebview(id: string, location: PanelViewLocation, container: HTMLElement, title: string, icon?: string): void;
+  /** Unmount a webview from its layout slot */
+  unmountWebview(id: string): void;
+  /** Get all webview views in a location slot */
+  getWebviewViews(location: PanelViewLocation): PanelView[];
 }
