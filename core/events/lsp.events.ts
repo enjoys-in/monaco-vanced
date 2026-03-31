@@ -1,1 +1,15 @@
-// LSP connection events — see context/lsp-bridge-module.txt Section 4
+export enum LspEvents {
+  ServerStart = "lsp:server-start",
+  ServerReady = "lsp:server-ready",
+  ServerStop = "lsp:server-stop",
+  ServerError = "lsp:server-error",
+  DiagnosticsReceived = "lsp:diagnostics-received",
+  CompletionRequest = "lsp:completion-request",
+  CompletionResponse = "lsp:completion-response",
+  HoverRequest = "lsp:hover-request",
+  HoverResponse = "lsp:hover-response",
+  DefinitionRequest = "lsp:definition-request",
+  DefinitionResponse = "lsp:definition-response",
+  ReferencesRequest = "lsp:references-request",
+  ReferencesResponse = "lsp:references-response",
+}
