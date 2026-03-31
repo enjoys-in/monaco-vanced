@@ -179,6 +179,60 @@ export function createWebviewPlugin(): {
         }),
       );
 
+      // Forward loader errors to iframe
+      ctx.addDisposable(
+        ctx.on(WebviewEvents.Error, (data) => {
+          const { id, phase, error } = data as {
+            id: string;
+            phase: string;
+            error: unknown;
+          };
+          if (phase !== "loader") return;
+          const host = iframeHosts.get(id);
+          if (host) {
+            host.bridge.postToWebview({
+              type: "__loader-error",
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }),
+      );
+
+      // Forward action complete to iframe
+      ctx.addDisposable(
+        ctx.on(WebviewEvents.ActionDone, (data) => {
+          const { id, result } = data as { id: string; result: unknown };
+          const host = iframeHosts.get(id);
+          if (host) {
+            host.bridge.postToWebview({ type: "__action-done", result });
+          }
+        }),
+      );
+
+      // Forward action errors to iframe
+      ctx.addDisposable(
+        ctx.on(WebviewEvents.ActionError, (data) => {
+          const { id, error } = data as { id: string; error: unknown };
+          const host = iframeHosts.get(id);
+          if (host) {
+            host.bridge.postToWebview({
+              type: "__action-error",
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }),
+      );
+
+      // Push theme changes to all active iframes
+      ctx.addDisposable(
+        ctx.on("theme:change", (data) => {
+          const theme = data as { kind: string; colors: Record<string, string> };
+          for (const host of iframeHosts.values()) {
+            host.bridge.postToWebview({ type: "__theme-change", theme });
+          }
+        }),
+      );
+
       // Post message forwarding (host → iframe)
       ctx.addDisposable(
         ctx.on(WebviewEvents.Post, (data) => {

@@ -18,6 +18,11 @@ export class WebviewManager implements WebviewModuleAPI {
   private readonly _panels = new Map<string, WebviewPanelImpl>();
   /** Lazy descriptors (not yet created) */
   private readonly _descriptors = new Map<string, WebviewDescriptor>();
+  /** Track loader/action state per panel for coordination */
+  private readonly _loaderRunning = new Set<string>();
+  private readonly _actionRunning = new Set<string>();
+  /** Queued action while loader is running */
+  private readonly _pendingAction = new Map<string, unknown>();
 
   private _ctx: PluginContext | null = null;
 
@@ -67,8 +72,17 @@ export class WebviewManager implements WebviewModuleAPI {
       });
     }
 
+    // Auto-register keybinding if provided (requires command)
+    if (descriptor.keybinding && descriptor.command) {
+      ctx.addKeybinding(
+        0, // Keybinding code — host app resolves the string via keybinding-module
+        () => this._materializeLazy(descriptor.id),
+        descriptor.title,
+      );
+    }
+
     // Emit registration event
-    ctx.emit("webview:registered", {
+    ctx.emit(WebviewEvents.Registered, {
       id: descriptor.id,
       command: descriptor.command,
       keybinding: descriptor.keybinding,
@@ -121,7 +135,7 @@ export class WebviewManager implements WebviewModuleAPI {
     const descriptor = this._descriptors.get(id);
     if (!descriptor) return;
 
-    this._ctx.emit("webview:lazy-create", { id });
+    this._ctx.emit(WebviewEvents.LazyCreate, { id });
 
     // Call the factory
     const options = descriptor.create(this._ctx);
@@ -152,20 +166,9 @@ export class WebviewManager implements WebviewModuleAPI {
       }
     }
 
-    // Phase 2: loader
+    // Phase 2: loader (with coordination tracking)
     if (options.loader) {
-      this._ctx.emit(WebviewEvents.LoaderStart, { id: panel.id });
-      try {
-        const data = await options.loader(this._ctx);
-        panel._setLoaderData(data);
-        this._ctx.emit(WebviewEvents.LoaderDone, { id: panel.id });
-      } catch (error) {
-        this._ctx.emit(WebviewEvents.Error, {
-          id: panel.id,
-          phase: "loader",
-          error,
-        });
-      }
+      await this._runLoader(panel);
     }
 
     // Phase 3: show
@@ -180,9 +183,45 @@ export class WebviewManager implements WebviewModuleAPI {
       this._ctx.emit(WebviewEvents.AfterMount, { id: panel.id });
       options.afterMount(this._ctx, panel);
     }
+
+    // Phase 5: drain any action that was queued during loader
+    const queued = this._pendingAction.get(panel.id);
+    if (queued !== undefined) {
+      this._pendingAction.delete(panel.id);
+      void this.handleAction(panel.id, queued);
+    }
   }
 
-  // ── Action handler ─────────────────────────────────────
+  // ── Loader runner with coordination ────────────────────
+
+  private async _runLoader(panel: WebviewPanelImpl): Promise<void> {
+    if (!this._ctx) return;
+    const options = panel.options;
+    if (!options.loader) return;
+
+    // Rule 4: Don't start loader while action is running
+    if (this._actionRunning.has(panel.id)) return;
+
+    this._loaderRunning.add(panel.id);
+    this._ctx.emit(WebviewEvents.LoaderStart, { id: panel.id });
+
+    try {
+      const data = await options.loader(this._ctx);
+      panel._setLoaderData(data);
+      this._ctx.emit(WebviewEvents.LoaderDone, { id: panel.id });
+    } catch (error) {
+      // Rule 7: Forward loader error to iframe
+      this._ctx.emit(WebviewEvents.Error, {
+        id: panel.id,
+        phase: "loader",
+        error,
+      });
+    } finally {
+      this._loaderRunning.delete(panel.id);
+    }
+  }
+
+  // ── Action handler with coordination ───────────────────
 
   async handleAction(panelId: string, actionData: unknown): Promise<unknown> {
     if (!this._ctx) throw new Error("WebviewManager: context not set");
@@ -193,6 +232,17 @@ export class WebviewManager implements WebviewModuleAPI {
     const options = panel.options;
     if (!options.action) return undefined;
 
+    // Rule 2: Queue action if loader is running
+    if (this._loaderRunning.has(panelId)) {
+      // Rule 5: Only keep the latest action (overwrite previous)
+      this._pendingAction.set(panelId, actionData);
+      return undefined;
+    }
+
+    // Rule 5: Overwrite any previously queued action
+    this._pendingAction.delete(panelId);
+
+    this._actionRunning.add(panelId);
     this._ctx.emit(WebviewEvents.ActionStart, {
       id: panelId,
       data: actionData,
@@ -201,14 +251,17 @@ export class WebviewManager implements WebviewModuleAPI {
     try {
       const result = await options.action(this._ctx, actionData);
       this._ctx.emit(WebviewEvents.ActionDone, { id: panelId, result });
+      this._actionRunning.delete(panelId);
 
-      // Auto-reload after successful action
+      // Rule 3: Auto-reload after successful action
       if (options.loader) {
-        await panel.reload();
+        await this._runLoader(panel);
       }
 
       return result;
     } catch (error) {
+      this._actionRunning.delete(panelId);
+      // Rule 8: Emit error, do NOT re-run loader on error
       this._ctx.emit(WebviewEvents.ActionError, { id: panelId, error });
       throw error;
     }

@@ -7,6 +7,7 @@ import type {
   WebviewPanelOptions,
   WebviewTheme,
   WebviewLoadingConfig,
+  WebviewPermission,
 } from "./types";
 import { WebviewPanelImpl } from "./panel";
 import { HostBridge } from "./bridge";
@@ -61,8 +62,17 @@ export function createIframeHost(
 
   // Apply CSP via meta tag
   const cspMeta = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline';">`;
-  const finalHTML = injectedHTML.replace(/<head>/i, `<head>${cspMeta}`)
-    || `<html><head>${cspMeta}</head><body>${engineScript}${userHTML}</body></html>`;
+
+  // Theme CSS variables
+  const themeCssVars = Object.entries(theme.colors)
+    .map(([k, v]) => `--vscode-${k.replace(/\./g, "-")}: ${v};`)
+    .join("\n    ");
+  const themeStyle = themeCssVars
+    ? `<style>:root { ${themeCssVars} }</style>`
+    : "";
+
+  const finalHTML = injectedHTML.replace(/<head>/i, `<head>${cspMeta}${themeStyle}`)
+    || `<html><head>${cspMeta}${themeStyle}</head><body>${engineScript}${userHTML}</body></html>`;
 
   // Set iframe content via srcdoc
   iframe.srcdoc = finalHTML;
@@ -86,6 +96,10 @@ export function createIframeHost(
     }
     if (msg.type === "__dispose") {
       panel.dispose();
+      return;
+    }
+    if (msg.type === "__reload") {
+      panel.reload();
       return;
     }
     if (msg.type === "__loading-show" || msg.type === "__loading-hide") {
@@ -146,6 +160,15 @@ function registerRPCHandlers(
   // State persistence using localStorage scoped to panel ID
   const stateKey = `webview-state:${panel.id}`;
 
+  const permissions = new Set<WebviewPermission>(panel.options.permissions ?? []);
+
+  function requirePermission(perm: WebviewPermission): void {
+    if (!permissions.has(perm)) {
+      ctx.emit("security:permission-denied", { panelId: panel.id, permission: perm });
+      throw new Error(`Permission denied: ${perm}`);
+    }
+  }
+
   bridge.registerRPC("getState", async () => {
     const raw = localStorage.getItem(stateKey);
     return raw ? JSON.parse(raw) : {};
@@ -157,13 +180,14 @@ function registerRPCHandlers(
   });
 
   bridge.registerRPC("executeCommand", async (args) => {
+    requirePermission("commands.execute");
     const [commandId] = args as [string];
-    // Delegate to editor action trigger
     ctx.editor.trigger("webview", commandId, undefined);
     return undefined;
   });
 
   bridge.registerRPC("getActiveFile", async () => {
+    requirePermission("editor.read");
     const model = ctx.editor.getModel();
     if (!model) return null;
     return {
@@ -173,6 +197,7 @@ function registerRPCHandlers(
   });
 
   bridge.registerRPC("getSelection", async () => {
+    requirePermission("editor.read");
     const selection = ctx.editor.getSelection();
     if (!selection) return null;
     const model = ctx.editor.getModel();
@@ -189,7 +214,7 @@ function registerRPCHandlers(
   });
 
   bridge.registerRPC("getOpenFiles", async () => {
-    // Return current model as the only open file
+    requirePermission("editor.read");
     const model = ctx.editor.getModel();
     if (!model) return [];
     return [{
@@ -200,30 +225,34 @@ function registerRPCHandlers(
   });
 
   bridge.registerRPC("readFile", async (args) => {
-    // Proxy through event bus — fs-module listens
+    requirePermission("fs.read");
     const [path] = args as [string];
     ctx.emit("webview:fs-read", { path, panelId: panel.id });
-    return ""; // Actual impl requires async FS adapter
+    return "";
   });
 
   bridge.registerRPC("writeFile", async (args) => {
+    requirePermission("fs.write");
     const [path, content] = args as [string, string];
     ctx.emit("webview:fs-write", { path, content, panelId: panel.id });
   });
 
   bridge.registerRPC("listDir", async (args) => {
+    requirePermission("fs.read");
     const [dir] = args as [string];
     ctx.emit("webview:fs-list", { dir, panelId: panel.id });
     return [];
   });
 
   bridge.registerRPC("getSetting", async (args) => {
+    requirePermission("settings.read");
     const [key] = args as [string];
     ctx.emit("webview:setting-read", { key, panelId: panel.id });
     return undefined;
   });
 
   bridge.registerRPC("setSetting", async (args) => {
+    requirePermission("settings.write");
     const [key, value] = args as [string, unknown];
     ctx.emit("webview:setting-write", { key, value, panelId: panel.id });
   });

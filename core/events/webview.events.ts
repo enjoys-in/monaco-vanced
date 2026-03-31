@@ -15,4 +15,6 @@ export enum WebviewEvents {
   ActionStart = "webview:action-start",
   ActionDone = "webview:action-done",
   ActionError = "webview:action-error",
+  Registered = "webview:registered",
+  LazyCreate = "webview:lazy-create",
 }

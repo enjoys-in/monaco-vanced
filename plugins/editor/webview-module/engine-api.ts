@@ -41,6 +41,7 @@ export function buildEngineApiScript(
   var __loaderErrorHandlers = [];
   var __actionErrorHandlers = [];
   var __actionPending = false;
+  var __actionCompleteHandlers = [];
   var __loading = false;
 
   // Listen for messages from host
@@ -69,6 +70,7 @@ export function buildEngineApiScript(
       }
       if (payload.type === "__action-done") {
         __actionPending = false;
+        __actionCompleteHandlers.forEach(function(h) { h(payload.result); });
         return;
       }
       if (payload.type === "__theme-change") {
@@ -175,6 +177,10 @@ export function buildEngineApiScript(
     },
     get actionPending() { return __actionPending; },
     onActionError: function(handler) { __actionErrorHandlers.push(handler); },
+    onActionComplete: function(handler) { __actionCompleteHandlers.push(handler); },
+
+    // Reload — ask host to re-run loader
+    reload: function() { postToHost({ type: "__reload" }); },
 
     // Loading control
     showLoading: function() {

@@ -195,12 +195,16 @@ export interface EngineApi {
   // Action
   submitAction(data: unknown): Promise<unknown>;
   readonly actionPending: boolean;
+  onActionComplete(handler: (result: unknown) => void): void;
   onActionError(handler: (error: unknown) => void): void;
 
   // Loading control (from inside webview)
   showLoading(config?: WebviewLoadingConfig): void;
   hideLoading(): void;
   readonly loading: boolean;
+
+  // Trigger loader re-run from inside webview
+  reload(): void;
 
   // Dispose
   dispose(): void;
