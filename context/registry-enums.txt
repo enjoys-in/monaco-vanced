@@ -1,0 +1,340 @@
+================================================================================
+  SECTION 14.  FULL MODULE & COMPONENT REGISTRY
+================================================================================
+
+All modules are grouped into 12 categories under `plugins/`.
+Module numbers are stable IDs — they do not change when modules move.
+core-engine (#1) lives in `core/`, not under `plugins/`.
+
+CATEGORY: editor/ (5 modules)
+-----------------------------
+  2.  editor-module           — plugins/editor/editor-module/
+  12. tabs-module             — plugins/editor/tabs-module/
+  decorations-module          — plugins/editor/decorations-module/
+  snippets-module             — plugins/editor/snippets-module/
+  virtualization-module        — plugins/editor/virtualization-module/
+
+CATEGORY: language/ (9 modules)
+-------------------------------
+  3.  context-module          — plugins/language/context-module/
+  18. diagnostics-module      — plugins/language/diagnostics-module/
+  28. lsp-bridge-module       — plugins/language/lsp-bridge-module/
+  43. eslint-module           — plugins/language/eslint-module/
+  44. prettier-module         — plugins/language/prettier-module/
+  46. symbol-index-module     — plugins/language/symbol-index-module/
+  language-config             — plugins/language/language-config/
+  language-detection          — plugins/language/language-detection/
+  monarch-grammars            — plugins/language/monarch-grammars/
+
+CATEGORY: filesystem/ (4 modules)
+---------------------------------
+  8.  fs-module               — plugins/filesystem/fs-module/
+  9.  indexer-module          — plugins/filesystem/indexer-module/
+  42. search-module           — plugins/filesystem/search-module/
+  workspace-module            — plugins/filesystem/workspace-module/
+
+CATEGORY: layout/ (8 modules)
+-----------------------------
+  11. sidebar-module          — plugins/layout/sidebar-module/
+  13. statusbar-module        — plugins/layout/statusbar-module/
+  17. layout-module           — plugins/layout/layout-module/
+  22. title-module            — plugins/layout/title-module/
+  23. header-module           — plugins/layout/header-module/
+  context-menu-module         — plugins/layout/context-menu-module/
+  navigation-module           — plugins/layout/navigation-module/
+  ui-module                   — plugins/layout/ui-module/
+
+CATEGORY: ai/ (10 modules)
+--------------------------
+  4.  ai-module               — plugins/ai/ai-module/
+  24. agent-module            — plugins/ai/agent-module/
+  25. memory-module           — plugins/ai/memory-module/
+  26. rag-module              — plugins/ai/rag-module/
+  27. eval-module             — plugins/ai/eval-module/
+  ai-memory-module            — plugins/ai/ai-memory-module/
+  context-fusion-module       — plugins/ai/context-fusion-module/
+  predictive-module           — plugins/ai/predictive-module/
+  knowledge-graph-module      — plugins/ai/knowledge-graph-module/
+  intent-module               — plugins/ai/intent-module/
+
+CATEGORY: scm/ (5 modules)
+--------------------------
+  19. collab-module           — plugins/scm/collab-module/
+  30. git-module              — plugins/scm/git-module/
+  40. review-module           — plugins/scm/review-module/
+  41. snapshot-module         — plugins/scm/snapshot-module/
+  sync-module                 — plugins/scm/sync-module/
+
+CATEGORY: devtools/ (6 modules)
+-------------------------------
+  14. terminal-module         — plugins/devtools/terminal-module/
+  29. debugger-module         — plugins/devtools/debugger-module/
+  31. test-module             — plugins/devtools/test-module/
+  38. notebook-module         — plugins/devtools/notebook-module/
+  39. profiler-module         — plugins/devtools/profiler-module/
+  task-module                 — plugins/devtools/task-module/
+
+CATEGORY: extensions/ (4 modules)
+---------------------------------
+  5.  vsix-module             — plugins/extensions/vsix-module/
+  21. extension-module        — plugins/extensions/extension-module/
+  36. marketplace-module      — plugins/extensions/marketplace-module/
+  37. embed-module            — plugins/extensions/embed-module/
+
+CATEGORY: theming/ (2 modules)
+------------------------------
+  6.  theme-module            — plugins/theming/theme-module/
+  7.  icon-module             — plugins/theming/icon-module/
+
+CATEGORY: infrastructure/ (7 modules)
+-------------------------------------
+  10. storage-module          — plugins/infrastructure/storage-module/
+  15. command-module          — plugins/infrastructure/command-module/
+  16. keybinding-module       — plugins/infrastructure/keybinding-module/
+  20. notification-module     — plugins/infrastructure/notification-module/
+  32. auth-module             — plugins/infrastructure/auth-module/
+  45. settings-module         — plugins/infrastructure/settings-module/
+  deep-link-module            — plugins/infrastructure/deep-link-module/
+
+CATEGORY: platform/ (9 modules)
+-------------------------------
+  security-module             — plugins/platform/security-module/
+  crash-recovery-module       — plugins/platform/crash-recovery-module/
+  performance-module          — plugins/platform/performance-module/
+  resource-module             — plugins/platform/resource-module/
+  concurrency-module          — plugins/platform/concurrency-module/
+  fallback-module             — plugins/platform/fallback-module/
+  worker-module               — plugins/platform/worker-module/
+  streaming-module            — plugins/platform/streaming-module/
+  feature-flags-module        — plugins/platform/feature-flags-module/
+
+CATEGORY: enterprise/ (9 modules)
+---------------------------------
+  33. audit-module            — plugins/enterprise/audit-module/
+  34. secrets-module          — plugins/enterprise/secrets-module/
+  35. telemetry-module        — plugins/enterprise/telemetry-module/
+  saas-tenant-module          — plugins/enterprise/saas-tenant-module/
+  billing-module              — plugins/enterprise/billing-module/
+  realtime-module             — plugins/enterprise/realtime-module/
+  policy-module               — plugins/enterprise/policy-module/
+  api-stability-module        — plugins/enterprise/api-stability-module/
+  context-engine              — plugins/enterprise/context-engine/
+
+CORE ENGINE (1, lives in core/ not plugins/)
+--------------------------------------------
+  1.  core-engine             — core/
+
+ADAPTERS (5, inside plugins/filesystem/fs-module/adapters/)
+-----------------------------------------------------------
+  SFTPAdapter, APIAdapter, LocalAdapter, OPFSAdapter, IndexedDBAdapter
+
+PROVIDERS (6, inside plugins/language/symbol-index-module/providers/)
+--------------------------------------------------------------------
+  DefinitionProvider, ReferenceProvider, DocumentSymbolProvider,
+  WorkspaceSymbolProvider, HoverProvider, RenameProvider
+  + 20 additional providers registered via monaco.languages.*
+
+FACTORIES / INTERNAL (2)
+-------------------------
+  SymbolProviderFactory, SymbolIndex
+
+TOTALS
+------
+  78 modules across 12 categories  +  1 core-engine
+  5 FS adapters  +  6 symbol providers  +  2 factories
+  ~140 named events across 18 domains
+  490 source files
+
+
+================================================================================
+  SECTION 15.  EVENT NAME ENUMS — MANDATORY PATTERN
+================================================================================
+
+RULE: Every event name used with the EventBus MUST be a string enum value.
+No module may emit or listen for a raw string literal like "file:open".
+All event names live in a dedicated folder: `core/events/`.
+
+WHY:
+  - Typos in event names are silent bugs (listener never fires, no error)
+  - Enums give autocomplete, refactor-safe renames, and grep-ability
+  - One source of truth for every event in the system
+  - Easy to audit which events exist and who uses them
+
+FOLDER STRUCTURE:
+
+  core/events/
+  ├── index.ts                  ← re-exports all enums from one barrel
+  ├── file.events.ts            ← FileEvent enum
+  ├── editor.events.ts          ← EditorEvent enum
+  ├── tab.events.ts             ← TabEvent enum
+  ├── ai.events.ts              ← AIEvent enum
+  ├── auth.events.ts            ← AuthEvent enum
+  ├── git.events.ts             ← GitEvent enum
+  ├── terminal.events.ts        ← TerminalEvent enum
+  ├── diagnostic.events.ts      ← DiagnosticEvent enum
+  ├── debug.events.ts           ← DebugEvent enum
+  ├── collab.events.ts          ← CollabEvent enum
+  ├── notify.events.ts          ← NotifyEvent enum
+  ├── layout.events.ts          ← LayoutEvent enum
+  ├── plugin.events.ts          ← PluginEvent enum
+  ├── search.events.ts          ← SearchEvent enum
+  ├── snapshot.events.ts        ← SnapshotEvent enum
+  ├── settings.events.ts        ← SettingsEvent enum
+  ├── index-symbol.events.ts    ← IndexEvent enum
+  ├── vsix.events.ts            ← VSIXEvent enum
+  ├── titlebar.events.ts        ← TitlebarEvent enum
+  └── header.events.ts          ← HeaderEvent enum
+
+ENUM EXAMPLES:
+
+  // core/events/file.events.ts
+  export enum FileEvent {
+    Open            = "file:open",
+    ReadRequest     = "file:read-request",
+    Read            = "file:read",
+    WriteRequest    = "file:write-request",
+    Written         = "file:written",
+    Save            = "file:save",
+    Saved           = "file:saved",
+    Close           = "file:close",
+    RenameRequest   = "file:rename-request",
+    Renamed         = "file:renamed",
+    DeleteRequest   = "file:delete-request",
+    Deleted         = "file:deleted",
+    CopyRequest     = "file:copy-request",
+    Copied          = "file:copied",
+    MoveRequest     = "file:move-request",
+    Moved           = "file:moved",
+    CreateRequest   = "file:create-request",
+    Created         = "file:created",
+    UploadRequest   = "file:upload-request",
+    UploadProgress  = "file:upload-progress",
+    Uploaded        = "file:uploaded",
+    DownloadRequest = "file:download-request",
+    DownloadProgress = "file:download-progress",
+    Downloaded      = "file:downloaded",
+    Error           = "file:error",
+  }
+
+  export enum FSEvent {
+    Change       = "fs:change",
+    Connected    = "fs:connected",
+    Disconnected = "fs:disconnected",
+    WatchError   = "fs:watch-error",
+    ListRequest  = "fs:list-request",
+    Listed       = "fs:listed",
+  }
+
+  // core/events/auth.events.ts
+  export enum AuthEvent {
+    LoginRequest  = "auth:login-request",
+    Login         = "auth:login",
+    Logout        = "auth:logout",
+    TokenRefresh  = "auth:token-refresh",
+    TokenExpired  = "auth:token-expired",
+    Error         = "auth:error",
+    Ready         = "auth:ready",
+  }
+
+  // core/events/editor.events.ts
+  export enum EditorEvent {
+    Ready          = "editor:ready",
+    Focus          = "editor:focus",
+    Blur           = "editor:blur",
+    LanguageChange = "editor:language-change",
+    ContentChange  = "editor:content-change",
+    Format         = "editor:format",
+    Formatted      = "editor:formatted",
+  }
+
+  export enum ModelEvent {
+    Create  = "model:create",
+    Dispose = "model:dispose",
+  }
+
+  export enum CursorEvent {
+    Move = "cursor:move",
+  }
+
+  export enum SelectionEvent {
+    Change = "selection:change",
+  }
+
+  // core/events/ai.events.ts
+  export enum AIEvent {
+    ChatRequest  = "ai:chat-request",
+    Stream       = "ai:stream",
+    ChatResponse = "ai:chat-response",
+    Status       = "ai:status",
+    Error        = "ai:error",
+  }
+
+  // core/events/header.events.ts
+  export enum HeaderEvent {
+    MenuOpen    = "header:menu-open",
+    SearchOpen  = "header:search-open",
+    CommandOpen = "header:command-open",
+  }
+
+  // core/events/titlebar.events.ts
+  export enum TitlebarEvent {
+    LanguageClick   = "titlebar:language-click",
+    EncodingClick   = "titlebar:encoding-click",
+    BreadcrumbClick = "titlebar:breadcrumb-click",
+  }
+
+  // core/events/index.ts  (barrel re-export)
+  export { FileEvent, FSEvent } from "./file.events";
+  export { AuthEvent } from "./auth.events";
+  export { EditorEvent, ModelEvent, CursorEvent, SelectionEvent } from "./editor.events";
+  export { AIEvent } from "./ai.events";
+  export { HeaderEvent } from "./header.events";
+  export { TitlebarEvent } from "./titlebar.events";
+  // ... all other event enums
+
+USAGE PATTERN (how every module uses them):
+
+  // CORRECT — use enum value
+  import { FileEvent, AuthEvent } from "core/events";
+
+  ctx.emit(FileEvent.Open, { path: "/src/index.ts" });
+  ctx.on(AuthEvent.Login, ({ user }) => { ... });
+  ctx.on(FileEvent.Saved, ({ path }) => { ... });
+
+  // WRONG — never use raw strings
+  ctx.emit("file:open", { path });     // ❌ banned
+  ctx.on("auth:login", handler);       // ❌ banned
+
+TYPE-SAFE EVENT PAYLOADS:
+  Each event enum should have a companion payload map so TypeScript
+  enforces correct payloads at emit and on call sites:
+
+  // core/events/file.events.ts
+  export interface FileEventPayloads {
+    [FileEvent.Open]:            { path: string };
+    [FileEvent.Read]:            { path: string; content: string | Uint8Array };
+    [FileEvent.Written]:         { path: string };
+    [FileEvent.Saved]:           { path: string };
+    [FileEvent.Deleted]:         { path: string };
+    [FileEvent.Renamed]:         { from: string; to: string };
+    [FileEvent.Error]:           { op: string; path: string; message: string };
+    // ... every event gets its payload typed
+  }
+
+  // EventBus interface becomes generic:
+  interface TypedEventBus {
+    emit<E extends FileEvent>(event: E, payload: FileEventPayloads[E]): void;
+    on<E extends FileEvent>(event: E, handler: (payload: FileEventPayloads[E]) => void): IDisposable;
+  }
+
+NAMING CONVENTION (same as Section 8):
+  domain:action          — present tense intent  (file:open, file:save)
+  domain:action-request  — user intent before op (file:delete-request)
+  domain:action-ed       — op completed           (file:deleted, file:saved)
+  domain:error           — op failed              (file:error, auth:error)
+
+RULES:
+  1. ONE file per domain — never scatter event names across modules
+  2. Barrel export from core/events/index.ts — single import path
+  3. Payload interfaces live next to the enum in the same file
+  4. New modules MUST define their enum before registering any listener

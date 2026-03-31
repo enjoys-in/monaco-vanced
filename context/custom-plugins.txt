@@ -1,0 +1,246 @@
+// ═══════════════════════════════════════════════════════════════
+//  PLUGIN SYSTEM
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Context provided to every plugin during its lifecycle.
+ * This is the primary API surface plugins interact with.
+ */
+export interface PluginContext {
+  /** The raw Monaco namespace (for direct API access) */
+  monaco: Monaco;
+  /** The editor instance (available after mount) */
+  editor: MonacoEditorInstance;
+  /** Register a disposable that will be cleaned up on plugin deactivation */
+  addDisposable(disposable: IDisposable): void;
+  /** Get the current editor value */
+  getContent(): string;
+  /** Set the editor value */
+  setContent(value: string): void;
+  /** Get the current language ID */
+  getLanguage(): string;
+  /** Set the editor language */
+  setLanguage(languageId: string): void;
+  /** Get current file path (if provided) */
+  getFilePath(): string | undefined;
+  /** Insert text at the current cursor position */
+  insertTextAtCursor(text: string): void;
+  /** Get the currently selected text */
+  getSelectedText(): string;
+  /** Replace the current selection */
+  replaceSelection(text: string): void;
+  /** Show a notification (integrates with host app) */
+  notify(message: string, type?: "info" | "success" | "warning" | "error"): void;
+  /** Register a keybinding scoped to this plugin */
+  addKeybinding(
+    keybinding: number,
+    handler: () => void,
+    label?: string,
+  ): void;
+  /** Add an editor action (appears in command palette) */
+  addAction(action: monacoNs.editor.IActionDescriptor): void;
+  /** Register a completion provider for specific languages */
+  registerCompletionProvider(
+    languageSelector: string | string[],
+    provider: monacoNs.languages.CompletionItemProvider,
+  ): void;
+  /** Register a hover provider for specific languages */
+  registerHoverProvider(
+    languageSelector: string | string[],
+    provider: monacoNs.languages.HoverProvider,
+  ): void;
+  /** Register a code action provider */
+  registerCodeActionProvider(
+    languageSelector: string | string[],
+    provider: monacoNs.languages.CodeActionProvider,
+  ): void;
+  /** Register a code lens provider */
+  registerCodeLensProvider(
+    languageSelector: string | string[],
+    provider: monacoNs.languages.CodeLensProvider,
+  ): void;
+  /** Register a document formatting provider */
+  registerDocumentFormattingProvider(
+    languageSelector: string | string[],
+    provider: monacoNs.languages.DocumentFormattingEditProvider,
+  ): void;
+  /** Register inline completions (ghost text / AI suggestions) */
+  registerInlineCompletionsProvider(
+    languageSelector: string | string[],
+    provider: monacoNs.languages.InlineCompletionsProvider,
+  ): void;
+  /** Register a definition provider (Go to Definition) */
+  registerDefinitionProvider(
+    languageSelector: string | string[],
+    provider: monacoNs.languages.DefinitionProvider,
+  ): void;
+  /** Register a declaration provider (Go to Declaration) */
+  registerDeclarationProvider(
+    languageSelector: string | string[],
+    provider: monacoNs.languages.DeclarationProvider,
+  ): void;
+  /** Register a type definition provider (Go to Type Definition) */
+  registerTypeDefinitionProvider(
+    languageSelector: string | string[],
+    provider: monacoNs.languages.TypeDefinitionProvider,
+  ): void;
+  /** Register an implementation provider (Go to Implementation) */
+  registerImplementationProvider(
+    languageSelector: string | string[],
+    provider: monacoNs.languages.ImplementationProvider,
+  ): void;
+  /** Register a reference provider (Find All References) */
+  registerReferenceProvider(
+    languageSelector: string | string[],
+    provider: monacoNs.languages.ReferenceProvider,
+  ): void;
+  /** Register a document highlight provider (highlight occurrences) */
+  registerDocumentHighlightProvider(
+    languageSelector: string | string[],
+    provider: monacoNs.languages.DocumentHighlightProvider,
+  ): void;
+  /** Register a document symbol provider (Outline / Breadcrumbs) */
+  registerDocumentSymbolProvider(
+    languageSelector: string | string[],
+    provider: monacoNs.languages.DocumentSymbolProvider,
+  ): void;
+  /** Register a link provider (clickable links in editor) */
+  registerLinkProvider(
+    languageSelector: string | string[],
+    provider: monacoNs.languages.LinkProvider,
+  ): void;
+  /** Register a color provider (Color Picker, Color Decorator) */
+  registerColorProvider(
+    languageSelector: string | string[],
+    provider: monacoNs.languages.DocumentColorProvider,
+  ): void;
+  /** Register an inlay hints provider (inline type/parameter hints) */
+  registerInlayHintsProvider(
+    languageSelector: string | string[],
+    provider: monacoNs.languages.InlayHintsProvider,
+  ): void;
+  /** Register a signature help provider (parameter hints) */
+  registerSignatureHelpProvider(
+    languageSelector: string | string[],
+    provider: monacoNs.languages.SignatureHelpProvider,
+  ): void;
+  /** Register a linked editing range provider (rename linked tags) */
+  registerLinkedEditingRangeProvider(
+    languageSelector: string | string[],
+    provider: monacoNs.languages.LinkedEditingRangeProvider,
+  ): void;
+  /** Register a document range formatting provider */
+  registerDocumentRangeFormattingProvider(
+    languageSelector: string | string[],
+    provider: monacoNs.languages.DocumentRangeFormattingEditProvider,
+  ): void;
+  /** Register an on-type formatting provider */
+  registerOnTypeFormattingProvider(
+    languageSelector: string | string[],
+    provider: monacoNs.languages.OnTypeFormattingEditProvider,
+  ): void;
+  /** Register a folding range provider */
+  registerFoldingRangeProvider(
+    languageSelector: string | string[],
+    provider: monacoNs.languages.FoldingRangeProvider,
+  ): void;
+  /** Register a rename provider (F2 rename symbol) */
+  registerRenameProvider(
+    languageSelector: string | string[],
+    provider: monacoNs.languages.RenameProvider,
+  ): void;
+  /** Register a new symbol names provider (AI rename suggestions) */
+  registerNewSymbolNameProvider(
+    languageSelector: string | string[],
+    provider: monacoNs.languages.NewSymbolNamesProvider,
+  ): void;
+  /** Register a selection range provider (smart Select) */
+  registerSelectionRangeProvider(
+    languageSelector: string | string[],
+    provider: monacoNs.languages.SelectionRangeProvider,
+  ): void;
+  /** Register a document semantic tokens provider */
+  registerDocumentSemanticTokensProvider(
+    languageSelector: string | string[],
+    provider: monacoNs.languages.DocumentSemanticTokensProvider,
+  ): void;
+  /** Register a document range semantic tokens provider */
+  registerDocumentRangeSemanticTokensProvider(
+    languageSelector: string | string[],
+    provider: monacoNs.languages.DocumentRangeSemanticTokensProvider,
+  ): void;
+  /** Set model markers (diagnostics / squiggles) */
+  setModelMarkers(
+    owner: string,
+    markers: monacoNs.editor.IMarkerData[],
+  ): void;
+  /** Apply decorations to the editor */
+  applyDecorations(
+    decorations: monacoNs.editor.IModelDeltaDecoration[],
+  ): string[];
+  /** Remove decorations by their IDs */
+  removeDecorations(decorationIds: string[]): void;
+  /** Emit a custom event plugins can listen to */
+  emit(event: string, data?: unknown): void;
+  /** Listen for a custom event from other plugins */
+  on(event: string, handler: (data?: unknown) => void): IDisposable;
+}
+
+/**
+ * The plugin interface. Implement this to create a Monaco Editor plugin.
+ *
+ * Lifecycle:
+ *  1. `onBeforeMount(monaco)` — Monaco loaded, before editor creation
+ *  2. `onMount(context)` — Editor created, plugin receives full context
+ *  3. `onLanguageChange(lang, context)` — Language changed
+ *  4. `onContentChange(content, context)` — Content changed
+ *  5. `onDispose()` — Cleanup before plugin removal
+ */
+export interface MonacoPlugin {
+  /** Unique plugin identifier (kebab-case) */
+  id: string;
+  /** Human-readable name */
+  name: string;
+  /** Semver version string */
+  version: string;
+  /** Plugin description */
+  description?: string;
+  /** IDs of other plugins this depends on */
+  dependencies?: string[];
+  /** Priority for load ordering (higher = loads first, default 0) */
+  priority?: number;
+  /** Whether the plugin is enabled by default */
+  defaultEnabled?: boolean;
+
+  /**
+   * Called when Monaco is loaded but before the editor is created.
+   * Use this for registering languages, themes, etc.
+   */
+  onBeforeMount?(monaco: Monaco): void | Promise<void>;
+
+  /**
+   * Called when the editor instance is created.
+   * The primary lifecycle hook — register providers, keybindings, etc.
+   */
+  onMount?(context: PluginContext): void | Promise<void>;
+
+  /**
+   * Called when the editor language changes.
+   */
+  onLanguageChange?(language: string, context: PluginContext): void;
+
+  /**
+   * Called on content change (debounced by the host).
+   */
+  onContentChange?(content: string, context: PluginContext): void;
+
+  /**
+   * Called when the editor configuration changes.
+   */
+  onConfigChange?(config: Partial<MonacoEditorConfig>, context: PluginContext): void;
+
+  /**
+   * Cleanup. Remove any side effects not tracked via addDisposable.
+   */
+  onDispose?(): void;
+}

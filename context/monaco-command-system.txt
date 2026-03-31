@@ -1,0 +1,679 @@
+
+
+================================================================================
+MONACO EDITOR — COMMAND PALETTE & CONTEXT MENU MODULE SYSTEM
+COMPLETE ARCHITECTURE REFERENCE
+================================================================================
+
+OVERVIEW
+--------
+This document defines the full architecture for integrating a Command Palette
+and a Right-Click Context Menu system into a Monaco-based editor environment.
+
+The system is built around a single principle:
+
+    "Define command once → use everywhere"
+
+
+
+Key Goals:
+  - Use Monaco's built-in command palette (no custom palette UI)  to modify commands
+  - Use Monaco's built-in context menu for the editor to modify commands
+  - Build a custom context menu only for the File Explorer
+  - Provide a clean, strongly-typed plugin API for developers
+  - Keep all modules independent and decoupled
+  - Strongly typed
+
+
+Break the task into multiple TODOs and smaller chunks.
+
+Make sure we export the custom plugin so users can easily modify it and add new functionality as requirements change.
+
+Also, ensure the plugin registration/setup is updated properly.
+
+I want this command to be available in both:
+
+the Command Palette
+the right-click context menu
+
+Please link all related files in context and keep them in the correct sequence/order.
+--------------------------------------------------------------------------------
+SECTION 1 — CORE CONCEPT: COMMAND PALETTE vs RIGHT-CLICK CONTEXT MENU
+--------------------------------------------------------------------------------
+
+Both surfaces are different UI layers, but they share the same command backend.
+There is NO separate system for each in Monaco — both are powered by editor
+actions registered via editor.addAction().
+
+1.1 Command Palette
+  - Trigger     : Ctrl+Shift+P or F1
+  - Behavior    : Global command search, keyboard-first interaction
+  - Shows       : All registered commands (filtered by search)
+  - Use case    : Discover and execute commands quickly
+
+1.2 Right-Click Context Menu (Editor)
+  - Trigger     : Mouse right-click inside the editor
+  - Behavior    : Context-aware, shows only relevant commands
+  - Shows       : Filtered commands based on cursor position / selection
+  - Use case    : Quick actions on selected text or current file
+
+1.3 Key Difference
+  - Command Palette  → Global, search-based, shows everything
+  - Context Menu     → Local, context-aware, shows filtered commands
+
+1.4 Internal Working (Important)
+  Monaco does NOT have two separate systems.
+  Both surfaces are powered by a single API:
+
+      editor.addAction({ id, label, keybindings, contextMenuGroupId, run })
+
+  Registering one action automatically enables:
+    - Command Palette support
+    - Right-click Context Menu support
+
+1.5 Visibility Control
+  Command visibility is controlled by three things:
+    - label           → what appears in command palette
+    - contextMenuGroupId → where it appears in the context menu
+    - precondition    → conditions that must be true for it to show
+
+--------------------------------------------------------------------------------
+SECTION 2 — WHAT WE ARE BUILDING (SCOPE DEFINITION)
+--------------------------------------------------------------------------------
+
+  ✅ Command Palette Module
+       → Central registry, binds to Monaco's built-in palette
+       → No custom palette UI
+
+  ✅ Editor Context Menu Module
+       → Uses Monaco's built-in right-click menu via editor.addAction()
+       → Conditions control visibility and grouping
+
+  ✅ File Explorer Context Menu Module
+       → Custom UI implementation (Monaco does not handle this)
+       → Triggered on right-click in the file explorer panel
+       → Supports file, folder, and multi-select actions
+
+  ❌ Do NOT modify Monaco internals
+  ❌ Do NOT build a custom editor command palette
+
+--------------------------------------------------------------------------------
+SECTION 3 — COMMAND MODULE (CENTRAL REGISTRY)
+--------------------------------------------------------------------------------
+
+Purpose:
+  The Command Module is the single source of truth for all commands.
+  It registers commands, binds them to Monaco, and executes them by ID.
+
+3.1 Command Structure
+
+  Each command has the following shape:
+
+    id          : string       — Unique identifier (e.g., "ai.explain")
+    label       : string       — Display name shown in palette/menu
+    handler     : function     — Execution logic, receives context
+    keybinding  : optional     — Keyboard shortcut (Monaco KeyMod / KeyCode)
+    precondition: optional     — Condition string for visibility
+    group       : optional     — Metadata for grouping/categorization
+
+3.2 Module API
+
+    commandModule.register(command)
+      → Adds command to internal registry
+
+    commandModule.execute(commandId, context)
+      → Manually triggers a command by ID
+
+    commandModule.bindToEditor(editorInstance)
+      → Registers all commands with Monaco using editor.addAction()
+
+3.3 Usage Example
+
+    commandModule.register({
+      id: "ai.explain",
+      label: "AI: Explain Code",
+      keybinding: monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK,
+      precondition: "editorHasSelection",
+      // other props if required
+      run: (ctx) => {
+        eventBus.emit("ai:explain", ctx);
+      }
+    });
+
+    // Manually trigger a command programmatically
+    editor.trigger("keyboard", "ai.explain");
+
+3.4 Execution Flow
+
+    User opens Command Palette (Ctrl+Shift+P or F1)
+      → Searches for command by label
+      → Selects command
+      → Monaco triggers the registered action
+      → Command handler (run) executes
+      → Handler optionally emits event to system via Event Bus
+      → Modules (AI, FS, Git, etc.) respond to the event
+
+3.5 Design Principles
+
+  - Single command registry — no duplication
+  - Strongly typed command definitions
+  - Decoupled execution — commands don't know who handles them
+  - No modification of Monaco internals
+
+--------------------------------------------------------------------------------
+SECTION 4 — RIGHT-CLICK CONTEXT MENU MODULE
+--------------------------------------------------------------------------------
+
+Scope covers two targets:
+  1. Monaco Editor     → built-in context menu via editor.addAction()
+  2. File Explorer     → custom context menu UI
+
+4.1 Action Structure
+
+    id          : string              — Unique identifier
+    label       : string              — Display name
+    handler     : function            — Execution logic
+    target      : "editor"|"explorer" — Where this action appears
+    group       : string              — Menu group (see Section 6)
+    order       : number              — Position within group
+    precondition: string              — When to show (see Section 5)
+
+4.2 Editor Context Menu
+
+  Powered by Monaco's editor.addAction().
+  A registered action automatically appears in:
+    - The right-click context menu
+    - The command palette
+
+  Visibility controlled by:
+    - contextMenuGroupId  → which group in the menu
+    - contextMenuOrder    → position within that group
+    - precondition        → when it should be visible
+
+4.3 File Explorer Context Menu
+
+  Completely custom UI (Monaco does not handle this).
+  Triggered on right-click within the file explorer panel.
+
+  Supports:
+    - Single file actions
+    - Single folder actions
+    - Multi-selection actions
+
+  Actions are filtered at render time using condition evaluation.
+
+4.4 Module API
+
+    contextMenuModule.register(action)
+      → Registers action for editor, explorer, or both
+
+    contextMenuModule.getActionsByTarget(target, context)
+      → Returns filtered list of visible actions for a given target
+
+    contextMenuModule.execute(actionId, context)
+      → Executes action by ID with provided context
+
+4.5 Execution Flow
+
+    User right-clicks (editor or file explorer)
+      → Actions filtered by target and current conditions
+      → Menu rendered with visible actions
+      → User selects an action
+      → Handler executes with context
+      → Optional: emits event to system via Event Bus
+
+4.6 Design Principles
+
+  - Same action registry used by both editor and explorer
+  - Context-aware visibility — irrelevant actions never shown
+  - Strong typing on all action definitions
+  - No logic duplication between editor and explorer
+
+--------------------------------------------------------------------------------
+SECTION 5 — CONTEXT CONDITIONS SYSTEM
+--------------------------------------------------------------------------------
+
+Purpose:
+  Conditions control WHEN a command or menu item is visible.
+  They are evaluated at the point of rendering or execution.
+
+5.1 Editor State Conditions
+
+    editorTextFocus              → Editor is currently focused
+    editorHasSelection           → One or more characters are selected
+    !editorHasSelection          → No selection (cursor position only)
+    editorHasMultipleSelections  → Multiple cursors or selections are active
+    editorReadonly               → Editor is in read-only mode
+    !editorReadonly              → Editor is in editable mode
+
+5.2 Language Conditions
+
+    editorLangId == javascript
+    editorLangId == typescript
+    editorLangId == json
+    editorLangId == html
+    editorLangId == css
+
+5.3 Resource / File Conditions
+
+    resourceScheme == file       → Local file
+    resourceScheme == sftp       → Remote file via SFTP
+    resourceExtname == .js
+    resourceExtname == .ts
+    resourceExtname == .json
+
+5.4 File Explorer Conditions (Custom)
+
+    isFile == true               → Target is a file node
+    isDirectory == true          → Target is a folder node
+    isRoot == true               → Target is the root folder
+    isMultiSelect == true        → Multiple items are selected
+
+5.5 System / Workspace Conditions (Custom)
+
+    fileDirty == true            → File has unsaved changes
+    gitRepo == true              → Workspace is a git repository
+    connection == sftp           → Active SFTP connection
+    workspaceOpen == true        → A workspace is currently open
+
+5.6 AI / Feature Flag Conditions (Custom)
+
+    aiEnabled == true            → AI feature is enabled in settings
+    aiAvailable == true          → AI service is reachable/connected
+
+5.7 Custom Conditions (Developer-defined)
+
+  Developers can define their own context keys and control them programmatically:
+
+    userRole == admin
+    fileType == config
+    debugMode == true
+
+  These are set via Monaco's context key system or your own condition manager.
+
+5.8 Condition Rules
+
+  - Conditions can be combined using AND / OR logic
+  - Keep condition evaluation fast — no async or heavy computation
+  - Prefer built-in Monaco conditions where possible
+  - Use custom conditions only for system-specific logic
+
+5.9 Practical Examples
+
+    AI Explain Code:
+      precondition: editorHasSelection && !editorReadonly
+
+    Format Code:
+      precondition: !editorReadonly && (editorLangId == javascript || editorLangId == typescript)
+
+    SFTP Upload:
+      precondition: resourceScheme == sftp && !fileDirty
+
+    Git Commit:
+      precondition: gitRepo == true && fileDirty == true
+
+    Explorer — Delete File:
+      precondition: isFile == true && !isRoot
+
+    Explorer — New Folder:
+      precondition: isDirectory == true
+
+--------------------------------------------------------------------------------
+SECTION 6 — CONTEXT MENU GROUPS & ORDERING
+--------------------------------------------------------------------------------
+
+Purpose:
+  Groups define WHERE in the right-click menu an action appears.
+  Order defines the position of an action within its group.
+
+6.1 Built-in Monaco Menu Groups
+
+    navigation       → Top-level navigation actions (first group shown)
+    1_modification   → Editing actions (format, refactor, rename)
+    2_execution      → Run / execute type actions
+    9_cutcopypaste   → Bottom area (cut, copy, paste related)
+
+6.2 Recommended Custom Groups
+
+    3_ai             → AI-related actions (explain, generate, fix)
+    4_git            → Git actions (stage, diff, blame)
+    5_file           → File-level actions (save, close, open in explorer)
+
+6.3 Context Menu Order (within a group)
+
+    contextMenuOrder: number
+
+    Examples:
+      1 → appears at top of group
+      5 → appears in the middle
+      9 → appears at bottom of group
+
+6.4 Best Practice
+
+  - Group related commands together
+  - Use order to create a logical visual flow
+  - Avoid putting too many items in one group
+  - Place most-used actions near the top (lower order number)
+
+--------------------------------------------------------------------------------
+SECTION 7 — OVERALL ARCHITECTURE & DATA FLOW
+--------------------------------------------------------------------------------
+
+7.1 Architecture Layers
+
+    ┌────────────────────────────────────────┐
+    │          Developer / Plugin API         │
+    │  commandModule.register(...)            │
+    │  contextMenuModule.register(...)        │
+    └────────────────┬───────────────────────┘
+                     │
+    ┌────────────────▼───────────────────────┐
+    │         Central Command Registry        │
+    │  - Stores all commands & actions        │
+    │  - Validates IDs and types              │
+    │  - Resolves conditions                  │
+    └──────┬─────────────────────┬───────────┘
+           │                     │
+    ┌──────▼──────┐      ┌───────▼────────┐
+    │   Monaco    │      │  File Explorer  │
+    │  addAction  │      │  Custom Menu UI │
+    │  (editor +  │      │  (filtered by   │
+    │   palette)  │      │   conditions)   │
+    └──────┬──────┘      └───────┬─────────┘
+           │                     │
+    ┌──────▼─────────────────────▼─────────┐
+    │              Event Bus                │
+    │  eventBus.emit("ai:explain", ctx)     │
+    └──────────────────┬────────────────────┘
+                       │
+    ┌──────────────────▼────────────────────┐
+    │         Feature Modules               │
+    │   AI Module, Git Module,              │
+    │   File System Module, etc.            │
+    └───────────────────────────────────────┘
+
+7.2 Full Execution Flow (End-to-End)
+
+    User triggers command (palette, right-click, or keybinding)
+      ↓
+    Monaco fires the registered action (editor.addAction run())
+      ↓
+    Command handler executes with context (editor, selection, file info)
+      ↓
+    Handler emits event via Event Bus (e.g., eventBus.emit("ai:explain", ctx))
+      ↓
+    Subscribed modules receive the event and respond
+      ↓
+    Result returned to editor or UI (e.g., inline explanation, diff view)
+
+7.3 Context Object (Passed to Every Handler)
+
+  The context object passed to run() should include:
+
+    editor      : Monaco editor instance
+    model       : Current editor model
+    selection   : Current selection range
+    selectedText: Selected text string (if any)
+    filePath    : Path of the currently open file
+    language    : Language ID of the current file
+    scheme      : Resource scheme (file, sftp, etc.)
+
+--------------------------------------------------------------------------------
+SECTION 8 — PLUGIN API (DEVELOPER-FACING)
+--------------------------------------------------------------------------------
+
+Purpose:
+  Export a clean, strongly-typed API so developers and users can register
+  their own commands and context menu actions without touching internals.
+
+8.1 Registering a Command (Palette + Editor Menu)
+
+    commandModule.register({
+      id: "ai.explain",
+      label: "AI: Explain Code",
+      keybinding: monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK,
+      precondition: "editorHasSelection",
+      contextMenuGroup: "3_ai",
+      contextMenuOrder: 1,
+      run: (ctx) => {
+        eventBus.emit("ai:explain", ctx);
+      }
+    });
+
+8.2 Registering a File Explorer Action
+
+    contextMenuModule.register({
+      id: "explorer.newFile",
+      label: "New File",
+      target: "explorer",
+      precondition: "isDirectory == true",
+      group: "navigation",
+      order: 1,
+      run: (ctx) => {
+        eventBus.emit("explorer:newFile", ctx);
+      }
+    });
+
+8.3 Triggering a Command Programmatically
+
+    // Via Monaco's trigger API
+    editor.trigger("keyboard", "ai.explain");
+
+    // Via Command Module
+    commandModule.execute("ai.explain", context);
+
+8.4 Binding Commands to a New Editor Instance
+
+    commandModule.bindToEditor(newEditorInstance);
+
+  This registers all commands in the registry with the new editor.
+  Call this whenever a new editor tab or split view is created.
+
+8.5 Adding Custom Context Keys (Conditions)
+
+    // Set a custom context key value
+    contextKeyService.set("aiEnabled", true);
+    contextKeyService.set("gitRepo", true);
+
+  These can then be used in precondition strings.
+
+8.6 Design Rules for Plugin Authors
+
+  - Always use unique, namespaced IDs (e.g., "myplugin.doSomething")
+  - Always provide a label (shown in palette and menu)
+  - Use preconditions to avoid cluttering the menu
+  - Emit events via Event Bus — do not call modules directly
+  - Do not modify Monaco internals or override built-in commands
+
+--------------------------------------------------------------------------------
+SECTION 9 — FILE LINKING & MODULE SEQUENCE
+--------------------------------------------------------------------------------
+
+Recommended file structure and load order, categorized by where each file
+lives in the actual project directory structure.
+
+NOTE: The project does NOT have standalone types/, modules/, or editor/
+directories. Types are co-located per module. All modules live under
+plugins/<category>/<name>-module/. Core infrastructure lives in core/.
+
+────────────────────────────────────────────────────────────────────────────
+CATEGORY A — CORE (core/)
+  Shared framework kernel. Loaded first. No plugin dependencies.
+────────────────────────────────────────────────────────────────────────────
+
+    1. core/event-bus.ts                             [EXISTING]
+       → Shared pub/sub event bus used by all modules
+       → Already exists — no changes needed
+
+    2. core/events/context-menu.events.ts            [EXISTING]
+       → ContextMenuEvent enum (show, select, dismiss, register)
+       → Already exists — may need new command-specific events added
+
+────────────────────────────────────────────────────────────────────────────
+CATEGORY B — COMMAND MODULE (plugins/infrastructure/command-module/)
+  Central command registry. Powers palette + editor context menu.
+  Depends on: core/event-bus, keybinding-module
+────────────────────────────────────────────────────────────────────────────
+
+    3. plugins/infrastructure/command-module/types.ts  [EXISTING]
+       → Defines CommandDefinition, ExecutionContext types
+       → ADD: ActionDefinition type for context menu actions
+
+    4. plugins/infrastructure/command-module/when-clause.ts  [EXISTING]
+       → Evaluates precondition strings against editor/explorer state
+       → This IS the conditionEngine from the spec
+
+    5. plugins/infrastructure/command-module/registry.ts  [EXISTING]
+       → Central registry: register(), execute(), getAll()
+       → ADD: unregister(), enable/disable toggle
+
+    6. plugins/infrastructure/command-module/palette.ts  [EXISTING]
+       → Binds commands to Monaco's built-in command palette
+       → ADD: bindToEditor(editorInstance) logic
+
+    7. plugins/infrastructure/command-module/router.ts  [EXISTING]
+       → Routes command execution to the correct handler
+       → Connects registry → Monaco action → EventBus
+
+    8. plugins/infrastructure/command-module/index.ts  [EXISTING]
+       → Barrel export + CommandModule plugin class (init/destroy)
+
+────────────────────────────────────────────────────────────────────────────
+CATEGORY C — CONTEXT MENU MODULE (plugins/layout/context-menu-module/)
+  Handles BOTH editor right-click AND file explorer right-click.
+  Depends on: command-module, core/event-bus
+────────────────────────────────────────────────────────────────────────────
+
+    9.  plugins/layout/context-menu-module/types.ts  [EXISTING]
+        → ActionDefinition, MenuGroup, target: "editor"|"explorer"
+
+    10. plugins/layout/context-menu-module/registry.ts  [EXISTING]
+        → register(action), getActionsByTarget(target, context)
+        → Shared action store for both editor and explorer
+
+    11. plugins/layout/context-menu-module/when-evaluator.ts  [EXISTING]
+        → Evaluates when-clauses specific to context menu visibility
+        → Uses same condition format as command-module/when-clause.ts
+
+    12. plugins/layout/context-menu-module/renderer.ts  [EXISTING]
+        → Custom UI renderer for file explorer context menu ONLY
+        → Editor context menu is handled by Monaco natively
+
+    13. plugins/layout/context-menu-module/index.ts  [EXISTING]
+        → Barrel export + ContextMenuModule plugin class
+
+────────────────────────────────────────────────────────────────────────────
+CATEGORY D — PLUGIN COMMAND REGISTRATIONS
+  Each feature module registers its own commands in its init().
+  These are NOT separate files — they live inside each module's init.
+────────────────────────────────────────────────────────────────────────────
+
+    14. plugins/ai/ai-module/index.ts                [EXISTING]
+        → AI-specific commands registered in init() via ctx.commands.register()
+        → e.g. "ai.explain", "ai.generate", "ai.fix"
+        → Precondition: editorHasSelection && aiEnabled
+
+    15. plugins/scm/git-module/index.ts              [EXISTING]
+        → Git-specific commands registered in init()
+        → e.g. "git.stage", "git.diff", "git.blame"
+        → Precondition: gitRepo == true
+
+    16. plugins/filesystem/fs-module/index.ts        [EXISTING]
+        → File system commands + explorer context menu actions
+        → e.g. "explorer.newFile", "explorer.delete", "explorer.rename"
+        → Precondition: isFile/isDirectory when-clauses
+
+────────────────────────────────────────────────────────────────────────────
+CATEGORY E — EDITOR SETUP (plugins/editor/editor-module/)
+  Boots Monaco editor instance. Calls commandModule.bindToEditor().
+  Loaded LAST — after all commands are registered.
+────────────────────────────────────────────────────────────────────────────
+
+    17. plugins/editor/editor-module/index.ts        [EXISTING]
+        → Initializes Monaco, calls commandModule.bindToEditor()
+        → On new tab/split: re-calls bindToEditor() for each instance
+
+────────────────────────────────────────────────────────────────────────────
+LOAD ORDER (respects plugin dependency resolution)
+────────────────────────────────────────────────────────────────────────────
+
+  Phase 1 — Core:
+    core/event-bus.ts → core/events/*.ts
+
+  Phase 2 — Infrastructure (no feature deps):
+    command-module  → keybinding-module → context-menu-module
+
+  Phase 3 — Feature modules register their commands:
+    ai-module.init()  → ctx.commands.register("ai.explain", ...)
+    git-module.init() → ctx.commands.register("git.stage", ...)
+    fs-module.init()  → ctx.commands.register("explorer.newFile", ...)
+    (all other modules register commands in their init)
+
+  Phase 4 — Editor binds all registered commands:
+    editor-module.init() → commandModule.bindToEditor(editorInstance)
+
+  Summary:
+    core → command-module → context-menu-module → feature plugins → editor
+
+--------------------------------------------------------------------------------
+SECTION 10 — SUMMARY & FINAL PRINCIPLES
+--------------------------------------------------------------------------------
+
+  1. Use editor.addAction() exclusively — never bypass Monaco internals.
+
+  2. One registry, two surfaces.
+     Commands registered once appear in both palette and context menu.
+
+  3. Conditions control everything.
+     A command without a precondition appears everywhere.
+     Use conditions to keep menus clean and context-aware.
+
+  4. Groups and order create UX.
+     Proper grouping makes the context menu scannable and logical.
+
+  5. Event Bus decouples execution.
+     Commands fire events. Modules listen. Neither knows about the other.
+
+  6. Export a clean plugin API.
+     Developers should never need to touch Monaco directly to add a command.
+
+  7. File Explorer is always custom.
+     Monaco only manages the editor area. Explorer menus are your responsibility.
+
+  8. Bind to every editor instance.
+     When a new editor tab or split opens, call bindToEditor() again.
+
+
+  What's Missing or Weak
+1. Error Handling
+
+What happens if a duplicate command ID is registered?
+What if bindToEditor() is called before any commands are registered?
+No mention of graceful failure
+
+2. Command Lifecycle
+
+No mention of unregister() — how do you remove a command?
+No mention of enable/disable toggling a command at runtime
+What happens when the editor is destroyed?
+
+3. Event Bus Contract
+
+You mention eventBus.emit("ai:explain", ctx) but never define what events exist
+No list of standard event names and their expected payloads
+A developer reading this won't know what to listen for
+
+4. Multi-Editor / Tab Support
+
+You briefly mention calling bindToEditor() again for new tabs
+But no detail on how the registry handles multiple editor instances
+Split view / diff editor cases not covered
+
+5. TypeScript Types
+
+You mention "strongly typed" but never show the actual type shapes
+CommandDefinition, ExecutionContext, ActionDefinition are referenced but not defined
+
+6. Real-World Plugin Example
+
+The examples are snippets — no end-to-end example showing a full plugin from register → event → handler → UI response

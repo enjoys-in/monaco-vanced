@@ -1,0 +1,178 @@
+================================================================================
+  8. EVENT BUS — FULL EVENT CATALOGUE
+================================================================================
+
+NAMING CONVENTION:
+  domain:action          e.g. file:open
+  domain:action-request  user intent before the op runs
+  domain:action-ed       op completed (past tense)
+  domain:error           op failed
+
+FILE / FS:
+  file:open              { path }
+  file:read-request      { path }
+  file:read              { path, data: Uint8Array }
+  file:write-request     { path, data: Uint8Array }
+  file:written           { path }
+  file:save              { path }                    — user intent (Ctrl+S)
+  file:saved             { path }                    — write done, dirty cleared
+  file:close             { path }
+  file:rename-request    { from, to }
+  file:renamed           { from, to }
+  file:delete-request    { path, isDirectory }
+  file:deleted           { path }
+  file:copy-request      { from, to }
+  file:copied            { from, to }
+  file:move-request      { from, to }
+  file:moved             { from, to }
+  file:create-request    { path, isDirectory }
+  file:created           { path, isDirectory }
+  file:exists-request    { path }
+  file:exists            { path, exists: boolean }
+  file:upload-request    { path, data: Uint8Array }
+  file:upload-progress   { path, loaded, total, percent }
+  file:uploaded          { path }
+  file:download-request  { path }
+  file:download-progress { path, loaded, total, percent }
+  file:downloaded        { path, data: Uint8Array }
+  file:error             { op, path, message }
+  file:stat-request      { path }
+  file:stat              { path, stat: FileStat }
+  fs:list-request        { dir }
+  fs:listed              { dir, entries: DirEntry[] }
+  fs:change              { path, changeType }
+  fs:connected           { adapter }
+  fs:disconnected        { adapter }
+  fs:watch-error         { path, error }
+  fs:storage-warning     { used, quota, percent }   — IndexedDB/OPFS quota
+
+EDITOR:
+  editor:ready           { instance }
+  editor:focus           {}
+  editor:blur            {}
+  editor:language-change { language }
+  model:create           { uri, language }
+  model:dispose          { uri }
+  cursor:move            { line, column }
+  selection:change       { start, end }
+  editor:format          { uri }
+  editor:formatted       { uri }
+
+TABS:
+  tab:open               { uri, label }
+  tab:close              { uri }
+  tab:switch             { uri }
+  tab:dirty              { uri, dirty }
+  tab:reorder            { order: string[] }
+  tab:pin                { uri }
+
+AI:
+  ai:suggestion          { uri, range, text }
+  ai:accept              { uri, range }
+  ai:reject              { uri }
+  ai:stream              { token, done }
+  ai:chat-message        { role, content }
+  ai:status              { state }
+  ai:error               { message }
+  ai:cost                { tokens, model }
+
+AUTH:
+  (See context/auth-module.txt — AUTH MODULE EVENTS for full annotated list)
+
+GIT:
+  git:status             { files: StatusFile[] }
+  git:commit             { message, files }
+  git:committed          { sha }
+  git:push               {}
+  git:pushed             {}
+  git:pull               {}
+  git:pulled             {}
+  git:branch-change      { branch }
+  git:conflict           { path }
+  git:diff-open          { path, base, head }
+
+TERMINAL:
+  terminal:output        { id, data }
+  terminal:command       { id, command }
+  terminal:error         { id, text }
+  terminal:exit          { id, code }
+  terminal:create        { id }
+  terminal:close         { id }
+
+DIAGNOSTICS:
+  diagnostic:add         { uri, diagnostics: Diagnostic[] }
+  diagnostic:clear       { uri? }
+  marker:update          { uri, markers }
+
+DEBUG:
+  debug:start            { config }
+  debug:stop             {}
+  debug:paused           { reason, callStack }
+  debug:resumed          {}
+  debug:breakpoint       { path, line, enabled }
+  debug:variable         { name, value }
+  debug:step             { type }
+
+COLLAB:
+  collab:join            { roomId, user }
+  collab:leave           { user }
+  collab:op              { op, user }
+  collab:cursor          { user, position }
+  collab:presence        { users: User[] }
+
+NOTIFICATIONS:
+  notify:show            { message, level, duration }
+  notify:dismiss         { id }
+
+LAYOUT:
+  layout:split           { direction }
+  layout:resize          { panel, size }
+  layout:focus           { panelId }
+  sidebar:toggle         {}
+  sidebar:resize         { width }
+  right-panel:toggle     {}
+  bottom-panel:toggle    {}
+
+PLUGINS:
+  plugin:register        { name }
+  plugin:init            { name }
+  plugin:ready           { name }                — init() succeeded
+  plugin:destroy         { name }
+  plugin:error           { name, error }
+  plugin:all-ready       { count, names: string[] }  — all plugins booted
+  plugin:boot-failed     { failedCount, names: string[] }
+
+CONTEXT MENU:
+  context-menu:show      { zone, position, targetPath }
+  context-menu:select    { zone, itemId, command, target }
+  context-menu:dismiss   { zone }
+  context-menu:register  { zone, itemId, pluginName }
+  context-menu:unregister { zone, itemId }
+
+SEARCH:
+  search:query           { text, options }
+  search:results         { matches: Match[] }
+  search:replace         { from, to, files }
+
+SNAPSHOTS:
+  snapshot:capture       { label }
+  snapshot:restore       { id }
+  snapshot:list          { snapshots }
+
+WEBVIEWS:
+  webview:create         { id, location }
+  webview:show           { id }
+  webview:hide           { id }
+  webview:dispose        { id }
+  webview:message        { id, message }          — webview → host
+  webview:post           { id, message }          — host → webview
+  webview:state-save     { id }
+  webview:state-restore  { id }
+  webview:error          { id, phase, error }
+  webview:before-mount   { id }
+  webview:after-mount    { id }
+  webview:loader-start   { id }
+  webview:loader-done    { id }
+  webview:action-start   { id, data }
+  webview:action-done    { id, result }
+  webview:action-error   { id, error }

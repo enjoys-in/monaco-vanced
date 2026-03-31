@@ -1,0 +1,208 @@
+================================================================================
+  9. HOW TO WIRE A HANDLER — THE USER-SIDE PATTERN
+================================================================================
+
+You never subclass the modules. You create a handler object or adapter
+and pass it in the options. The module calls your handler at the right time.
+
+EXAMPLE 1 — Custom delete confirmation:
+
+  const fs = new FSPlugin({
+    adapter: new APIAdapter({
+      baseUrl: "https://api.example.com/files",
+      handlers: {
+        delete: async (path, isDirectory) => {
+          const ok = await myApp.confirm(`Delete ${path}?`);
+          if (!ok) throw new Error("Cancelled");
+          await fetch(`/api/files/${path}`, { method: "DELETE" });
+        },
+      },
+    }),
+  });
+
+EXAMPLE 2 — Custom AI adapter (bring your own model):
+
+  const ai = new AIPlugin({
+    adapters: [
+      {
+        id: "my-llm",
+        available: () => true,
+        complete: async function*(prompt, opts) {
+          const res = await fetch("https://my-llm.api/v1/complete", {
+            method: "POST",
+            body: JSON.stringify({ prompt, maxTokens: opts.maxTokens }),
+          });
+          for await (const chunk of res.body) {
+            yield decodeChunk(chunk);
+          }
+        },
+        inline: async (ctx) => {
+          const suggestions = await myInlineAPI(ctx.prefix, ctx.suffix);
+          return suggestions.map(s => ({ text: s, range: ctx.range }));
+        },
+      },
+    ],
+    fallbackOrder: ["my-llm", "openai", "anthropic"],
+  });
+
+EXAMPLE 3 — Custom auth provider:
+
+  const auth = new AuthPlugin({
+    providers: [
+      {
+        id: "my-idp",
+        clientId: "abc123",
+        authorizeUrl: "https://sso.mycompany.com/oauth2/authorize",
+        tokenUrl: "https://sso.mycompany.com/oauth2/token",
+        scopes: ["openid", "profile", "editor"],
+        redirectUri: window.location.origin + "/callback",
+      },
+    ],
+  });
+
+EXAMPLE 4 — Listening for events from user code (outside any plugin):
+
+  // The event bus is exported from core-engine after init
+  import { eventBus } from "./core";
+
+  eventBus.on("file:saved", ({ path }) => {
+    myCI.triggerBuild(path);
+  });
+
+  eventBus.on("auth:login", ({ user }) => {
+    myAnalytics.identify(user.id, user.email);
+  });
+
+================================================================================
+  10. PLUGIN REGISTRATION ORDER AND DEPENDENCY GRAPH
+================================================================================
+
+The core engine resolves dependencies topologically. You register plugins
+in any order — the engine sorts them.
+
+  core.register([
+    storage-module,       // no deps — boots first
+    event-bus,            // built into core
+    auth-module,          // deps: storage
+    fs-module,            // deps: storage
+    indexer-module,       // deps: fs, storage
+    theme-module,         // deps: storage
+    icon-module,          // deps: storage
+    editor-module,        // deps: theme
+    context-module,       // deps: editor, indexer
+    ai-module,            // deps: editor, context
+    rag-module,           // deps: indexer, storage, ai
+    memory-module,        // deps: storage
+    agent-module,         // deps: ai, fs, terminal, diagnostics
+    lsp-bridge-module,    // deps: editor
+    debugger-module,      // deps: editor, fs
+    git-module,           // deps: fs, auth
+    test-module,          // deps: terminal, diagnostics
+    tabs-module,          // deps: editor, fs
+    sidebar-module,       // deps: layout
+    statusbar-module,     // deps: editor, diagnostics, ai
+    terminal-module,      // deps: diagnostics, ai
+    command-module,       // deps: keybinding
+    keybinding-module,    // deps: command
+    layout-module,        // deps: storage
+    diagnostics-module,   // deps: editor, terminal
+    collab-module,        // deps: editor, terminal
+    notification-module,  // deps: (none)
+    extension-module,     // deps: vsix, storage
+    vsix-module,          // deps: theme, icon, storage
+    // new advanced modules
+    telemetry-module,
+    audit-module,
+    secrets-module,
+    marketplace-module,
+    embed-module,
+    notebook-module,
+    profiler-module,
+    review-module,        // deps: auth, git
+    snapshot-module,      // deps: editor, storage
+    search-module,        // deps: fs, indexer, rag
+    eval-module,          // deps: ai
+    header-bar-plugin,    // deps: auth, command, ai
+  ]);
+
+  core.start(); // resolves order, calls init() in dependency order
+
+================================================================================
+  11. DATA FLOW WALKTHROUGHS
+================================================================================
+
+WALKTHROUGH A — File open from sidebar click:
+
+  1. User clicks file in sidebar view panel
+  2. Sidebar view panel emits: file:open { path: "/src/main.ts" }
+  3. fs-module hears file:open, calls adapter.read("/src/main.ts")
+  4. fs-module emits: file:read { path, content }
+  5. editor-module hears file:read, calls monaco.createModel(content, "typescript", uri)
+  6. editor-module emits: model:create { uri, language: "typescript" }
+  7. tabs-module hears model:create, opens a new tab
+  8. tabs-module emits: tab:open { uri, label: "main.ts" }
+  9. tabs-module emits: tab:switch { uri }
+  10. context-module hears model:create, registers all 26 providers for that URI
+  11. ai-module hears model:create, attaches inline completion provider
+  12. indexer-module hears file:read, queues the file for symbol parsing
+  13. statusbar-module hears tab:switch, updates language and cursor display
+  14. title-bar hears tab:switch, updates file name display
+  15. diagnostics-module hears model:create, clears previous markers for this URI
+
+WALKTHROUGH B — User saves file (Ctrl+S):
+
+  1. keybinding-module detects Ctrl+S
+  2. Executes command: "file.save"
+  3. command-module calls the registered save handler
+  4. Save handler reads model content from editor-module
+  5. fs-module.write(path, content) is called
+  6. On success, emits: file:written { path }
+  7. tabs-module hears file:written, clears dirty state
+  8. tabs-module emits: tab:dirty { uri, dirty: false }
+  9. git-module hears file:written, updates file status decoration
+  10. audit-module hears file:written, logs the save event
+
+WALKTHROUGH C — GitHub login flow:
+
+  1. User clicks account avatar in header bar
+  2. Header bar emits: auth:login-request { provider: "github" }
+  3. auth-module handles auth:login-request
+  4. auth-module opens GitHub OAuth popup with PKCE challenge
+  5. User approves in GitHub
+  6. GitHub redirects to callback URL with code + state
+  7. auth-module exchanges code for access token (no server needed — PKCE)
+  8. auth-module stores encrypted token in IndexedDB via storage-module
+  9. auth-module emits: auth:login { user: { name, avatar, token, ... } }
+  10. header-bar hears auth:login, shows avatar and username
+  11. git-module hears auth:login, stores token for push/pull
+  12. review-module hears auth:login, enables PR comment fetching
+  13. marketplace-module hears auth:login, enables one-click install
+  14. audit-module logs: user session started
+
+WALKTHROUGH D — AI agent task:
+
+  1. User types in AI chat: "add JSDoc to every exported function in /src"
+  2. ai-module receives chat message, routes to agent-module
+  3. agent-module calls rag-module to find all relevant files
+  4. agent-module reads each file via fs-module
+  5. agent-module calls ai-module.complete() for each function
+  6. agent-module writes updated files via fs-module
+  7. fs-module emits file:written for each file
+  8. editor-module updates open models in place
+  9. tabs-module marks affected tabs as dirty
+  10. agent-module emits: agent:task-complete { filesModified: [...] }
+  11. notification-module shows: "Added JSDoc to 14 functions in 6 files"
+
+
+This architecture gives you:
+  - Full plugin isolation (no direct imports between modules)
+  - Swappable backends (SFTP, API, local — same event surface)
+  - OAuth without a server (PKCE for GitHub and Google)
+  - A visual shell where every panel is independent and composable
+  - Handler injection — users wire their own logic without patching the core
+  - A single EventBus as the source of truth for all cross-module communication
+
+Total modules: 78 across 12 categories + 1 core-engine
+Total events: ~140 named events across 18 domains
+Auth providers: GitHub, Google, custom
+FS adapters: SFTP, REST API, Local, OPFS, IndexedDB

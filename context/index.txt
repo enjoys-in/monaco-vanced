@@ -1,0 +1,96 @@
+================================================================================
+  MONACO PLUGIN-BASED IDE ARCHITECTURE — MASTER INDEX
+================================================================================
+
+VERSION: 3.0 — Full architecture with Extension Host, Interaction System, Preview
+ARCHITECTURE STYLE: Plugin-based, event-driven, fully composable
+CORE IDEA: Every feature is a plugin. Nothing is hardcoded. The Core Engine
+is the only shared runtime. Everything else communicates through events.
+
+================================================================================
+  FILE MAP — READ IN THIS ORDER
+================================================================================
+
+  TOTAL: 21 spec files + 1 build plan + 1 instructions = 23 files
+  TOTAL LINES: ~14,800
+
+  #   File                              Lines   Description
+  ──  ────────────────────────────────  ──────  ─────────────────────────────────────
+
+  CORE ARCHITECTURE (extracted from original context.txt):
+  ──  ────────────────────────────────  ──────  ─────────────────────────────────────
+  1.  tech-stack.txt                       90   Bun, Vite, Rolldown, ESM+CJS, package exports, directory layout
+  2.  plugin-contract.txt                  68   Core philosophy, Plugin interface, ModuleContext, EventBus contract
+  3.  layout-shell.txt                   1000   Visual frame: header, title, sidebar, editor, panels, status bar, webviews
+  4.  auth-module.txt                      97   GitHub & Gmail OAuth, PKCE, token storage, route protection
+  5.  fs-connections.txt                  678   FSAdapter interface, 5 adapters (SFTP/API/Local/OPFS/IndexedDB), AI gating
+  6.  modules-core.txt                    254   23 core modules + 19 advanced modules (42 module summaries)
+  7.  event-bus.txt                       178   Full event catalogue (~140 events across 18 domains)
+  8.  wiring-patterns.txt                 208   User-side handler patterns, registration order, data flow walkthroughs
+  9.  settings-module.txt                 292   VSCode-style configuration: layers, API, UI, snippets, JSON, events
+  10. symbol-providers.txt                500   Symbol index + 6 Monaco providers (definition, reference, hover, rename)
+  11. registry-enums.txt                  340   Full module registry (78 modules, 12 categories) + event name enums
+
+  EXTENDED SPECIFICATIONS:
+  ──  ────────────────────────────────  ──────  ─────────────────────────────────────
+  12. advanced-modules.txt               1999   Phase 1/2/3 — 26 new modules (#47-#72), 16 expansions
+  13. filesystem-advanced.txt             666   Strategy Pattern handlers, lifecycle hooks, FS context menu system
+  14. plugin-lifecycle.txt                323   Mount lifecycle (onReady/onFailed), universal operation callbacks
+  15. webview-triggers.txt                706   WebviewPanel API, lazy registration, 8 trigger mechanisms
+  16. custom-context-enginge.txt          365   Context Engine — CDN language packs, 25 providers, Dexie storage
+  17. custom-plugins.txt                  246   Plugin system TypeScript interfaces — PluginContext, MonacoPlugin
+
+  COMMAND & EXTENSION SYSTEM:
+  ──  ────────────────────────────────  ──────  ─────────────────────────────────────
+  18. monaco-command-system.txt           678   Command palette + editor context menu, preconditions, when-clauses
+  19. custom-extension-host.txt          1022   Extension host: OPFS VFS, Dexie.js index, contribution parser, webview panels
+
+  INTERACTION & PREVIEW SYSTEM:
+  ──  ────────────────────────────────  ──────  ─────────────────────────────────────
+  20. custom-dialog.txt                  1516   TWO SEPARATE SYSTEMS: Notification system (toasts, user-configurable)
+                                                + Dialog system (modals: confirm/input/trust/auth/permission/custom/wizard)
+                                                + File preview system (markdown, image, audio, video, PDF, font, HTML, JSON, CSV)
+
+  BUILD & INSTRUCTIONS:
+  ──  ────────────────────────────────  ──────  ─────────────────────────────────────
+  21. instructions.md                    2508   Project instructions and conventions
+  22. PLAN.md                            1277   Master build plan, module list, dependency graph, progress tracking
+
+================================================================================
+  QUICK REFERENCE
+================================================================================
+
+  Total modules:    79 components (72 numbered + 7 standalone plugins)
+  Total events:     ~160+ named events across 20+ domains
+  FS adapters:      SFTP, REST API, Local, OPFS, IndexedDB
+  Auth providers:   GitHub, Google, custom
+  Build stack:      Bun + Vite + Rolldown
+  Output:           NPM package (ESM + CJS) + demo app
+  CSS:              Tailwind
+
+  Plugin categories (under plugins/):
+    editor/, language/, filesystem/, layout/, ai/, scm/,
+    devtools/, extensions/, theming/, infrastructure/, platform/, enterprise/
+
+  New event files:
+    core/events/interaction.events.ts    (dialogs, prompts, notifications)
+    core/events/preview.events.ts        (file preview system)
+
+  New modules scaffolded:
+    plugins/editor/preview-module/       (10 preview providers)
+    plugins/infrastructure/notification-module/trust-store.ts
+
+================================================================================
+  HOW TO USE THIS INDEX
+================================================================================
+
+  1. Start with tech-stack.txt and plugin-contract.txt for fundamentals
+  2. Read layout-shell.txt for the visual architecture
+  3. Read fs-connections.txt for the adapter system
+  4. Read modules-core.txt for all module summaries
+  5. Read event-bus.txt for the full event catalogue
+  6. Use registry-enums.txt as a lookup table for module paths
+  7. Read custom-extension-host.txt for the extension system (OPFS + Dexie)
+  8. Read custom-dialog.txt for interaction system + file preview
+  9. Extended files deep-dive into specific subsystems as needed
+  10. PLAN.md tracks implementation progress

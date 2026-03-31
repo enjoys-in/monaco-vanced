@@ -1,0 +1,323 @@
+================================================================================
+  PLUGIN LIFECYCLE — MODULE MOUNT SUCCESS/ERROR + OPERATION CALLBACKS
+  Applies to ALL modules, not just FS
+================================================================================
+
+Linked from: context.txt Section 2 (Plugin Contract)
+This file defines two lifecycle features every plugin gains automatically:
+  A.  Module Mount Lifecycle (onReady / onFailed — fires after init)
+  B.  Universal Operation Callbacks (any module can declare them)
+
+================================================================================
+  A. MODULE MOUNT LIFECYCLE — onReady / onFailed
+================================================================================
+
+PROBLEM:
+  Currently the Plugin interface has init() and destroy(). The user has
+  no hook point for "this module finished initializing successfully" vs
+  "this module failed to initialize". The core-engine calls init() and
+  either it works or it throws — but there's no CALLBACK the user can
+  provide to react to either outcome.
+
+SOLUTION:
+  The Plugin interface gains two optional lifecycle callbacks. The
+  core-engine calls them AFTER init() completes (or fails):
+
+  interface Plugin {
+    name:          string;
+    dependencies?: string[];
+    init(ctx: ModuleContext): void | Promise<void>;
+    destroy?():    void;
+
+    // NEW — called by core-engine after init() succeeds
+    onReady?(ctx: ModuleContext): void | Promise<void>;
+
+    // NEW — called by core-engine if init() throws
+    onFailed?(error: Error, ctx: ModuleContext): void;
+  }
+
+
+HOW THE CORE-ENGINE CALLS THEM:
+
+  For each plugin in dependency order:
+
+    try {
+      await plugin.init(ctx);
+
+      // Emit plugin-level event BEFORE calling onReady
+      ctx.eventBus.emit("plugin:ready", { name: plugin.name });
+
+      // Call the user's onReady hook
+      if (plugin.onReady) {
+        await plugin.onReady(ctx);
+      }
+    } catch (error) {
+      // Emit plugin-level error event
+      ctx.eventBus.emit("plugin:error", { name: plugin.name, error });
+
+      // Call the user's onFailed hook
+      if (plugin.onFailed) {
+        plugin.onFailed(error, ctx);
+      }
+
+      // Core-engine decides: skip this plugin, or abort boot?
+      // Default: log error, skip, continue booting remaining plugins.
+      // Strict mode: abort entire boot sequence.
+    }
+
+
+CONFIGURATION ON CORE-ENGINE:
+
+  The user controls boot behavior when a plugin fails:
+
+  const engine = new CoreEngine({
+    plugins: [...],
+
+    // What to do when a plugin init() throws
+    onPluginError: "skip",       // "skip" | "abort" | "retry"
+
+    // How many times to retry a failed init() before giving up
+    retryCount: 2,               // default 0 (no retry)
+    retryDelay: 1000,            // ms between retries
+
+    // Global lifecycle hooks — fire for ALL plugins
+    onAllReady: (ctx, readyPlugins) => {
+      console.log(`Boot complete: ${readyPlugins.length} plugins loaded`);
+      analytics.track("ide_boot", { count: readyPlugins.length });
+    },
+
+    onAnyFailed: (ctx, failedPlugins) => {
+      console.warn(`Failed plugins:`, failedPlugins.map(p => p.name));
+    },
+  });
+
+
+EXAMPLE 1 — FS module: log when ready, fallback when failed:
+
+  class FSPlugin implements Plugin {
+    name = "fs-module";
+    dependencies = ["storage-module"];
+
+    async init(ctx) {
+      this.adapter = this.options.adapter;
+      await this.adapter.connect?.();
+      this.wireEventListeners(ctx);
+    }
+
+    onReady(ctx) {
+      ctx.eventBus.emit("fs:connected", { adapter: this.adapter.name });
+      ctx.notifications.show("File system connected", "info");
+    }
+
+    onFailed(error, ctx) {
+      ctx.eventBus.emit("fs:disconnected", { adapter: this.adapter.name });
+      ctx.notifications.show(`FS failed: ${error.message}`, "error");
+      // Optionally switch to a local fallback adapter
+      this.adapter = new OPFSAdapter({ rootDir: "fallback" });
+    }
+  }
+
+
+EXAMPLE 2 — AI module: announce readiness:
+
+  class AIPlugin implements Plugin {
+    name = "ai-module";
+
+    async init(ctx) {
+      this.client = new AIClient(this.options);
+      await this.client.healthCheck();
+    }
+
+    onReady(ctx) {
+      ctx.eventBus.emit("ai:status", { state: "idle" });
+      // Header bar picks this up and shows green AI indicator
+    }
+
+    onFailed(error, ctx) {
+      ctx.eventBus.emit("ai:status", { state: "error" });
+      ctx.notifications.show("AI service unreachable", "warning");
+    }
+  }
+
+
+EVENTS ADDED:
+
+  plugin:ready      { name: string }               — plugin init succeeded
+  plugin:error      { name: string, error: Error }  — plugin init failed
+  plugin:all-ready  { count: number, names: string[] } — all plugins loaded
+  plugin:boot-failed { failedCount: number, names: string[] } — boot had failures
+
+  NOTE: plugin:register and plugin:init already exist in context.txt Section 8.
+  plugin:ready is NEW — it fires AFTER init succeeds (not at the start of init).
+
+
+================================================================================
+  B. UNIVERSAL OPERATION CALLBACKS — FOR ANY MODULE
+================================================================================
+
+PROBLEM:
+  The FSOperationLifecycle pattern (onSuccess/onError per operation) is
+  useful beyond just the FS. Every module has operations that users want
+  to hook into: AI completions, git commits, keybinding triggers, theme
+  switches, terminal commands, etc.
+
+SOLUTION:
+  Any module can accept an `on` hooks object in its options. The pattern
+  is standardized — every module uses the same shape:
+
+  interface ModuleOperationHooks<TOperations extends string> {
+    // Global — fires after ANY operation in this module
+    onSuccess?: (result: OperationResult<TOperations>) => void | Promise<void>;
+    onError?:   (error: OperationError<TOperations>) => void | Promise<void>;
+  }
+
+  interface OperationResult<TOp extends string> {
+    module:   string;         // module name
+    op:       TOp;            // operation name
+    duration: number;         // ms
+    payload:  unknown;        // operation-specific
+  }
+
+  interface OperationError<TOp extends string> {
+    module:   string;
+    op:       TOp;
+    message:  string;
+    cause?:   Error;
+    duration: number;
+  }
+
+
+HOW EACH MODULE APPLIES IT:
+
+  Each module defines its own operation names as a union type and accepts
+  the hooks in its options. The module calls the hooks internally after
+  each operation — the pattern is standardized but the operation names
+  are module-specific.
+
+
+EXAMPLE — ai-module operations:
+
+  type AIOperation = "complete" | "chat" | "embed" | "stream";
+
+  const ai = new AIPlugin({
+    baseUrl: "https://api.openai.com",
+    model: "gpt-4",
+
+    on: {
+      onSuccess: (result) => {
+        if (result.op === "complete") {
+          analytics.track("ai_complete", { duration: result.duration });
+        }
+      },
+      onError: (error) => {
+        if (error.op === "stream") {
+          ctx.notifications.show("AI stream dropped", "warning");
+        }
+      },
+    },
+  });
+
+
+EXAMPLE — git-module operations:
+
+  type GitOperation = "commit" | "push" | "pull" | "stage" | "unstage"
+                    | "branch" | "merge" | "stash" | "diff";
+
+  const git = new GitPlugin({
+    on: {
+      onSuccess: (result) => {
+        if (result.op === "push") {
+          slackNotify(`Code pushed by ${result.payload.user}`);
+        }
+        if (result.op === "commit") {
+          console.log(`Committed: ${result.payload.sha}`);
+        }
+      },
+    },
+  });
+
+
+EXAMPLE — terminal-module operations:
+
+  type TerminalOperation = "create" | "execute" | "close" | "resize";
+
+  const terminal = new TerminalPlugin({
+    on: {
+      onSuccess: (result) => {
+        if (result.op === "execute" && result.payload.exitCode !== 0) {
+          ctx.notifications.show("Command failed", "error");
+        }
+      },
+    },
+  });
+
+
+EXAMPLE — auth-module operations:
+
+  type AuthOperation = "login" | "logout" | "refresh" | "restore";
+
+  const auth = new AuthPlugin({
+    providers: [...],
+
+    on: {
+      onSuccess: (result) => {
+        if (result.op === "login") {
+          analytics.identify(result.payload.user.id);
+        }
+      },
+      onError: (error) => {
+        if (error.op === "refresh") {
+          // Token refresh failed — prompt re-login
+          ctx.notifications.show("Session expired. Please log in again.", "warning");
+        }
+      },
+    },
+  });
+
+
+MODULES THAT SUPPORT OPERATION HOOKS:
+
+  Module               │ Operations
+  ─────────────────────┼──────────────────────────────────────────
+  fs-module            │ read, write, delete, rename, copy, move, list, mkdir,
+                       │ exists, stat, upload, download, watch
+  ai-module            │ complete, chat, embed, stream
+  git-module           │ commit, push, pull, stage, unstage, branch, merge, diff
+  terminal-module      │ create, execute, close, resize
+  auth-module          │ login, logout, refresh, restore
+  editor-module        │ createModel, disposeModel, setLanguage, format
+  tabs-module          │ open, close, switch, reorder, pin
+  theme-module         │ apply, register, remove
+  extension-module     │ install, uninstall, enable, disable, update
+  search-module        │ query, replace
+  indexer-module       │ indexFile, indexWorkspace, removeFile
+  command-module       │ execute, register, unregister
+  notification-module  │ show, dismiss
+  collab-module        │ join, leave, sync
+  debugger-module      │ start, stop, step, breakpoint
+  test-module          │ run, discover, coverage
+  settings-module      │ get, set, reset, import, export
+  storage-module       │ get, set, delete, clear
+
+  Not every module needs this — it's opt-in. Modules that are purely
+  reactive (sidebar-module, statusbar-module, layout-module) don't have
+  user-triggered operations to hook.
+
+
+DESIGN PRINCIPLES:
+  - OBSERVER PATTERN: hooks observe operations without modifying them
+  - COLOCATED CONFIG: hooks live next to the plugin options, not scattered
+  - UNIFORM SHAPE: every module uses the same OperationResult/OperationError
+  - NON-BLOCKING: hooks are fire-and-forget (awaited with timeout)
+  - COMPOSABLE: global onSuccess + per-module onSuccess + EventBus all fire
+    in sequence — they don't replace each other
+
+EXECUTION ORDER (complete):
+  1. Operation executes (handler/adapter/internal)
+  2. Module-level on.onSuccess/on.onError fires (from plugin options)
+  3. EventBus event emits (the standard domain event)
+  4. External listeners react (other plugins, user code)
+
+  Position 2 fires BEFORE position 3. This lets the hook modify state
+  or log before the broader system reacts. Hooks CANNOT cancel the
+  EventBus emission — they are observers, not interceptors.

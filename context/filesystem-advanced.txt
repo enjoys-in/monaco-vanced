@@ -1,0 +1,666 @@
+================================================================================
+  FILESYSTEM ADVANCED — PER-OPERATION HANDLERS, LIFECYCLE HOOKS, CONTEXT MENU
+  Extension of Section 5 in context.txt
+================================================================================
+
+Linked from: context.txt Section 5 (File System Connections)
+This file covers three additions:
+  A.  Per-Operation Custom Handlers (Strategy Pattern)
+  B.  FS Operation Lifecycle Hooks (onSuccess / onError per operation)
+  C.  File Explorer Context Menu (plugin-extensible right-click menu)
+
+================================================================================
+  A. PER-OPERATION CUSTOM HANDLERS — STRATEGY PATTERN
+================================================================================
+
+PROBLEM:
+  The current design gives ONE adapter per FSPlugin instance. But real
+  projects need mixed transport — rename via WebSocket, upload via REST API,
+  watch via native fs.watcher. The adapter is the wrong layer for this
+  because each adapter is a single transport implementation.
+
+SOLUTION:
+  FSPlugin accepts an optional `handlers` object at the TOP LEVEL (not inside
+  the adapter). Each key in `handlers` corresponds to an FSAdapter method.
+  If a handler is provided, the fs-module calls IT instead of the adapter
+  for that specific operation. Unhandled operations fall through to the
+  adapter as usual.
+
+  This is the STRATEGY PATTERN — each operation's execution strategy can be
+  swapped independently at configuration time.
+
+
+INTERFACE:
+
+  interface FSOperationHandlers {
+    // Each handler has the SAME signature as the corresponding FSAdapter method.
+    // All are optional. Missing = use adapter default.
+
+    read?:    (path: string) => Promise<Uint8Array>;
+    write?:   (path: string, data: Uint8Array) => Promise<void>;
+    delete?:  (path: string, opts?: { recursive?: boolean }) => Promise<void>;
+    rename?:  (from: string, to: string) => Promise<void>;
+    copy?:    (from: string, to: string) => Promise<void>;
+    move?:    (from: string, to: string) => Promise<void>;
+    list?:    (dir: string) => Promise<DirEntry[]>;
+    mkdir?:   (path: string, opts?: { recursive?: boolean }) => Promise<void>;
+    exists?:  (path: string) => Promise<boolean>;
+    stat?:    (path: string) => Promise<FileStat>;
+    watch?:   (glob: string, cb: WatchCallback) => IDisposable;
+    upload?:  (path: string, data: Uint8Array, onProgress?: ProgressCallback) => Promise<void>;
+    download?:(path: string, onProgress?: ProgressCallback) => Promise<Uint8Array>;
+  }
+
+  type ProgressCallback = (loaded: number, total: number) => void;
+
+
+FSPLUGIN OPTIONS (updated):
+
+  interface FSPluginOptions {
+    // Primary adapter — handles ALL operations by default
+    adapter:   FSAdapter;
+
+    // Per-operation overrides — optional, any missing key falls through
+    // to the adapter above. This is the Strategy Pattern injection point.
+    handlers?: FSOperationHandlers;
+  }
+
+
+RESOLUTION ORDER (how fs-module resolves which function to call):
+
+  For any operation (e.g. rename):
+    1. Check handlers.rename — if defined, call it
+    2. Else call adapter.rename()
+
+  This is a simple chain. No middleware, no wrapping, no next().
+  The handler REPLACES the adapter call — it does not wrap it.
+
+  Internally, fs-module resolves like this:
+
+    private resolve<K extends keyof FSAdapter>(op: K): FSAdapter[K] {
+      return (this.handlers?.[op] ?? this.adapter[op]).bind(this.adapter);
+    }
+
+
+EXAMPLE 1 — Rename via WebSocket, everything else via SFTP:
+
+  const fs = new FSPlugin({
+    adapter: new SFTPAdapter({ host: "...", ... }),
+
+    handlers: {
+      rename: async (from, to) => {
+        // Use a WebSocket command instead of SFTP rename
+        await mySocket.send(JSON.stringify({
+          type: "fs:rename",
+          from,
+          to,
+        }));
+        // Wait for acknowledgement
+        await mySocket.waitFor("fs:renamed");
+      },
+    },
+  });
+
+
+EXAMPLE 2 — Upload via custom REST API with chunking, watch via chokidar:
+
+  const fs = new FSPlugin({
+    adapter: new OPFSAdapter({ rootDir: "workspace" }),
+
+    handlers: {
+      upload: async (path, data, onProgress) => {
+        const chunkSize = 1024 * 1024;  // 1MB chunks
+        for (let offset = 0; offset < data.byteLength; offset += chunkSize) {
+          const chunk = data.slice(offset, offset + chunkSize);
+          await fetch(`/api/upload?path=${encodeURIComponent(path)}&offset=${offset}`, {
+            method: "POST",
+            body: chunk,
+          });
+          onProgress?.(offset + chunk.byteLength, data.byteLength);
+        }
+      },
+
+      watch: (glob, cb) => {
+        // Use native chokidar watcher instead of OPFS polling
+        const watcher = chokidar.watch(glob, { persistent: true });
+        watcher.on("change", (p) => cb({ path: p, changeType: "modify" }));
+        watcher.on("add",    (p) => cb({ path: p, changeType: "create" }));
+        watcher.on("unlink", (p) => cb({ path: p, changeType: "delete" }));
+        return { dispose: () => watcher.close() };
+      },
+    },
+  });
+
+
+EXAMPLE 3 — Read from cache, write to both cache + remote:
+
+  const cache = new Map<string, Uint8Array>();
+
+  const fs = new FSPlugin({
+    adapter: new APIAdapter({ baseUrl: "https://api.example.com/files", ... }),
+
+    handlers: {
+      read: async (path) => {
+        if (cache.has(path)) return cache.get(path)!;
+        const data = await fetch(`/api/files/${path}`).then(r => r.arrayBuffer());
+        const arr = new Uint8Array(data);
+        cache.set(path, arr);
+        return arr;
+      },
+
+      write: async (path, data) => {
+        cache.set(path, data);
+        await fetch(`/api/files/${path}`, { method: "PUT", body: data });
+      },
+    },
+  });
+
+
+WIRING TABLE IMPACT:
+  The UNIFIED FS OPERATION WIRING TABLE in context.txt Section 5 remains
+  CANONICAL. The only change is step 4 of "HOW THE WIRING WORKS":
+
+    OLD:  4. fs-module calls the configured adapter: adapter.rename(from, to)
+    NEW:  4. fs-module calls resolve("rename")(from, to)
+              → if handlers.rename exists, calls it
+              → else calls adapter.rename(from, to)
+
+  All events, payloads, and side effects remain IDENTICAL. The handler is
+  transparent to the rest of the system. Only the execution layer changes.
+
+
+DESIGN PATTERN: STRATEGY
+  - The FSAdapter is the DEFAULT strategy for all operations
+  - Each handler is an OVERRIDE strategy for a single operation
+  - The fs-module is the CONTEXT that holds both and selects which to call
+  - Strategies are injected at configuration time, never at runtime
+  - No dynamic dispatch, no middleware chain — pure function replacement
+
+
+================================================================================
+  B. FS OPERATION LIFECYCLE HOOKS — onSuccess / onError
+================================================================================
+
+PROBLEM:
+  After a FS operation completes, the user may want to run custom logic —
+  log to analytics, sync a cache, trigger a deployment, notify a Slack
+  channel. Currently the only way is to subscribe to EventBus events from
+  outside. That works but is disconnected from the FS configuration.
+
+SOLUTION:
+  FSPlugin accepts an `on` object with operation-level lifecycle callbacks.
+  These run AFTER the operation completes (success or error) but BEFORE the
+  EventBus event is emitted. This gives the user a synchronous hook point
+  that is colocated with the FS configuration.
+
+
+INTERFACE:
+
+  interface FSOperationLifecycle {
+    // Called after ANY operation succeeds, before the confirm event is emitted.
+    onSuccess?: (result: FSOperationResult) => void | Promise<void>;
+
+    // Called after ANY operation fails, before the error event is emitted.
+    onError?: (error: FSOperationError) => void | Promise<void>;
+
+    // Per-operation hooks — more specific than the global ones above.
+    // If BOTH global and per-op are defined, per-op runs first, then global.
+    onRead?:      FSOpCallback<{ path: string; data: Uint8Array }>;
+    onWrite?:     FSOpCallback<{ path: string }>;
+    onDelete?:    FSOpCallback<{ path: string }>;
+    onRename?:    FSOpCallback<{ from: string; to: string }>;
+    onCopy?:      FSOpCallback<{ from: string; to: string }>;
+    onMove?:      FSOpCallback<{ from: string; to: string }>;
+    onList?:      FSOpCallback<{ dir: string; entries: DirEntry[] }>;
+    onMkdir?:     FSOpCallback<{ path: string }>;
+    onUpload?:    FSOpCallback<{ path: string }>;
+    onDownload?:  FSOpCallback<{ path: string; data: Uint8Array }>;
+    onWatch?:     FSOpCallback<{ glob: string }>;
+    onStat?:      FSOpCallback<{ path: string; stat: FileStat }>;
+    onExists?:    FSOpCallback<{ path: string; exists: boolean }>;
+  }
+
+  interface FSOpCallback<T> {
+    success?: (result: T) => void | Promise<void>;
+    error?:   (error: FSOperationError) => void | Promise<void>;
+  }
+
+  interface FSOperationResult {
+    op:       FSOperationName;
+    path:     string;         // primary path (or `from` for rename/copy/move)
+    duration: number;         // ms elapsed
+    payload:  unknown;        // operation-specific result data
+  }
+
+  interface FSOperationError {
+    op:       FSOperationName;
+    path:     string;
+    message:  string;
+    cause?:   Error;          // original thrown error
+    duration: number;         // ms elapsed before failure
+  }
+
+  type FSOperationName =
+    | "read" | "write" | "delete" | "rename" | "copy" | "move"
+    | "list" | "mkdir" | "exists" | "stat" | "upload" | "download" | "watch";
+
+
+FSPLUGIN OPTIONS (updated — adds `on` field):
+
+  interface FSPluginOptions {
+    adapter:   FSAdapter;
+    handlers?: FSOperationHandlers;         // Section A above
+    on?:       FSOperationLifecycle;        // Lifecycle hooks (this section)
+  }
+
+
+EXECUTION ORDER (for any operation):
+
+  1. Request event received (e.g. file:rename-request)
+  2. fs-module calls resolve("rename")(from, to)   — handler or adapter
+  3. Operation executes
+  4. ON SUCCESS:
+     a. Per-op hook:  on.onRename?.success({ from, to })
+     b. Global hook:  on.onSuccess({ op: "rename", path: from, ... })
+     c. EventBus:     emit("file:renamed", { from, to })
+  5. ON ERROR:
+     a. Per-op hook:  on.onRename?.error({ op: "rename", path, message, cause })
+     b. Global hook:  on.onError({ op: "rename", path, message, cause })
+     c. EventBus:     emit("file:error", { op: "rename", path, message })
+
+  Hooks are OPTIONAL. If a hook throws, the error is logged but does NOT
+  block the EventBus emission. Hooks must not block critical operations.
+  If a hook returns a Promise, it is awaited with a 5s timeout — if the
+  hook hangs, the EventBus event fires anyway.
+
+
+EXAMPLE 1 — Log every FS operation to analytics:
+
+  const fs = new FSPlugin({
+    adapter: new SFTPAdapter({ ... }),
+
+    on: {
+      onSuccess: (result) => {
+        analytics.track("fs_operation", {
+          op: result.op,
+          path: result.path,
+          duration: result.duration,
+        });
+      },
+
+      onError: (error) => {
+        analytics.track("fs_error", {
+          op: error.op,
+          path: error.path,
+          message: error.message,
+        });
+      },
+    },
+  });
+
+
+EXAMPLE 2 — Specific hooks — invalidate cache on write, sync on rename:
+
+  const fs = new FSPlugin({
+    adapter: new APIAdapter({ ... }),
+
+    on: {
+      onWrite: {
+        success: ({ path }) => {
+          myCache.invalidate(path);
+          console.log(`Cache invalidated for ${path}`);
+        },
+      },
+
+      onRename: {
+        success: ({ from, to }) => {
+          myCache.move(from, to);
+          slackNotify(`File renamed: ${from} → ${to}`);
+        },
+        error: ({ from, message }) => {
+          slackAlert(`Rename failed: ${from} — ${message}`);
+        },
+      },
+
+      onDelete: {
+        success: ({ path }) => {
+          myBackupService.markDeleted(path);
+        },
+      },
+    },
+  });
+
+
+EXAMPLE 3 — Trigger deployment on upload success:
+
+  const fs = new FSPlugin({
+    adapter: new SFTPAdapter({ ... }),
+
+    on: {
+      onUpload: {
+        success: ({ path }) => {
+          if (path.startsWith("/deploy/")) {
+            triggerDeployPipeline(path);
+            ctx.notifications.show(`Deploy triggered for ${path}`, "info");
+          }
+        },
+      },
+    },
+  });
+
+
+DESIGN PATTERN: OBSERVER (inside the strategy context)
+  - Each hook is an observer attached to a specific operation slot
+  - The fs-module is the subject that notifies observers after each operation
+  - Per-op hooks are fine-grained observers; global hooks are catch-all
+  - Hooks are passive — they observe but don't modify the operation result
+  - Hooks are colocated with config, not scattered across EventBus listeners
+
+
+================================================================================
+  C. FILE EXPLORER CONTEXT MENU — PLUGIN-EXTENSIBLE RIGHT-CLICK MENU
+================================================================================
+
+PROBLEM:
+  The file explorer (sidebar view panel registered by fs-module) needs a
+  right-click context menu. This menu must be:
+  1. Built-in with standard FS actions (rename, delete, copy, paste, etc.)
+  2. Extensible — any plugin can add menu items
+  3. Context-aware — items appear/hide based on what was clicked
+
+SOLUTION:
+  The context-menu-module (plugins/layout/context-menu-module/) provides a
+  generic context menu system. Plugins register menu items with a `when`
+  clause that controls visibility. The file explorer renders the menu when
+  the user right-clicks a file or folder.
+
+
+CONTEXT MENU INTERFACES:
+
+  interface ContextMenuItem {
+    id:         string;                           // unique ID
+    label:      string;                           // display text
+    icon?:      SVGIcon;                          // optional icon
+    keybinding?: string;                          // shortcut hint (display only)
+    group:      string;                           // grouping (for separator placement)
+    order?:     number;                           // sort within group (lower = higher)
+    when?:      string;                           // when-clause expression
+    command:    string;                            // command ID to execute
+    args?:      unknown;                          // arguments passed to command
+  }
+
+  interface ContextMenuGroup {
+    id:     string;                               // e.g. "navigation", "edit", "custom"
+    order:  number;                               // group sort order
+  }
+
+  interface ContextMenuContext {
+    // Injected into the when-clause evaluator and passed to the command
+    target:       ContextMenuTarget;
+    selection:    ContextMenuTarget[];             // multi-select support
+  }
+
+  interface ContextMenuTarget {
+    path:         string;
+    name:         string;
+    isDirectory:  boolean;
+    extension?:   string;                         // e.g. ".ts", ".json"
+    language?:    string;                         // detected language ID
+  }
+
+
+BUILT-IN FILE EXPLORER CONTEXT MENU GROUPS:
+
+  Group ID          │ Order │ Items
+  ──────────────────┼───────┼────────────────────────────
+  navigation        │ 0     │ Open, Open to Side, Reveal in Explorer
+  edit              │ 1     │ Cut, Copy, Paste, Copy Path, Copy Relative Path
+  modification      │ 2     │ New File, New Folder, Rename, Delete
+  source-control    │ 3     │ Stage, Unstage, Discard Changes, Diff
+  refactor          │ 4     │ Move to..., Duplicate
+  custom            │ 100   │ (plugins add items here by default)
+
+
+BUILT-IN FILE EXPLORER MENU ITEMS:
+
+  // navigation group
+  { id: "explorer.open",          label: "Open",              group: "navigation", order: 0, command: "file.open",     when: "!isDirectory" }
+  { id: "explorer.openToSide",    label: "Open to the Side",  group: "navigation", order: 1, command: "file.openSide", when: "!isDirectory" }
+  { id: "explorer.revealInOS",    label: "Reveal in Finder",  group: "navigation", order: 2, command: "file.revealOS"  }
+
+  // edit group
+  { id: "explorer.cut",           label: "Cut",               group: "edit", order: 0, command: "file.cut",       keybinding: "⌘X" }
+  { id: "explorer.copy",          label: "Copy",              group: "edit", order: 1, command: "file.copy",      keybinding: "⌘C" }
+  { id: "explorer.paste",         label: "Paste",             group: "edit", order: 2, command: "file.paste",     keybinding: "⌘V" }
+  { id: "explorer.copyPath",      label: "Copy Path",         group: "edit", order: 3, command: "file.copyPath",  keybinding: "⌘⌥C" }
+  { id: "explorer.copyRelPath",   label: "Copy Relative Path",group: "edit", order: 4, command: "file.copyRelPath" }
+
+  // modification group
+  { id: "explorer.newFile",       label: "New File",          group: "modification", order: 0, command: "file.newFile",    when: "isDirectory" }
+  { id: "explorer.newFolder",     label: "New Folder",        group: "modification", order: 1, command: "file.newFolder",  when: "isDirectory" }
+  { id: "explorer.rename",        label: "Rename",            group: "modification", order: 2, command: "file.rename",     keybinding: "Enter" }
+  { id: "explorer.delete",        label: "Delete",            group: "modification", order: 3, command: "file.delete",     keybinding: "⌘⌫"   }
+
+  // source-control group
+  { id: "explorer.gitStage",      label: "Stage Changes",     group: "source-control", order: 0, command: "git.stage",     when: "git.isRepo && file.isModified" }
+  { id: "explorer.gitUnstage",    label: "Unstage",           group: "source-control", order: 1, command: "git.unstage",   when: "git.isRepo && file.isStaged" }
+  { id: "explorer.gitDiscard",    label: "Discard Changes",   group: "source-control", order: 2, command: "git.discard",   when: "git.isRepo && file.isModified" }
+  { id: "explorer.gitDiff",       label: "Compare with HEAD", group: "source-control", order: 3, command: "git.diffHead",  when: "git.isRepo" }
+
+  // refactor group
+  { id: "explorer.moveTo",        label: "Move to...",        group: "refactor", order: 0, command: "file.moveTo"      }
+  { id: "explorer.duplicate",     label: "Duplicate",         group: "refactor", order: 1, command: "file.duplicate"   }
+
+
+HOW PLUGINS ADD CONTEXT MENU ITEMS:
+
+  Any plugin can register new context menu items by calling
+  ctx.contextMenu.register() in its init():
+
+  class MyPlugin implements Plugin {
+    name = "my-plugin";
+
+    init(ctx: ModuleContext) {
+      // Add a "Deploy" item to the file explorer context menu
+      ctx.contextMenu.register("explorer", {
+        id:      "my-plugin.deploy",
+        label:   "Deploy This File",
+        icon:    rocketIcon,
+        group:   "custom",                     // goes into the custom group
+        order:   0,
+        when:    "!isDirectory && extension == '.ts'",
+        command: "my-plugin.deploy",
+        args:    { env: "production" },
+      });
+
+      // Register the command the menu item will call
+      ctx.commands.register("my-plugin.deploy", async (args, menuCtx) => {
+        const { target } = menuCtx;            // ContextMenuContext injected
+        await deployFile(target.path, args.env);
+        ctx.notifications.show(`Deployed ${target.name}`, "info");
+      });
+    }
+  }
+
+
+MULTIPLE CONTEXT MENU ZONES:
+
+  The context-menu-module is NOT limited to the file explorer. Any visual
+  region can host a context menu. Each zone has a unique ID:
+
+  Zone ID           │ Where                              │ Registered by
+  ──────────────────┼────────────────────────────────────┼───────────────────
+  explorer          │ File explorer sidebar panel        │ fs-module
+  editor            │ Monaco editor area (right-click)   │ editor-module
+  tab               │ Tab bar (right-click on a tab)     │ tabs-module
+  terminal          │ Terminal panel                      │ terminal-module
+  sidebar           │ Sidebar header (right-click)       │ sidebar-module
+  statusbar         │ Status bar items                    │ statusbar-module
+
+  Plugins register items to any zone:
+    ctx.contextMenu.register("editor", { ... });     // editor context menu
+    ctx.contextMenu.register("tab",    { ... });     // tab context menu
+
+
+CONTEXT MENU MODULE API:
+
+  interface ContextMenuModule {
+    // Register a menu item in a specific zone
+    register(zone: string, item: ContextMenuItem): IDisposable;
+
+    // Register a custom group (for ordering between separators)
+    registerGroup(zone: string, group: ContextMenuGroup): IDisposable;
+
+    // Show the context menu programmatically (used internally by panels)
+    show(zone: string, position: { x: number; y: number }, context: ContextMenuContext): void;
+
+    // Remove all items registered by a specific plugin (called on destroy)
+    unregisterAll(pluginName: string): void;
+
+    // Get resolved menu items for a zone + context (for testing/inspection)
+    getItems(zone: string, context: ContextMenuContext): ContextMenuItem[];
+  }
+
+
+WHEN-CLAUSE EVALUATION:
+
+  The `when` field in a menu item uses the same expression evaluator as
+  the command-module (used for keybinding contexts). Supported expressions:
+
+    isDirectory                          // boolean — is the clicked item a directory?
+    !isDirectory                         // negate
+    extension == '.ts'                   // file extension match
+    extension in ['.ts', '.tsx', '.js']  // set membership
+    language == 'typescript'             // language ID from detection
+    git.isRepo                           // git-module context
+    file.isModified                      // dirty state from tabs-module
+    file.isStaged                        // git staging state
+    file.size < 1048576                  // file size comparison
+    editor.hasSelection                  // editor state
+    my-plugin.featureEnabled             // custom context set by any plugin
+
+  Plugins can add their own context variables:
+    ctx.commands.setContext("my-plugin.featureEnabled", true);
+
+
+CONTEXT MENU EVENTS:
+
+  context-menu:show        { zone, position, targetPath }
+  context-menu:select      { zone, itemId, command, target: ContextMenuTarget }
+  context-menu:dismiss     { zone }
+  context-menu:register    { zone, itemId, pluginName }
+  context-menu:unregister  { zone, itemId }
+
+
+VISUAL RENDERING:
+
+  The context-menu-module renders a floating <div> portal (absolutely
+  positioned) when show() is called. It:
+  - Evaluates all when-clauses against the current context
+  - Filters out items that don't match
+  - Groups items by group ID, inserts separators between groups
+  - Renders icon + label + keybinding hint
+  - Handles keyboard navigation (↑↓, Enter, Escape)
+  - Auto-positions to avoid viewport overflow
+  - Dismisses on outside click or Escape
+
+  The rendering is done by the context-menu-module itself — panels just
+  call ctx.contextMenu.show() on right-click and pass the target info.
+
+  // Inside file explorer (fs-module sidebar view panel):
+  treeNode.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    ctx.contextMenu.show("explorer", { x: e.clientX, y: e.clientY }, {
+      target: { path: node.path, name: node.name, isDirectory: node.isDir },
+      selection: selectedNodes.map(n => ({
+        path: n.path, name: n.name, isDirectory: n.isDir,
+      })),
+    });
+  });
+
+
+MULTI-SELECT CONTEXT MENU:
+
+  When the user selects multiple files in the explorer (Ctrl+Click or
+  Shift+Click) and right-clicks, the context object includes all selected
+  targets. Commands receive the full selection:
+
+    ctx.commands.register("file.delete", async (args, menuCtx) => {
+      const paths = menuCtx.selection.map(t => t.path);
+      for (const p of paths) {
+        ctx.eventBus.emit("file:delete-request", { path: p, isDirectory: false });
+      }
+    });
+
+  Menu items can use when-clauses that reference selection count:
+    when: "selection.count > 1"           // show only for multi-select
+    when: "selection.every.isDirectory"   // all selected are directories
+
+
+FILE EXPLORER WIRING — COMPLETE FLOW FOR RIGHT-CLICK → RENAME:
+
+  1. User right-clicks "main.ts" in the file explorer sidebar
+  2. fs-module sidebar view calls ctx.contextMenu.show("explorer", pos, context)
+  3. context-menu-module evaluates when-clauses, resolves visible items
+  4. Renders floating menu: Open | Copy | Paste | Rename | Delete | ...
+  5. User clicks "Rename"
+  6. context-menu-module emits: context-menu:select { zone: "explorer", 
+     itemId: "explorer.rename", command: "file.rename", target: { path: "/src/main.ts", ... } }
+  7. command-module executes "file.rename" — shows inline rename input in explorer
+  8. User types new name, presses Enter
+  9. fs-module sidebar emits: file:rename-request { from: "/src/main.ts", to: "/src/app.ts" }
+  10. fs-module calls resolve("rename")(from, to)  — handler or adapter
+  11. Operation executes
+  12. on.onRename?.success({ from, to })           — lifecycle hook fires
+  13. on.onSuccess({ op: "rename", ... })           — global hook fires
+  14. fs-module emits: file:renamed { from, to }    — EventBus event
+  15. tabs-module updates tab URI
+  16. indexer-module re-indexes at new path
+  17. Done.
+
+  This flow shows all three systems working together:
+    Context Menu (C) → FS Operation (Strategy from A) → Lifecycle Hook (B) → EventBus
+
+
+NEW FILES TO CREATE:
+
+  plugins/layout/context-menu-module/
+    index.ts          — ContextMenuPlugin implementation
+    types.ts          — ContextMenuItem, ContextMenuGroup, ContextMenuTarget, etc.
+    renderer.ts       — floating DOM portal, keyboard nav, position calc
+    when-evaluator.ts — when-clause expression parser and evaluator
+    registry.ts       — stores registered items per zone, handles add/remove
+
+  plugins/filesystem/fs-module/
+    (existing files — no new files needed, just add handlers + lifecycle
+     to the FSPlugin class in index.ts and types in types.ts)
+
+
+NEW EVENTS ADDED:
+
+  Add to core/events/context-menu.events.ts:
+    export enum ContextMenuEvent {
+      Show       = "context-menu:show",
+      Select     = "context-menu:select",
+      Dismiss    = "context-menu:dismiss",
+      Register   = "context-menu:register",
+      Unregister = "context-menu:unregister",
+    }
+
+  Add to core/events/file.events.ts (already exists, add missing):
+    ExistsRequest  = "file:exists-request",
+    Exists         = "file:exists",
+    StatRequest    = "file:stat-request",
+    Stat           = "file:stat",
+
+  (fs:storage-warning was already added in context.txt Event Bus section)
+
+
+ModuleContext UPDATE:
+
+  The ModuleContext interface gains one new field:
+
+    interface ModuleContext {
+      // ... all existing fields ...
+      contextMenu: ContextMenuModule;       // NEW — register menu items
+    }

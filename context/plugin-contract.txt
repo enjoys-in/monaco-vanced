@@ -1,0 +1,68 @@
+================================================================================
+  1. CORE PHILOSOPHY
+================================================================================
+
+Monaco is the editor engine. Everything else is a plugin.
+
+Plugins:
+  - Declare a name and optional dependency list
+  - Receive a ModuleContext on init (injected by the core engine)
+  - Communicate ONLY through the EventBus — never import each other directly
+  - Clean up after themselves in destroy()
+
+This means:
+  - You can swap the AI provider without touching the editor
+  - You can replace SFTP with a REST API without touching the sidebar
+  - You can add auth without anything knowing about it
+  - You can ship each module as a separate npm package
+
+The user never talks to modules directly.
+The user creates objects (handlers, adapters, options) and passes them in.
+The modules do the wiring internally.
+
+================================================================================
+  2. PLUGIN CONTRACT
+================================================================================
+
+Every plugin must implement this shape:
+
+  interface Plugin {
+    name: string;                    // unique ID, e.g. "sftp-module"
+    dependencies?: string[];         // resolved before init() is called
+    init(ctx: ModuleContext): void | Promise<void>;  // called once by core engine
+    destroy?(): void;                // called on unload or hot-reload
+
+    // Lifecycle hooks — called by core-engine after init()
+    onReady?(ctx: ModuleContext): void | Promise<void>;  // init succeeded
+    onFailed?(error: Error, ctx: ModuleContext): void;   // init threw
+  }
+
+  See context/plugin-lifecycle.txt for full lifecycle spec, boot config,
+  retry behavior, universal operation callbacks, and examples.
+
+The ModuleContext is injected — you never construct it yourself:
+
+  interface ModuleContext {
+    editor:        EditorModule;
+    fs:            FSModule;
+    eventBus:      EventBus;
+    storage:       StorageModule;
+    commands:      CommandModule;
+    ai:            AIModule;
+    auth:          AuthModule;
+    indexer:       IndexerModule;
+    notifications: NotificationModule;
+    layout:        LayoutModule;
+    contextMenu:   ContextMenuModule;    // register right-click menu items
+    settings:      SettingsModule;       // read/write/watch settings
+  }
+
+The EventBus is the nervous system:
+
+  eventBus.emit("file:open", { path: "/src/index.ts" });
+  eventBus.on("file:open", (payload) => { ... });
+  eventBus.once("auth:ready", (user) => { ... });
+  const unsub = eventBus.on("tab:dirty", handler);
+  unsub.dispose(); // clean up
+
+Rule: if two modules need to talk, they use the event bus. Period.

@@ -1,0 +1,1999 @@
+================================================================================
+  MONACO VANCED — ADVANCED / MISSING LAYERS
+  Gap Analysis & New Module Specifications
+================================================================================
+
+PURPOSE: Identifies architectural gaps not covered by the current 46 modules
++ 7 standalone plugins. Each entry is classified as NEW MODULE (needs a fresh
+plugin) or EXPAND EXISTING (fold into an existing module). Numbering continues
+from the main spec (modules 1-46 in context.txt).
+
+CLASSIFICATION KEY:
+  [NEW]    → Becomes a new MonacoPlugin with its own folder under plugins/
+  [EXPAND] → Folded into an existing module — no new plugin, just new files
+  [CORE]   → Added to core/ runtime (not a plugin)
+
+
+================================================================================
+  1. OVERLAP MAP — What Already Exists
+================================================================================
+
+Before adding anything, acknowledge what the current architecture covers:
+
+  Search            → search-module (#42) — full-text + semantic via rag-module
+  Git               → git-module (#30) — clone/pull/push/commit/branch/diff/conflict
+  Diff              → git-module (#30) — Monaco diff editor, inline diff, hunk staging
+  Telemetry         → telemetry-module (#35) — OpenTelemetry spans, exporters
+  Dependency Resolver → core-engine (#1) — topological sort in plugin-engine.ts
+  Lifecycle Hooks   → MonacoPlugin interface — onBeforeMount, onMount, onLanguageChange,
+                       onContentChange, onConfigChange, onDispose
+  State Persistence → storage-module (#10) + snapshot-module (#41) — IndexedDB/OPFS + full state restore
+  Extension Sandbox → extension-module (#21) — Web Worker sandbox, manifest validation
+  Token Vault       → secrets-module (#34) — Vault/AWS/Doppler, encrypted storage
+  LSP Alternative   → context-module (#3) + symbol-index-module (#46) + context-engine (standalone)
+  Config Validator  → settings-module (#45) — schema registry, typed validation
+
+These DO NOT need new modules. They may need expansion (noted below).
+
+
+================================================================================
+  2. NEW MODULES
+================================================================================
+
+--------------------------------------------------------------------------------
+  [NEW] #47. security-module
+--------------------------------------------------------------------------------
+
+PRIORITY: CRITICAL — required before any production deployment.
+
+Centralized security policy enforcement across the entire IDE. Every module
+that touches network, FS, or user data goes through this gate.
+
+RESPONSIBILITIES:
+  - Permission system: per-plugin capability declarations
+      Each plugin declares what it needs in its manifest:
+        { "permissions": ["fs.read", "fs.write", "ai.call", "network.fetch"] }
+      security-module validates at registration time. Undeclared access is blocked.
+
+  - Rate limiting: throttle AI requests, API calls, FS operations
+      Configurable per-domain:
+        { "ai:*": { max: 60, windowMs: 60000 },
+          "fs:write": { max: 100, windowMs: 60000 } }
+
+  - CSP enforcement: Content Security Policy for webview panels
+      Injects CSP headers/meta into all iframe-based views (right panel, bottom panel).
+      Blocks inline scripts, restricts fetch origins.
+
+  - Input sanitization: sanitize all user-provided HTML before rendering
+      Prevents XSS in notification toasts, markdown preview, AI chat output.
+
+  - Audit bridge: forwards security-relevant events to audit-module (#33)
+
+EVENTS:
+  security:permission-denied   { plugin, capability, action }
+  security:rate-limited        { plugin, domain, retryAfter }
+  security:csp-violation       { viewId, directive, blockedUri }
+  security:sanitize            { source, field }
+
+DEPENDENCIES: core-engine, storage-module
+DEPENDED ON BY: Every module that calls network/FS/AI.
+
+FILES:
+  plugins/security-module/index.ts           createSecurityPlugin()
+  plugins/security-module/permission-gate.ts  Capability check engine
+  plugins/security-module/rate-limiter.ts     Token bucket / sliding window
+  plugins/security-module/csp.ts             CSP policy builder + injector
+  plugins/security-module/sanitizer.ts       HTML/SVG sanitization (DOMPurify)
+  plugins/security-module/types.ts           PermissionManifest, RateLimitConfig
+
+--------------------------------------------------------------------------------
+  [NEW] #48. worker-module
+--------------------------------------------------------------------------------
+
+Centralized Web Worker pool manager. All modules that need off-main-thread
+work go through this instead of spawning their own workers.
+
+RESPONSIBILITIES:
+  - Worker pool: spawn, reuse, and terminate workers on demand
+  - Task queue: FIFO with priority levels (high/normal/low)
+  - Worker types: dedicated (one task) and shared (message port)
+  - Transferable support: ArrayBuffer, OffscreenCanvas, MessagePort
+  - Timeout + kill: terminate stuck workers after configurable deadline
+  - Resource tracking: memory + CPU usage per worker (where available)
+
+CONSUMERS:
+  indexer-module — symbol parsing
+  eslint-module — linting
+  prettier-module — formatting
+  rag-module — embedding computation
+  search-module — regex search across large workspaces
+
+API:
+  const result = await ctx.workers.run("parse-symbols", {
+    input: { path, content },
+    priority: "high",
+    timeout: 5000,
+    transfer: [buffer],
+  });
+
+  const pool = ctx.workers.createPool("lint-pool", {
+    maxWorkers: 4,
+    workerUrl: new URL("./lint-worker.ts", import.meta.url),
+  });
+
+EVENTS:
+  worker:spawn        { poolId, workerId }
+  worker:complete     { poolId, workerId, taskId, durationMs }
+  worker:error        { poolId, workerId, taskId, error }
+  worker:timeout      { poolId, workerId, taskId }
+  worker:pool-drain   { poolId }
+
+DEPENDENCIES: none (tier 0)
+
+FILES:
+  plugins/worker-module/index.ts          createWorkerPlugin()
+  plugins/worker-module/pool.ts           WorkerPool — spawn/reuse/kill
+  plugins/worker-module/scheduler.ts      Priority task queue
+  plugins/worker-module/rpc.ts            Structured message bridge (postMessage RPC)
+  plugins/worker-module/types.ts          WorkerTask, PoolConfig, WorkerHandle
+
+--------------------------------------------------------------------------------
+  [NEW] #49. performance-module
+--------------------------------------------------------------------------------
+
+Runtime performance management for Monaco + AI workloads.
+
+RESPONSIBILITIES:
+  - Debounce manager: centralized debounce/throttle registry
+      Modules register their debounced operations here instead of rolling
+      their own setTimeout. Configurable per-operation:
+        ctx.perf.debounce("editor:content-change", handler, 500);
+        ctx.perf.throttle("ai:inline-request", handler, 1000);
+
+  - Task scheduler: prioritized microtask/macrotask scheduling
+      Ensures heavy tasks (indexing, linting) yield to user interactions.
+      Uses requestIdleCallback where available.
+
+  - Memory cleanup: tracks Monaco model count, disposes leaked models,
+      monitors IndexedDB storage quota, emits warnings at thresholds.
+
+  - Performance marks: wraps performance.mark() / performance.measure()
+      for structured timing. Feeds into telemetry-module.
+
+EVENTS:
+  perf:memory-warning    { usedMB, limitMB, percent }
+  perf:long-task         { taskName, durationMs }
+  perf:model-leak        { uri, age }
+
+DEPENDENCIES: worker-module (for offloading), storage-module
+DEPENDED ON BY: editor-module, indexer-module, ai-module
+
+FILES:
+  plugins/performance-module/index.ts        createPerformancePlugin()
+  plugins/performance-module/debounce.ts     Centralized debounce/throttle
+  plugins/performance-module/scheduler.ts    Priority task scheduler
+  plugins/performance-module/memory.ts       Memory monitor + cleanup
+  plugins/performance-module/marks.ts        performance.mark() wrapper
+  plugins/performance-module/types.ts        PerfConfig, TaskPriority
+
+--------------------------------------------------------------------------------
+  [NEW] #50. ui-module
+--------------------------------------------------------------------------------
+
+Shared, theme-aware UI component library used by all visual modules.
+
+RESPONSIBILITIES:
+  - Reusable primitives: Button, Input, Select, Dropdown, Modal, Tooltip,
+    ContextMenu, ProgressBar, Badge, Avatar, Tree, List, Tabs (UI tabs,
+    not editor tabs), Breadcrumb, Checkbox, Toggle, ColorPicker
+  - Theme integration: all components read CSS custom properties from
+    theme-module. Auto-switch on theme:change.
+  - Accessibility: ARIA roles, keyboard navigation, focus traps (modals)
+  - Icon integration: components use icon-module for all icons
+  - No framework lock-in: components are vanilla DOM + CSS.
+    React/Preact wrappers optional.
+
+API:
+  const modal = ctx.ui.createModal({
+    title: "Confirm Delete",
+    body: "Delete this file?",
+    actions: [
+      { label: "Cancel", role: "cancel" },
+      { label: "Delete", role: "destructive", handler: () => { ... } },
+    ],
+  });
+  modal.open();
+
+EVENTS:
+  ui:modal-open     { modalId }
+  ui:modal-close    { modalId }
+  ui:theme-applied  { themeId }
+
+DEPENDENCIES: theme-module, icon-module (tier 1)
+
+FILES:
+  plugins/ui-module/index.ts             createUIPlugin()
+  plugins/ui-module/components/modal.ts
+  plugins/ui-module/components/dropdown.ts
+  plugins/ui-module/components/tree.ts
+  plugins/ui-module/components/tooltip.ts
+  plugins/ui-module/components/input.ts
+  plugins/ui-module/theme-bridge.ts      CSS custom property reader
+  plugins/ui-module/a11y.ts              Focus trap, ARIA helpers
+  plugins/ui-module/types.ts             ModalConfig, DropdownConfig, etc.
+
+--------------------------------------------------------------------------------
+  [NEW] #51. navigation-module
+--------------------------------------------------------------------------------
+
+Editor navigation history — go back / go forward across files and positions.
+
+RESPONSIBILITIES:
+  - History stack: records every cursor jump (go-to-definition, file open,
+    search result click, breadcrumb click)
+  - Back / Forward: Ctrl+Alt+← / Ctrl+Alt+→ (VS Code-style)
+  - Limits: configurable max entries (default 100), auto-prune oldest
+  - Cross-file: navigating back restores both the file AND the cursor position
+
+EVENTS:
+  nav:push           { uri, line, column, reason }
+  nav:back           { uri, line, column }
+  nav:forward        { uri, line, column }
+
+DEPENDENCIES: editor-module, tabs-module, keybinding-module
+
+FILES:
+  plugins/navigation-module/index.ts      createNavigationPlugin()
+  plugins/navigation-module/history.ts    Stack with max-size + dedup
+  plugins/navigation-module/types.ts      NavEntry, NavConfig
+
+--------------------------------------------------------------------------------
+  [NEW] #52. task-module
+--------------------------------------------------------------------------------
+
+Background job system with progress tracking.
+
+RESPONSIBILITIES:
+  - Job registry: any module can enqueue a long-running background task
+      ctx.tasks.enqueue({
+        id: "workspace-index",
+        label: "Indexing workspace...",
+        run: async (progress) => {
+          for (const file of files) {
+            await indexFile(file);
+            progress.report(i / files.length);
+          }
+        },
+        cancellable: true,
+      });
+  - Progress UI: feeds into statusbar-module (spinner + percentage) and
+    notification-module (progress toast)
+  - Cancellation: AbortController-based — modules check signal.aborted
+  - Concurrency: configurable max parallel jobs (default 3)
+  - Priority: high (user-initiated) > normal (background) > low (prefetch)
+
+EVENTS:
+  task:enqueue       { taskId, label }
+  task:progress      { taskId, percent }
+  task:complete      { taskId, durationMs }
+  task:cancel        { taskId }
+  task:error         { taskId, error }
+
+DEPENDENCIES: notification-module, statusbar-module
+
+FILES:
+  plugins/task-module/index.ts         createTaskPlugin()
+  plugins/task-module/runner.ts        Concurrency limiter + abort
+  plugins/task-module/types.ts         TaskConfig, TaskHandle, TaskProgress
+
+--------------------------------------------------------------------------------
+  [NEW] #53. feature-flags-module
+--------------------------------------------------------------------------------
+
+Dynamic feature toggle system.
+
+RESPONSIBILITIES:
+  - Flag registry: boolean, string, number, JSON flags
+  - Sources: local config, remote API (for SaaS), settings-module override
+  - Runtime toggle: enable/disable features without reload
+  - A/B testing: percentage rollout, user segmentation
+  - Module integration: any module checks flags before activating:
+      if (ctx.flags.isEnabled("ai.ghost-text")) { ... }
+
+EVENTS:
+  flags:change       { flag, oldValue, newValue, source }
+  flags:sync         { source, count }
+
+DEPENDENCIES: storage-module, settings-module
+
+FILES:
+  plugins/feature-flags-module/index.ts     createFeatureFlagsPlugin()
+  plugins/feature-flags-module/registry.ts  Flag store + evaluation
+  plugins/feature-flags-module/remote.ts    Remote flag sync (optional)
+  plugins/feature-flags-module/types.ts     FlagConfig, FlagValue
+
+
+================================================================================
+  3. EXPAND EXISTING MODULES
+================================================================================
+
+These do NOT become new plugins. They are new files/capabilities folded
+into existing modules.
+
+--------------------------------------------------------------------------------
+  [EXPAND] core-engine → Error Boundary System
+--------------------------------------------------------------------------------
+
+Add to: core/error-boundary.ts
+
+  - Wraps every plugin lifecycle call (onMount, onDispose, etc.) in try/catch
+  - A crashing plugin is isolated — other plugins continue running
+  - Emits: plugin:error { name, phase, error }
+  - Configurable recovery: retry once, disable plugin, or ignore
+  - Prevents full app crash from a single bad extension
+
+This is NOT a plugin — it lives in core/ alongside plugin-engine.ts.
+
+FILE:
+  core/error-boundary.ts    try/catch wrapper for all lifecycle phases
+
+--------------------------------------------------------------------------------
+  [EXPAND] extension-module → Sandbox Runtime (Extension Host)
+--------------------------------------------------------------------------------
+
+The extension-module (#21) already has Web Worker sandbox. Expand it with:
+
+  - iframe sandbox option (for extensions that need DOM access)
+  - RPC message bridge: Extension ↔ Core via structured postMessage
+      Extension calls: rpc.call("fs.read", { path }) → proxied to fs-module
+      Extension cannot access window, document, or global scope
+  - Capability negotiation: extension declares permissions in manifest,
+    security-module validates, sandbox enforces
+
+FILES to add:
+  plugins/extension-module/iframe-sandbox.ts   iframe-based isolation
+  plugins/extension-module/rpc-bridge.ts       Bidirectional RPC over postMessage
+  plugins/extension-module/capability.ts       Permission enforcement in sandbox
+
+--------------------------------------------------------------------------------
+  [EXPAND] extension-module → Update & Versioning
+--------------------------------------------------------------------------------
+
+Add to extension-module (#21):
+
+  - Version tracking per installed extension
+  - Migration runner: extensions can declare migrate() for breaking changes
+  - Auto-update check against marketplace registry
+  - Cache invalidation: clear stale VSIX data when version changes
+  - CDN version pinning: lock to specific extension versions
+
+FILES to add:
+  plugins/extension-module/updater.ts      Version check + auto-update
+  plugins/extension-module/migrator.ts     Schema migration runner
+
+--------------------------------------------------------------------------------
+  [EXPAND] core-engine → Dev Mode / Testing Overlay
+--------------------------------------------------------------------------------
+
+Add to core/:
+
+  - Dev mode flag: `core.start({ devMode: true })`
+  - Debug logs panel: every EventBus emit logged with timestamp + payload
+  - Plugin inspector: shows registered plugins, their state, dependencies
+  - Mock adapters: MockFSAdapter, MockAIAdapter for testing without backends
+
+FILES to add:
+  core/dev-mode.ts          Enables debug logging, mock adapters
+  core/inspector.ts         Plugin state viewer (feeds into a sidebar view)
+
+--------------------------------------------------------------------------------
+  [EXPAND] ai-module → Context Orchestrator
+--------------------------------------------------------------------------------
+
+The ai-module (#4) is a thin transport client. The context orchestration
+belongs in a layer between the AI chat client and the modules that provide
+context. Expand:
+
+  - Context merging: gathers editor content, terminal output, file history,
+    symbol index results, rag-module chunks into a single context object
+  - Token budget: counts tokens per context source, trims to fit model limit
+  - Smart chunking: uses rag-module for relevance-ranked chunks
+  - Priority: user message > current file > imported files > workspace context
+
+This can be a new file in ai-module OR a standalone orchestrator plugin.
+Recommend: standalone #54 ai-context-module if scope is large enough.
+
+FILE to add (if expanding ai-module):
+  plugins/ai-module/context-builder.ts    Merges + trims context per request
+
+--------------------------------------------------------------------------------
+  [EXPAND] settings-module → Schema Validator
+--------------------------------------------------------------------------------
+
+Already has schema registry. Expand with:
+
+  - Deep validation: nested objects, arrays, enums, regex patterns
+  - Error messages: human-readable validation errors shown in settings UI
+  - Plugin config validation: plugins register their config schema,
+    settings-module validates on load AND on change
+  - JSON Schema draft-07 compatible
+
+FILE to add:
+  plugins/settings-module/validator.ts    JSON Schema-compatible validator
+
+--------------------------------------------------------------------------------
+  [EXPAND] command-module → Command Router
+--------------------------------------------------------------------------------
+
+The command-module (#15) already has command registry + when-clause.
+Expand with explicit routing:
+
+  - Command → Handler → Module chain with middleware support
+  - Pre/post hooks: before:command, after:command events
+  - Command history: last N executed commands (for undo/replay)
+
+FILE to add:
+  plugins/command-module/router.ts        Middleware chain + hooks
+
+--------------------------------------------------------------------------------
+  [EXPAND] storage-module → Session Persistence
+--------------------------------------------------------------------------------
+
+The storage-module (#10) + snapshot-module (#41) already handle persistence.
+Expand storage-module with explicit session restore:
+
+  - On startup: restore open tabs, cursor positions, layout state,
+    active sidebar view, scroll positions, split pane configuration
+  - On shutdown: auto-save session state
+  - Granular: user can choose what to restore (tabs only, full state, nothing)
+
+FILE to add:
+  plugins/storage-module/session.ts       Session save/restore orchestrator
+
+--------------------------------------------------------------------------------
+  [EXPAND] telemetry-module → Analytics
+--------------------------------------------------------------------------------
+
+Already has OpenTelemetry spans. Expand with:
+
+  - Feature usage tracking: which commands/features are used, frequency
+  - Error rate dashboards: error count per module, per time window
+  - Performance budgets: alert when operation exceeds time budget
+
+FILE to add:
+  plugins/telemetry-module/analytics.ts   Feature usage + error rate tracking
+
+
+================================================================================
+  4. UPDATED MODULE COUNT
+================================================================================
+
+  EXISTING (from context.txt):
+    Core modules:       23  (#1-#23)
+    Advanced modules:   19  (#24-#42)
+    v2.1 modules:        2  (#43-#44)
+    v2.2 modules:        2  (#45-#46)
+    Standalone plugins:  7
+    ─────────────────────────────
+    Subtotal:           53
+
+  NEW MODULES (from this document):
+    #47  security-module         [NEW]
+    #48  worker-module           [NEW]
+    #49  performance-module      [NEW]
+    #50  ui-module               [NEW]
+    #51  navigation-module       [NEW]
+    #52  task-module             [NEW]
+    #53  feature-flags-module    [NEW]
+    ─────────────────────────────
+    New:                 7
+
+  EXPANDED (no new module number — existing modules grow):
+    core-engine          + error-boundary, dev-mode, inspector
+    extension-module     + iframe-sandbox, rpc-bridge, updater, migrator
+    ai-module            + context-builder
+    settings-module      + validator
+    command-module       + router
+    storage-module       + session
+    telemetry-module     + analytics
+
+  ─────────────────────────────────────────
+  GRAND TOTAL:  53 modules + 7 new = 60 components
+                (53 modules + 7 standalone plugins)
+  ─────────────────────────────────────────
+
+
+================================================================================
+  5. DEPENDENCY TIER PLACEMENT (new modules only)
+================================================================================
+
+  TIER 0 — No dependencies:
+    worker-module
+
+  TIER 1 — Depends on tier 0:
+    security-module ........... core-engine, storage-module
+    performance-module ........ worker-module, storage-module
+    ui-module ................. theme-module, icon-module
+    feature-flags-module ...... storage-module, settings-module
+    task-module ............... notification-module, statusbar-module
+
+  TIER 2 — Depends on tier 0+1:
+    navigation-module ......... editor-module, tabs-module, keybinding-module
+
+
+================================================================================
+  6. IMPLEMENTATION PRIORITY
+================================================================================
+
+  P0 — Before any production release:
+    #47  security-module        (gates all network/FS/AI access)
+    core error-boundary         (prevents full-app crashes)
+    extension sandbox expansion (RPC bridge, iframe isolation)
+
+  P1 — Required for good DX:
+    #48  worker-module          (unblocks performant ESLint/Prettier/indexing)
+    #49  performance-module     (memory monitoring, debounce management)
+    #52  task-module            (background job visibility)
+
+  P2 — Nice to have:
+    #50  ui-module              (consistent component library)
+    #51  navigation-module      (back/forward navigation)
+    #53  feature-flags-module   (runtime toggles, A/B testing)
+
+  P3 — Expand when needed:
+    All [EXPAND] entries — add files to existing modules as those modules
+    are built and gaps become apparent.
+
+
+================================================================================
+================================================================================
+  PHASE 2 — ADDITIONAL LAYERS
+  Resilience, Offline, Caching, Intelligence, Enterprise
+================================================================================
+================================================================================
+
+The entries below continue numbering from #53. Every item from the raw input
+is classified: NEW module, EXPAND existing, or OVERLAP (already covered).
+
+
+================================================================================
+  7. PHASE 2 OVERLAP — Already Covered
+================================================================================
+
+These are ALREADY fully covered by existing modules. No action needed.
+
+  Secrets Management   → secrets-module (#34) — Vault/AWS/Doppler, encrypted
+                          storage, scoped access per plugin. Already in the
+                          Phase 1 overlap map.
+
+  Audit & Logging      → audit-module (#33) — tracks file edits, commands, AI
+                          calls. telemetry-module (#35) + analytics [EXPAND]
+                          covers error-rate dashboards and feature-usage tracking.
+
+  Simulation / Testing → ALREADY noted as [EXPAND] core-engine → Dev Mode in
+                          Phase 1 Section 3. MockFSAdapter, MockAIAdapter,
+                          plugin inspector, debug logs panel.
+
+
+================================================================================
+  8. PHASE 2 NEW MODULES
+================================================================================
+
+--------------------------------------------------------------------------------
+  [NEW] #54. crash-recovery-module
+--------------------------------------------------------------------------------
+
+PRIORITY: P0 — production requirement.
+
+Ensures the IDE survives crashes, tab closures, and unexpected errors
+without losing user work.
+
+RESPONSIBILITIES:
+  - Unsaved file recovery: periodically writes dirty editor buffers to
+      IndexedDB (every 5s or on content-change debounce). On restart,
+      detects unclean shutdown and offers "Restore unsaved changes?" dialog.
+
+  - Editor state snapshot: saves cursor positions, scroll offsets, open tabs,
+      split pane layout, active sidebar view to IndexedDB on every
+      significant state change. Restores on next boot.
+
+  - Safe mode: if the IDE crashes 3 times within 60 seconds:
+      → Boot with ALL plugins disabled
+      → Show notification: "Safe mode — plugins disabled due to repeated crashes"
+      → User can re-enable plugins one by one from settings
+
+  - Plugin isolation: integrates with core error-boundary (Phase 1 [EXPAND]).
+      A crashing plugin is disabled + quarantined. Other plugins keep running.
+      Emits crash:plugin-quarantined { pluginId, error, restartCount }.
+
+  - Crash report: on unclean shutdown, captures:
+      → Last 50 EventBus events
+      → Active plugin list + their state
+      → Last error stack trace
+      Stores as crash-report.json in storage-module. Feeds into
+      telemetry-module if user opts in.
+
+EVENTS:
+  crash:detected            { reason, timestamp }
+  crash:recovery-start      { filesCount }
+  crash:recovery-complete   { restoredFiles, skippedFiles }
+  crash:safe-mode           { disabledPlugins }
+  crash:plugin-quarantined  { pluginId, error, restartCount }
+
+DEPENDENCIES: storage-module, snapshot-module, notification-module
+DEPENDED ON BY: core-engine (safe-mode boot check)
+
+FILES:
+  plugins/crash-recovery-module/index.ts         createCrashRecoveryPlugin()
+  plugins/crash-recovery-module/buffer-saver.ts  Periodic dirty-buffer flush to IDB
+  plugins/crash-recovery-module/state-snapshot.ts Editor state capture + restore
+  plugins/crash-recovery-module/safe-mode.ts     Crash counter + plugin disable logic
+  plugins/crash-recovery-module/crash-report.ts  Crash report builder
+  plugins/crash-recovery-module/types.ts         CrashReport, RecoveryConfig
+
+--------------------------------------------------------------------------------
+  [NEW] #55. sync-module
+--------------------------------------------------------------------------------
+
+PRIORITY: P1 — critical for SFTP/API workflows.
+
+Offline-first editing with background sync. Especially important for the
+three FS adapters (SFTP, API, Local) and IndexedDB storage.
+
+RESPONSIBILITIES:
+  - Offline queue: when network is unavailable, all write operations
+      (save, git push, AI requests) are enqueued in IndexedDB.
+      Queue is FIFO with retry + exponential backoff.
+
+  - Reconnection sync: on navigator.onLine or WebSocket reconnect,
+      the queue drains automatically. Progress shown in statusbar.
+
+  - Conflict resolution strategies (configurable per file type):
+      → "last-write-wins" — remote overwrites local silently
+      → "merge" — 3-way merge using Monaco diff engine
+      → "ask" — show conflict dialog with diff view (uses git-module diff UI)
+
+  - FS adapter integration: wraps all 3 FSAdapter implementations.
+      Writes go to local IDB first, then sync to remote when available.
+
+  - Sync status per file: synced | pending | conflict | error
+      Shown as icons in the file explorer tree.
+
+API:
+  ctx.sync.getStatus(uri)          → "synced" | "pending" | "conflict" | "error"
+  ctx.sync.forceSync(uri?)         → manually trigger sync (all or specific file)
+  ctx.sync.setStrategy(strategy)   → "last-write-wins" | "merge" | "ask"
+  ctx.sync.getQueue()              → pending operations list
+
+EVENTS:
+  sync:enqueue          { uri, operation, timestamp }
+  sync:start            { queueLength }
+  sync:progress         { completed, total }
+  sync:complete         { synced, failed }
+  sync:conflict         { uri, localVersion, remoteVersion }
+  sync:error            { uri, operation, error, retryIn }
+  sync:online           {}
+  sync:offline          {}
+
+DEPENDENCIES: storage-module, fs-module (all adapters), notification-module
+DEPENDED ON BY: file-explorer, git-module
+
+FILES:
+  plugins/sync-module/index.ts           createSyncPlugin()
+  plugins/sync-module/queue.ts           Offline operation queue (IDB-backed)
+  plugins/sync-module/reconciler.ts      Conflict detection + resolution
+  plugins/sync-module/adapter-wrapper.ts FSAdapter proxy that intercepts writes
+  plugins/sync-module/status-tracker.ts  Per-file sync status
+  plugins/sync-module/types.ts           SyncStatus, SyncStrategy, QueueEntry
+
+--------------------------------------------------------------------------------
+  [NEW] #56. resource-module
+--------------------------------------------------------------------------------
+
+Central resource lifecycle manager. Monaco can leak memory if models,
+editors, listeners, and workers are not explicitly disposed.
+
+RESPONSIBILITIES:
+  - Central registry: every disposable resource is registered here.
+      resourceManager.register("model", uri, model);
+      resourceManager.register("listener", key, disposable);
+      resourceManager.register("worker", poolId, worker);
+
+  - Auto-dispose on context teardown: when a plugin is unloaded or a tab
+      is closed, all resources registered by that plugin/tab are disposed.
+
+  - Leak detection: periodically scans for:
+      → Monaco models with no active editor (orphaned)
+      → Event listeners still subscribed after plugin dispose
+      → Workers alive past their timeout
+      Emits warnings + auto-cleans after configurable grace period.
+
+  - Dispose groups: group related resources together. Dispose the group
+      and all members are cleaned up atomically.
+
+  - Reference counting: shared resources (e.g., a model open in 2 tabs)
+      use refcount. Disposed only when refcount reaches 0.
+
+API:
+  ctx.resources.register(type, key, disposable, { owner?, group? })
+  ctx.resources.dispose(key)
+  ctx.resources.disposeGroup(groupId)
+  ctx.resources.getLeaks()          → { type, key, age, owner }[]
+  ctx.resources.onLeak(handler)     → subscribe to leak detection
+
+EVENTS:
+  resource:register     { type, key, owner }
+  resource:dispose      { type, key, owner }
+  resource:leak         { type, key, ageSec, owner }
+  resource:group-dispose { groupId, count }
+
+DEPENDENCIES: none (tier 0 — loaded very early)
+DEPENDED ON BY: editor-module, worker-module, every module that creates disposables
+
+FILES:
+  plugins/resource-module/index.ts       createResourcePlugin()
+  plugins/resource-module/registry.ts    Central disposable registry + refcount
+  plugins/resource-module/leak-scan.ts   Periodic orphan detection
+  plugins/resource-module/groups.ts      Dispose groups
+  plugins/resource-module/types.ts       ResourceEntry, LeakReport, DisposeGroup
+
+--------------------------------------------------------------------------------
+  [NEW] #57. concurrency-module
+--------------------------------------------------------------------------------
+
+Prevents race conditions across AI calls, FS operations, and indexing.
+
+RESPONSIBILITIES:
+  - Request deduplication: if the same request (same key) is already
+      in-flight, return the existing promise instead of firing a new one.
+        const result = await ctx.concurrency.dedupe("ai:completion:" + hash, () =>
+          ctx.ai.complete(prompt)
+        );
+
+  - Cancel-previous: for operations where only the latest matters
+      (e.g., autocomplete, search-as-you-type), automatically abort
+      the previous request when a new one starts.
+        ctx.concurrency.cancelPrevious("search:" + query, (signal) =>
+          ctx.search.find(query, { signal })
+        );
+
+  - Semaphore: limit concurrent operations per domain.
+        const sem = ctx.concurrency.semaphore("fs:write", 3);
+        await sem.acquire();
+        try { await writeFile(...); } finally { sem.release(); }
+
+  - AbortController pool: centralized abort management. Modules get
+      a signal from the pool instead of creating their own controllers.
+
+  - Mutex: single-access lock for critical sections.
+        await ctx.concurrency.mutex("config:write", async () => {
+          const config = await readConfig();
+          config.foo = "bar";
+          await writeConfig(config);
+        });
+
+EVENTS:
+  concurrency:deduped       { key }
+  concurrency:cancelled     { key, reason }
+  concurrency:semaphore-wait { domain, waiting, max }
+  concurrency:mutex-contention { key, waitMs }
+
+DEPENDENCIES: none (tier 0)
+
+FILES:
+  plugins/concurrency-module/index.ts       createConcurrencyPlugin()
+  plugins/concurrency-module/dedupe.ts      Request deduplication map
+  plugins/concurrency-module/cancel.ts      Cancel-previous pattern
+  plugins/concurrency-module/semaphore.ts   Counting semaphore
+  plugins/concurrency-module/mutex.ts       Async mutex
+  plugins/concurrency-module/abort-pool.ts  Centralized AbortController factory
+  plugins/concurrency-module/types.ts       SemaphoreConfig, MutexHandle
+
+--------------------------------------------------------------------------------
+  [NEW] #58. intent-module
+--------------------------------------------------------------------------------
+
+PRIORITY: P3 — advanced intelligence layer.
+
+Instead of reacting to raw events, this module detects USER INTENT from
+behavioral patterns and triggers smart responses.
+
+RESPONSIBILITIES:
+  - Typing speed analysis: if user is typing fast (>80 WPM), delay AI
+      completions to avoid distraction. Resume when typing slows.
+
+  - Idle detection: when user stops interacting for N seconds:
+      → Trigger background indexing
+      → Pre-fetch AI suggestions for current context
+      → Run pending lint/format
+
+  - Error-driven actions: when a diagnostic error appears:
+      → If AI is enabled: auto-trigger "fix this" suggestion
+      → If context-engine has a known fix: show inline action
+
+  - Focus tracking: detect which panel/file the user is focused on.
+      Prioritize resources (AI context, indexing) for that area.
+
+  - Pattern learning (optional): track user habits over time:
+      → "User always formats on save" → auto-enable
+      → "User switches to terminal after build error" → pre-open terminal
+
+EVENTS:
+  intent:typing-fast       { wpm, file }
+  intent:typing-slow       { wpm, file }
+  intent:idle              { idleSec, lastAction }
+  intent:error-detected    { uri, diagnostic, suggestedAction }
+  intent:focus-change      { from, to }
+  intent:pattern-learned   { pattern, confidence }
+
+DEPENDENCIES: editor-module, ai-module, performance-module, telemetry-module
+
+FILES:
+  plugins/intent-module/index.ts          createIntentPlugin()
+  plugins/intent-module/typing-analyzer.ts WPM tracking + speed thresholds
+  plugins/intent-module/idle-detector.ts   Idle timer + action triggers
+  plugins/intent-module/error-responder.ts Diagnostic → AI fix pipeline
+  plugins/intent-module/focus-tracker.ts   Panel/file focus prioritization
+  plugins/intent-module/patterns.ts        Optional habit learning (IDB-backed)
+  plugins/intent-module/types.ts           IntentSignal, IntentConfig
+
+--------------------------------------------------------------------------------
+  [NEW] #59. workspace-module
+--------------------------------------------------------------------------------
+
+Multi-workspace support — like VS Code's multi-root workspaces.
+
+RESPONSIBILITIES:
+  - Multiple root folders: user can open several project folders at once.
+      Each root has its own file tree, settings, and git context.
+
+  - Workspace config: .monaco-workspace.json at the top level:
+      {
+        "folders": [
+          { "path": "./frontend", "name": "Frontend" },
+          { "path": "./backend",  "name": "API" },
+          { "path": "./shared",   "name": "Shared Libs" }
+        ],
+        "settings": { /* workspace-level overrides */ }
+      }
+
+  - Context switching: each root maintains its own:
+      → FS adapter instance
+      → Settings layer (workspace > user > default)
+      → Git state (branch, status)
+      → Symbol index scope
+
+  - Cross-workspace search: search-module can search across all roots
+      or scope to a specific root.
+
+  - Workspace events: notify all modules when workspace roots change.
+
+API:
+  ctx.workspace.getRoots()                → WorkspaceRoot[]
+  ctx.workspace.addRoot(path, name?)      → add a folder
+  ctx.workspace.removeRoot(path)          → remove a folder
+  ctx.workspace.getActiveRoot()           → currently focused root
+  ctx.workspace.getConfig()               → parsed .monaco-workspace.json
+  ctx.workspace.getSettingsFor(rootPath)  → merged settings for that root
+
+EVENTS:
+  workspace:root-added      { path, name }
+  workspace:root-removed    { path }
+  workspace:root-changed    { path, activeRoot }
+  workspace:config-changed  { config }
+
+DEPENDENCIES: storage-module, settings-module, fs-module
+
+FILES:
+  plugins/workspace-module/index.ts       createWorkspacePlugin()
+  plugins/workspace-module/roots.ts       Root folder registry + FS adapter map
+  plugins/workspace-module/config.ts      .monaco-workspace.json parser
+  plugins/workspace-module/scope.ts       Per-root settings/symbol isolation
+  plugins/workspace-module/types.ts       WorkspaceRoot, WorkspaceConfig
+
+--------------------------------------------------------------------------------
+  [NEW] #60. deep-link-module
+--------------------------------------------------------------------------------
+
+URI-based deep linking into specific files, lines, and panels.
+
+RESPONSIBILITIES:
+  - URL scheme: app://file/{path}:{line}:{column}
+      Opens the file, scrolls to line, places cursor at column.
+      Works from: browser address bar, external links, AI responses,
+      error stack traces, notification click handlers.
+
+  - Panel links: app://panel/{panelId}
+      Opens a specific sidebar/bottom panel.
+
+  - Command links: app://command/{commandId}?args={json}
+      Executes a command with arguments.
+
+  - Link generation: any module can create shareable links:
+      const link = ctx.deepLink.create({
+        file: "src/index.ts", line: 42, column: 5
+      });
+      // → "app://file/src/index.ts:42:5"
+
+  - External sharing: links can be copied to clipboard for sharing
+      in chat, issues, documentation.
+
+  - Error navigation: when AI returns "see file X line Y", the response
+      renderer can turn that into a clickable deep link.
+
+API:
+  ctx.deepLink.create(target)     → string (URI)
+  ctx.deepLink.navigate(uri)      → opens file/panel/runs command
+  ctx.deepLink.parse(uri)         → { type, path?, line?, column?, commandId?, args? }
+  ctx.deepLink.onNavigate(handler) → intercept navigation for custom handling
+
+EVENTS:
+  deep-link:navigate    { uri, type, target }
+  deep-link:created     { uri }
+  deep-link:invalid     { uri, reason }
+
+DEPENDENCIES: editor-module, tabs-module, command-module
+
+FILES:
+  plugins/deep-link-module/index.ts      createDeepLinkPlugin()
+  plugins/deep-link-module/parser.ts     URI parser + validator
+  plugins/deep-link-module/navigator.ts  Route URI → editor/panel/command
+  plugins/deep-link-module/generator.ts  Create URIs from file/line/panel
+  plugins/deep-link-module/types.ts      DeepLinkTarget, DeepLinkURI
+
+--------------------------------------------------------------------------------
+  [NEW] #61. knowledge-graph-module
+--------------------------------------------------------------------------------
+
+PRIORITY: P3 — next-level AI intelligence.
+
+Builds a relationship graph across the entire codebase: functions, files,
+imports, usages, dependencies. Enables smarter AI context, faster
+navigation, and deeper code understanding.
+
+RESPONSIBILITIES:
+  - Graph construction: on workspace index, builds edges:
+      File → imports → File
+      Function → calls → Function
+      Class → extends → Class
+      Variable → used-in → Function
+      Module → depends-on → Module (package.json)
+
+  - Incremental updates: on file save, re-index only the changed file
+      and its direct dependents (not full re-index).
+
+  - Query API: modules query the graph for context:
+      ctx.graph.getDependents("src/utils.ts")   → who imports this?
+      ctx.graph.getCallGraph("handleClick")     → what does it call?
+      ctx.graph.getRelated("UserModel")         → files/functions using it
+      ctx.graph.getHotPaths()                   → most-connected nodes
+
+  - AI integration: feeds high-value graph context to ai-module:
+      → "User is editing handleClick which calls fetchUser, saveUser,
+         and is imported by 5 components" — AI gets richer context.
+
+  - Storage: graph stored in IndexedDB via storage-module.
+      Serialized as adjacency list. Lazy-loaded per workspace root.
+
+EVENTS:
+  graph:built          { nodeCount, edgeCount, durationMs }
+  graph:updated        { changedFile, addedEdges, removedEdges }
+  graph:query          { queryType, resultCount }
+
+DEPENDENCIES: symbol-index-module, indexer-module, storage-module, rag-module
+
+FILES:
+  plugins/knowledge-graph-module/index.ts       createKnowledgeGraphPlugin()
+  plugins/knowledge-graph-module/builder.ts     Graph construction from symbol index
+  plugins/knowledge-graph-module/graph.ts       In-memory graph + query engine
+  plugins/knowledge-graph-module/incremental.ts Diff-based graph updates
+  plugins/knowledge-graph-module/serializer.ts  IDB serialization (adjacency list)
+  plugins/knowledge-graph-module/types.ts       GraphNode, GraphEdge, QueryResult
+
+--------------------------------------------------------------------------------
+  [NEW] #62. streaming-module
+--------------------------------------------------------------------------------
+
+Generalized streaming engine for chunk-based rendering. Prevents UI
+blocking for AI responses, terminal output, and large file reads.
+
+RESPONSIBILITIES:
+  - Stream registry: any module can create a named stream.
+      const stream = ctx.streaming.create("ai-response-123", {
+        onChunk: (chunk) => appendToChat(chunk),
+        onDone: () => markComplete(),
+        onError: (err) => showError(err),
+      });
+
+  - Backpressure: if the consumer (UI) can't keep up, buffer chunks
+      and flush on requestAnimationFrame. Prevents DOM thrashing.
+
+  - AI streaming: wraps SSE/WebSocket AI transport. Chunks arrive as
+      tokens and are rendered incrementally (not waiting for full response).
+
+  - Terminal streaming: terminal output piped through streams. Large
+      output (build logs) rendered in batches, not line-by-line.
+
+  - File streaming: large files read in chunks via ReadableStream.
+      Editor receives chunks progressively for fast initial render.
+
+  - Cancel: abort a stream mid-flight via AbortController.
+
+API:
+  ctx.streaming.create(id, handlers)    → StreamHandle
+  ctx.streaming.push(id, chunk)         → push data into stream
+  ctx.streaming.complete(id)            → signal end of stream
+  ctx.streaming.abort(id)               → cancel stream
+  ctx.streaming.getActive()             → list active streams
+
+EVENTS:
+  stream:start       { streamId, source }
+  stream:chunk       { streamId, chunkSize }
+  stream:complete    { streamId, totalChunks, durationMs }
+  stream:error       { streamId, error }
+  stream:abort       { streamId }
+  stream:backpressure { streamId, bufferedChunks }
+
+DEPENDENCIES: none (tier 0)
+
+FILES:
+  plugins/streaming-module/index.ts        createStreamingPlugin()
+  plugins/streaming-module/stream.ts       Stream handle + chunk buffer
+  plugins/streaming-module/backpressure.ts RAF-based flush + buffer management
+  plugins/streaming-module/types.ts        StreamConfig, StreamHandle, Chunk
+
+--------------------------------------------------------------------------------
+  [NEW] #63. virtualization-module
+--------------------------------------------------------------------------------
+
+DOM virtualization for large lists. Prevents DOM lag in file trees,
+search results, logs, and any scrollable list with 1000+ items.
+
+RESPONSIBILITIES:
+  - Virtual scroll: renders only the visible rows + a small overscan
+      buffer. All other rows are represented by empty space (padding).
+
+  - Adapters for existing modules:
+      file-explorer-module — virtual file tree (10k+ files)
+      search-module — virtual search results
+      terminal-module — virtual log output
+      git-module — virtual diff hunk list
+      symbol-index-module — virtual symbol list (go-to-symbol)
+
+  - Variable row height: supports rows with different heights
+      (e.g., file tree with nested folders, search results with context).
+
+  - Keyboard navigation: arrow keys, page up/down, home/end work
+      correctly in virtualized lists.
+
+  - Framework-agnostic: vanilla DOM implementation. React wrapper optional.
+
+API:
+  const vlist = ctx.virtualize.createList({
+    container: element,
+    itemCount: 50000,
+    itemHeight: 24,          // fixed height, or (index) => height
+    renderItem: (index) => createRowElement(data[index]),
+    overscan: 10,            // extra rows above/below viewport
+  });
+  vlist.scrollToIndex(500);
+  vlist.refresh();           // re-render after data change
+
+EVENTS:
+  virtualize:mount      { listId, itemCount }
+  virtualize:scroll     { listId, startIndex, endIndex }
+  virtualize:refresh    { listId }
+
+DEPENDENCIES: ui-module (optional, for shared styling)
+
+FILES:
+  plugins/virtualization-module/index.ts       createVirtualizationPlugin()
+  plugins/virtualization-module/virtual-list.ts Core virtual scroll engine
+  plugins/virtualization-module/variable-height.ts Dynamic row height support
+  plugins/virtualization-module/keyboard.ts    Arrow key / page navigation
+  plugins/virtualization-module/types.ts       VirtualListConfig, VirtualHandle
+
+--------------------------------------------------------------------------------
+  [NEW] #64. policy-module
+--------------------------------------------------------------------------------
+
+PRIORITY: P3 — enterprise / managed deployment.
+
+Policy engine for restricting IDE features based on organization rules
+or deployment context. Role-based access control at the IDE level.
+
+RESPONSIBILITIES:
+  - Policy definitions: JSON-based rules that restrict features:
+      {
+        "policies": [
+          { "rule": "disable-ai",       "effect": "deny",  "scope": "ai:*" },
+          { "rule": "block-external-fs", "effect": "deny",  "scope": "fs:sftp" },
+          { "rule": "read-only-mode",   "effect": "deny",  "scope": "fs:write" },
+          { "rule": "allow-local-only",  "effect": "allow", "scope": "fs:local" }
+        ]
+      }
+
+  - Role-based access: define roles (admin, developer, viewer) with
+      different policy sets. Roles assigned via auth-module.
+
+  - Policy sources: local config, remote API (enterprise admin panel),
+      settings-module override.
+
+  - Runtime enforcement: integrates with security-module permission gate.
+      Policy check happens BEFORE capability check:
+        policy-module → security-module → actual operation
+
+  - Audit: every policy enforcement is logged to audit-module (#33).
+
+  - Feature masking: denied features hide their UI entirely (menu items,
+      sidebar panels, keybindings) rather than showing disabled state.
+
+API:
+  ctx.policy.check(scope)                → "allow" | "deny"
+  ctx.policy.getRole()                   → current user role
+  ctx.policy.getPolicies()               → active policy set
+  ctx.policy.onPolicyChange(handler)     → react to remote policy updates
+
+EVENTS:
+  policy:enforced      { rule, scope, effect, user }
+  policy:role-changed  { oldRole, newRole }
+  policy:sync          { source, ruleCount }
+
+DEPENDENCIES: security-module, auth-module, storage-module
+
+FILES:
+  plugins/policy-module/index.ts         createPolicyPlugin()
+  plugins/policy-module/engine.ts        Rule evaluation engine
+  plugins/policy-module/roles.ts         Role → policy mapping
+  plugins/policy-module/remote.ts        Remote policy sync (enterprise)
+  plugins/policy-module/types.ts         PolicyRule, Role, PolicyEffect
+
+
+================================================================================
+  9. PHASE 2 EXPAND EXISTING
+================================================================================
+
+These are folded into existing modules — no new plugin number.
+
+--------------------------------------------------------------------------------
+  [EXPAND] snapshot-module (#41) → Data Versioning / Time-Travel
+--------------------------------------------------------------------------------
+
+The snapshot-module already saves full state snapshots. Expand with:
+
+  - File-level snapshots: track content snapshots per file, not just
+      global state. Every save creates a snapshot entry.
+  - Cross-session undo: undo stack persisted in IndexedDB. Reopening a
+      file lets you undo changes from the previous session.
+  - Time-travel UI: slider control showing file history. Scrub through
+      snapshots to see the file at any point in time.
+  - Diff between snapshots: compare any two snapshots using Monaco diff.
+
+This is NOT Git — it's internal, always-on, no commits required.
+
+FILES to add:
+  plugins/snapshot-module/versioning.ts    File-level snapshot tracker
+  plugins/snapshot-module/time-travel.ts   UI slider + snapshot navigation
+  plugins/snapshot-module/session-undo.ts  Cross-session undo stack (IDB)
+
+--------------------------------------------------------------------------------
+  [EXPAND] performance-module (#49) → Smart Caching
+--------------------------------------------------------------------------------
+
+Formalize the caching strategy into a layered system:
+
+  - LRU cache: configurable max entries for Monaco models, symbol index,
+      AI completions. Evicts least-recently-used when full.
+  - TTL-based invalidation: each cache entry has a configurable TTL.
+      Expired entries are lazily purged or eagerly on a timer.
+  - Cache layers (checked in order):
+      1. Memory (Map/WeakMap) — fastest, lost on page reload
+      2. IndexedDB — persistent, survives reload
+      3. CDN — remote, for shared assets / context-engine data
+  - Cache stats: hit/miss ratio per domain, fed into telemetry-module.
+
+FILES to add:
+  plugins/performance-module/cache.ts      Multi-layer cache manager
+  plugins/performance-module/lru.ts        LRU eviction policy
+  plugins/performance-module/ttl.ts        TTL tracking + lazy purge
+
+--------------------------------------------------------------------------------
+  [EXPAND] performance-module (#49) → Heuristic Rules Engine
+--------------------------------------------------------------------------------
+
+Codified rules that automatically tune IDE behavior based on context:
+
+  - "If file > 1MB → disable syntax highlighting heavy features"
+  - "If typing → pause background indexing"
+  - "If CPU usage > 80% → reduce AI request frequency"
+  - "If battery low (laptop) → disable non-essential background tasks"
+  - "If workspace > 10k files → enable lazy-load file tree"
+
+Rules are configurable via settings-module. intent-module (#58) can
+feed behavioral signals into the heuristic engine for smarter decisions.
+
+FILES to add:
+  plugins/performance-module/heuristics.ts   Rule definitions + evaluation
+  plugins/performance-module/rules.ts        Default rule set (configurable)
+
+--------------------------------------------------------------------------------
+  [EXPAND] feature-flags-module (#53) → Capability Detection
+--------------------------------------------------------------------------------
+
+Runtime environment detection — not all browsers/contexts support
+every feature:
+
+  - Browser support: check for required APIs (WebWorker, SharedArrayBuffer,
+      IndexedDB, OPFS, WebSocket, ReadableStream, requestIdleCallback)
+  - Storage limits: detect IndexedDB quota, warn before limit
+  - Worker availability: check if Workers are blocked (some CSP policies)
+  - GPU: detect WebGL/WebGPU for potential editor rendering optimization
+
+Features that depend on unavailable APIs are automatically disabled.
+Falls through to feature-flags-module — a detected incapability sets
+the flag to false.
+
+FILES to add:
+  plugins/feature-flags-module/capabilities.ts  Environment capability scanner
+  plugins/feature-flags-module/browser.ts       Browser API detection
+
+--------------------------------------------------------------------------------
+  [EXPAND] core-engine → Simplicity Layer (API Facade)
+--------------------------------------------------------------------------------
+
+The hardest engineering challenge: hide complexity from plugin developers.
+
+  - Facade API: instead of plugins importing 10 different modules,
+      provide a single high-level ctx object with intuitive methods:
+        ctx.file.read(path)        — instead of ctx.fs.adapter.read(...)
+        ctx.ai.ask(prompt)         — instead of ctx.ai.transport.send(...)
+        ctx.ui.notify(msg)         — instead of ctx.notifications.show(...)
+
+  - Sensible defaults: every option has a sane default. Plugin devs
+      only configure what they need.
+
+  - Type inference: TypeScript generics ensure ctx.* methods return
+      properly typed results without explicit casting.
+
+  - Error messages: every error includes context:
+      "PermissionDeniedError: Plugin 'my-plugin' tried to call fs.write
+       but did not declare 'fs.write' in its manifest permissions."
+
+This is NOT a plugin — it's a design principle enforced across all
+module APIs. The PluginContext interface IS the simplicity layer.
+
+FILES to add:
+  core/facade.ts    High-level API wrappers (thin delegation to modules)
+
+
+================================================================================
+  10. UPDATED COUNTS (Phase 1 + Phase 2 combined)
+================================================================================
+
+  EXISTING (context.txt):
+    Core modules:       23  (#1-#23)
+    Advanced modules:   19  (#24-#42)
+    v2.1 modules:        2  (#43-#44)
+    v2.2 modules:        2  (#45-#46)
+    ─────────────────────────────
+    Subtotal:           46
+
+  Phase 1 NEW (this document, Section 2):
+    #47-#53              7 modules
+
+  Phase 2 NEW (this document, Section 8):
+    #54  crash-recovery-module      [NEW]
+    #55  sync-module                [NEW]
+    #56  resource-module            [NEW]
+    #57  concurrency-module         [NEW]
+    #58  intent-module              [NEW]
+    #59  workspace-module           [NEW]
+    #60  deep-link-module           [NEW]
+    #61  knowledge-graph-module     [NEW]
+    #62  streaming-module           [NEW]
+    #63  virtualization-module      [NEW]
+    #64  policy-module              [NEW]
+    ─────────────────────────────
+    Phase 2 New:        11 modules
+
+  Standalone plugins:    7
+
+  EXPANDED (no new number — existing modules grow):
+    Phase 1 expansions:  8 modules expanded
+    Phase 2 expansions:  5 modules expanded (snapshot, performance×2,
+                          feature-flags, core-engine)
+
+  ─────────────────────────────────────────
+  GRAND TOTAL:  46 + 7 + 11 = 64 modules
+                + 7 standalone plugins = 71 components
+  ─────────────────────────────────────────
+
+
+================================================================================
+  11. DEPENDENCY TIER PLACEMENT (Phase 2 modules)
+================================================================================
+
+  TIER 0 — No dependencies:
+    resource-module
+    concurrency-module
+    streaming-module
+
+  TIER 1 — Depends on tier 0:
+    crash-recovery-module ..... storage-module, snapshot-module, notification-module
+    sync-module ............... storage-module, fs-module, notification-module
+    workspace-module .......... storage-module, settings-module, fs-module
+    virtualization-module ..... ui-module (optional)
+
+  TIER 2 — Depends on tier 0+1:
+    deep-link-module .......... editor-module, tabs-module, command-module
+    policy-module ............. security-module, auth-module, storage-module
+
+  TIER 3 — Depends on tier 0+1+2:
+    intent-module ............. editor-module, ai-module, performance-module
+    knowledge-graph-module .... symbol-index-module, indexer-module, storage-module
+
+
+================================================================================
+  12. IMPLEMENTATION PRIORITY (Phase 2 modules)
+================================================================================
+
+  P0 — Production requirement:
+    #54  crash-recovery-module  (unsaved file recovery, safe mode)
+    #56  resource-module        (prevent memory leaks)
+
+  P1 — Required for good DX:
+    #55  sync-module            (offline editing, FS adapter sync)
+    #57  concurrency-module     (race condition prevention)
+    #62  streaming-module       (non-blocking AI + terminal output)
+
+  P2 — Nice to have:
+    #59  workspace-module       (multi-root workspaces)
+    #60  deep-link-module       (URI navigation)
+    #63  virtualization-module  (large list performance)
+
+  P3 — Advanced / Enterprise:
+    #58  intent-module          (smart user intent detection)
+    #61  knowledge-graph-module (codebase relationship graph)
+    #64  policy-module          (enterprise RBAC)
+
+
+================================================================================
+================================================================================
+  PHASE 3 — ORCHESTRATION, INTELLIGENCE, PLATFORM, INVISIBLE SYSTEMS
+  Runtime Control, AI Memory, SaaS Layers, Quality Systems
+================================================================================
+================================================================================
+
+Every item below is classified against the existing 64 modules. Items that
+overlap with existing modules are marked OVERLAP or EXPAND. Genuinely new
+capabilities get fresh module numbers continuing from #64.
+
+
+================================================================================
+  13. PHASE 3 OVERLAP — Already Covered
+================================================================================
+
+  Task Scheduler / Priority Queue
+    → performance-module (#49) scheduler.ts — prioritized microtask/macrotask
+    → task-module (#52) runner.ts — job concurrency limiter with priority
+    Combined, these already implement the priority queue system described.
+    No new module needed.
+
+  Cancellation System
+    → concurrency-module (#57) — cancel-previous pattern, AbortController pool,
+      request deduplication. Already fully specced.
+    No new module needed.
+
+  Garbage Collection / Dispose Strategy
+    → resource-module (#56) — central disposable registry, leak detection,
+      auto-dispose on context teardown, reference counting.
+    → performance-module (#49) memory.ts — Monaco model cleanup, IndexedDB
+      quota monitoring.
+    Combined, these cover dispose of models, editors, listeners, workers,
+    and old caches. No new module needed.
+
+  Performance Budget System
+    → Already noted as [EXPAND] telemetry-module → Analytics (Phase 1 Section 3)
+      with performance budgets. Expanded further below in Phase 3 EXPAND.
+
+
+================================================================================
+  14. PHASE 3 NEW MODULES
+================================================================================
+
+--------------------------------------------------------------------------------
+  [NEW] #65. context-fusion-module
+--------------------------------------------------------------------------------
+
+PRIORITY: P1 — the intelligence differentiator.
+
+Merges ALL available context sources into a single, token-budgeted context
+object for AI requests. This is the layer between raw data and AI prompts.
+Goes beyond the Phase 1 [EXPAND] "ai-module → context-builder" by being
+a standalone orchestrator that ANY module can query for fused context.
+
+RESPONSIBILITIES:
+  - Source registry: modules register themselves as context sources:
+      ctx.fusion.registerSource("editor", {
+        priority: 1,
+        gather: async () => ({
+          content: editor.getValue(),
+          language: model.getLanguageId(),
+          selection: editor.getSelection(),
+        }),
+      });
+
+  - Source categories (gathered in priority order):
+      1. User message (always included, never trimmed)
+      2. Active editor content (current file + selection)
+      3. Imported / related files (from knowledge-graph-module)
+      4. Terminal output (last N lines from terminal-module)
+      5. Git context (branch, recent commits, staged changes)
+      6. Symbol index results (relevant symbols from symbol-index-module)
+      7. RAG chunks (semantic search hits from rag-module)
+      8. User intent signals (from intent-module)
+      9. Workspace metadata (project type, dependencies, config)
+
+  - Token budget: counts tokens per source. If total exceeds model limit:
+      → Trim lowest-priority sources first
+      → Within a source, use rag-module to keep only relevant chunks
+      → Never trim user message or active file selection
+
+  - Context strategies (configurable per AI request type):
+      "chat"       → full context with conversation history
+      "completion" → active file + imports + symbols (minimal)
+      "fix"        → error diagnostic + surrounding code + related files
+      "explain"    → selected code + full file + import chain
+
+  - Freshness: context is re-gathered on every request (not cached).
+      Heavy sources (RAG, graph) use the concurrency-module to dedupe.
+
+API:
+  const context = await ctx.fusion.gather({
+    strategy: "chat",
+    tokenBudget: 8000,
+    userMessage: "refactor this function",
+    extras: { terminalLines: 50 },
+  });
+  // context = { sources: [...], totalTokens: 7200, trimmed: ["rag"] }
+
+  // Any module can also ask for partial context:
+  const editorCtx = await ctx.fusion.gatherSource("editor");
+
+EVENTS:
+  fusion:gather-start    { strategy, tokenBudget }
+  fusion:gather-complete { strategy, totalTokens, sourcesUsed, trimmed }
+  fusion:source-registered { sourceId, priority }
+  fusion:token-overflow  { requested, budget, trimmedSources }
+
+DEPENDENCIES: ai-module, editor-module, knowledge-graph-module, rag-module,
+              terminal-module, git-module, symbol-index-module, intent-module
+
+FILES:
+  plugins/context-fusion-module/index.ts       createContextFusionPlugin()
+  plugins/context-fusion-module/gatherer.ts    Source collector + priority sort
+  plugins/context-fusion-module/token-budget.ts Token counting + trimming logic
+  plugins/context-fusion-module/strategies.ts  Per-request-type context strategies
+  plugins/context-fusion-module/sources.ts     Source registry + interface
+  plugins/context-fusion-module/types.ts       FusionContext, SourceConfig, Strategy
+
+--------------------------------------------------------------------------------
+  [NEW] #66. predictive-module
+--------------------------------------------------------------------------------
+
+PRIORITY: P2 — advanced UX intelligence.
+
+Anticipates user actions and preloads resources before they're needed.
+Makes the IDE feel instant by front-loading expensive operations.
+
+RESPONSIBILITIES:
+  - File preloading: based on navigation patterns and import graphs,
+      predict which file the user will open next and pre-fetch it.
+        → User opens index.ts → preload App.tsx, routes.ts (top imports)
+        → User navigates to /components/ → preload the 3 most recent files
+
+  - Symbol pre-computation: when a file is opened, immediately index
+      symbols for all its imports (not just the file itself).
+
+  - Command prediction: based on recent command history and context:
+      → User just saved → predict "run tests" or "format document"
+      → User is in a CSS file → predict "color picker" or "preview"
+      Predicted commands appear as ghost suggestions in command palette.
+
+  - AI pre-fetch: when user pauses typing, pre-fetch AI completion
+      for the current cursor position. Result is cached and shown
+      instantly when user triggers completion.
+
+  - Prediction model: simple frequency-based (not ML). Tracks:
+      file-open-after-file, command-after-command, time-of-day patterns.
+      Stored in IndexedDB per workspace.
+
+API:
+  ctx.predict.getNextFiles()         → { uri, confidence }[]
+  ctx.predict.getNextCommands()      → { commandId, confidence }[]
+  ctx.predict.preload(uri)           → force preload a file
+  ctx.predict.recordAction(action)   → feed user action into model
+
+EVENTS:
+  predict:preload-start    { uri, reason }
+  predict:preload-hit      { uri }  // user actually opened the preloaded file
+  predict:preload-miss     { uri }  // preloaded but user went elsewhere
+  predict:command-suggested { commandId, confidence }
+
+DEPENDENCIES: knowledge-graph-module, storage-module, editor-module,
+              command-module, intent-module
+
+FILES:
+  plugins/predictive-module/index.ts        createPredictivePlugin()
+  plugins/predictive-module/file-predictor.ts   Import graph + frequency model
+  plugins/predictive-module/command-predictor.ts Command sequence model
+  plugins/predictive-module/preloader.ts    Background file/symbol prefetch
+  plugins/predictive-module/model.ts        Frequency tracker (IDB-backed)
+  plugins/predictive-module/types.ts        Prediction, PredictorConfig
+
+--------------------------------------------------------------------------------
+  [NEW] #67. ai-memory-module
+--------------------------------------------------------------------------------
+
+PRIORITY: P1 — makes AI context-aware across sessions.
+
+Persistent AI memory that remembers previous prompts, user corrections,
+coding patterns, and project-specific knowledge across sessions.
+
+RESPONSIBILITIES:
+  - Conversation persistence: store full AI chat history per workspace.
+      On new session, AI has access to previous conversations for context.
+      Configurable retention: last N conversations, or TTL-based.
+
+  - User corrections: when user edits AI-generated code, track the diff.
+      Over time, the AI learns: "user prefers arrow functions",
+      "user always adds error handling", "user uses tabs not spaces".
+      Corrections stored as preference signals, injected into system prompt.
+
+  - Project knowledge: facts discovered about the project:
+      → "This project uses Zustand for state management"
+      → "API base URL is /api/v2"
+      → "Component naming convention: PascalCase with .tsx extension"
+      Extracted from conversation + code analysis. Stored per workspace.
+
+  - Memory search: RAG-powered search over stored memories.
+      When building AI context, relevant memories are retrieved and
+      injected into the prompt (via context-fusion-module).
+
+  - Memory management UI: user can view, edit, delete stored memories.
+      "AI thinks you prefer X" → user can confirm or correct.
+
+  - Privacy: all data stored locally in IndexedDB. Never sent to
+      external services unless user explicitly exports.
+
+API:
+  ctx.aiMemory.store(memory)             → persist a memory entry
+  ctx.aiMemory.search(query, limit?)     → retrieve relevant memories
+  ctx.aiMemory.getConversations(limit?)  → past conversations
+  ctx.aiMemory.getCorrections()          → user's coding preferences
+  ctx.aiMemory.getProjectFacts()         → workspace-specific knowledge
+  ctx.aiMemory.forget(memoryId)          → delete a memory
+  ctx.aiMemory.export()                  → export all memories (JSON)
+
+EVENTS:
+  ai-memory:stored        { type, summary }
+  ai-memory:recalled      { query, resultCount }
+  ai-memory:correction    { original, corrected, pattern }
+  ai-memory:fact-learned  { fact, source, confidence }
+  ai-memory:pruned        { count, reason }
+
+DEPENDENCIES: storage-module, rag-module, ai-module, context-fusion-module
+
+FILES:
+  plugins/ai-memory-module/index.ts         createAIMemoryPlugin()
+  plugins/ai-memory-module/store.ts         Memory CRUD (IDB-backed)
+  plugins/ai-memory-module/conversations.ts Chat history persistence
+  plugins/ai-memory-module/corrections.ts   User edit diff → preference signal
+  plugins/ai-memory-module/project-facts.ts Workspace-specific knowledge base
+  plugins/ai-memory-module/recall.ts        RAG search over memories
+  plugins/ai-memory-module/types.ts         Memory, Correction, ProjectFact
+
+--------------------------------------------------------------------------------
+  [NEW] #68. fallback-module
+--------------------------------------------------------------------------------
+
+PRIORITY: P0 — production resilience.
+
+Graceful degradation system. When any subsystem fails, the IDE continues
+working with reduced capability instead of crashing.
+
+RESPONSIBILITIES:
+  - Fallback registry: each module registers its fallback chain:
+      ctx.fallback.register("ai", [
+        { provider: "primary",  check: () => primaryAI.isHealthy() },
+        { provider: "local",    check: () => localModel.isAvailable() },
+        { provider: "cached",   check: () => cache.hasRecent() },
+        { provider: "disabled", check: () => true },  // always available
+      ]);
+
+  - Auto-failover: when a provider fails, automatically try the next
+      in the chain. Transparent to the calling module.
+
+  - Health checks: periodic pings to each provider. Mark unhealthy
+      providers as "down" before they're needed (proactive, not reactive).
+
+  - Recovery: when a "down" provider recovers, automatically promote it
+      back to primary. Configurable cooldown to prevent flapping.
+
+  - Fallback chains for critical systems:
+      AI fails         → local model → cached responses → disabled
+      SFTP fails       → retry queue (sync-module) → local IndexedDB → read-only
+      Parser fails     → regex-based fallback parser → raw text
+      WebSocket fails  → SSE fallback → polling fallback
+      CDN fails        → local cache → embedded defaults
+      Auth fails       → offline mode → cached session token
+
+  - Degradation notifications: when running in fallback mode, show a
+      subtle statusbar indicator: "AI: fallback (local model)"
+
+API:
+  ctx.fallback.register(domain, providers)
+  ctx.fallback.get(domain)              → current active provider
+  ctx.fallback.getHealth(domain)        → provider health status
+  ctx.fallback.forceProvider(domain, providerId) → manual override
+  ctx.fallback.onFailover(handler)      → subscribe to failover events
+
+EVENTS:
+  fallback:failover      { domain, from, to, reason }
+  fallback:recovery      { domain, provider }
+  fallback:health-check  { domain, provider, healthy, latency }
+  fallback:degraded      { domain, level }  // "primary" | "fallback" | "minimal"
+
+DEPENDENCIES: none (tier 0 — loaded very early, before most modules)
+DEPENDED ON BY: ai-module, fs-module, auth-module, any module with external deps
+
+FILES:
+  plugins/fallback-module/index.ts        createFallbackPlugin()
+  plugins/fallback-module/registry.ts     Provider chain registry
+  plugins/fallback-module/health.ts       Periodic health checker
+  plugins/fallback-module/failover.ts     Auto-failover + recovery logic
+  plugins/fallback-module/types.ts        FallbackChain, ProviderHealth
+
+--------------------------------------------------------------------------------
+  [NEW] #69. api-stability-module
+--------------------------------------------------------------------------------
+
+PRIORITY: P1 — required once third-party plugins exist.
+
+Versioned API surface with deprecation warnings and backward compatibility.
+Once plugins depend on PluginContext, breaking changes kill the ecosystem.
+
+RESPONSIBILITIES:
+  - API versioning: every PluginContext method has a version tag.
+      Plugins declare which API version they target:
+        { "engine": "monaco-vanced", "apiVersion": "1.2" }
+
+  - Deprecation warnings: when a plugin calls a deprecated method:
+      → Console warning: "ctx.fs.read() is deprecated since v1.3. Use ctx.file.read()"
+      → Telemetry event logged for tracking migration progress
+      → Method still works — no breaking change until major version
+
+  - Compatibility shims: old API methods delegate to new ones internally.
+      Zero-cost for plugins that have migrated. Thin wrapper for those
+      that haven't.
+
+  - Breaking change detection: at plugin registration time, compare
+      plugin's declared apiVersion with current engine version.
+      If incompatible → show warning, offer to disable plugin.
+
+  - Migration guides: when a method is deprecated, the warning includes
+      a link to migration instructions.
+
+  - Changelog events: emit when API surface changes (for dev tooling).
+
+API:
+  ctx.api.getVersion()                    → current engine API version
+  ctx.api.isDeprecated(methodPath)        → boolean
+  ctx.api.getDeprecations()               → list of all deprecated methods
+  ctx.api.checkCompatibility(apiVersion)  → "compatible" | "deprecated" | "breaking"
+
+EVENTS:
+  api:deprecated-call    { method, plugin, since, replacement }
+  api:breaking-detected  { plugin, required, current }
+  api:version-mismatch   { plugin, declared, actual }
+
+DEPENDENCIES: core-engine (tier 0)
+
+FILES:
+  plugins/api-stability-module/index.ts       createAPIStabilityPlugin()
+  plugins/api-stability-module/versioning.ts  Version comparison + compatibility
+  plugins/api-stability-module/deprecation.ts Deprecated method registry + warnings
+  plugins/api-stability-module/shims.ts       Backward-compatible wrappers
+  plugins/api-stability-module/types.ts       APIVersion, DeprecationEntry
+
+--------------------------------------------------------------------------------
+  [NEW] #70. saas-tenant-module
+--------------------------------------------------------------------------------
+
+PRIORITY: P3 — only if going SaaS / multi-tenant.
+
+Per-user workspace isolation, resource limits, and tenant management
+for hosted/cloud deployments.
+
+RESPONSIBILITIES:
+  - Tenant isolation: each user gets an isolated environment:
+      → Separate IndexedDB databases (namespaced by tenantId)
+      → Separate FS adapter instances
+      → Separate settings, secrets, AI memory, storage
+      No cross-tenant data leakage.
+
+  - Resource limits per tenant:
+      → Max open files, max models, max workers
+      → AI request quota (per minute / per day)
+      → Storage quota (IndexedDB + OPFS)
+      Configurable per plan (free / pro / enterprise).
+
+  - Tenant context: all module operations receive tenantId:
+      ctx.tenant.getId()      → "user_abc123"
+      ctx.tenant.getPlan()    → "pro"
+      ctx.tenant.getQuota()   → { ai: { used: 45, limit: 100 }, storage: { ... } }
+
+  - Admin API: for platform operators:
+      ctx.tenant.list()              → all tenants (admin only)
+      ctx.tenant.getUsage(tenantId)  → resource usage
+      ctx.tenant.setLimits(tenantId, limits) → update quotas
+
+EVENTS:
+  tenant:created       { tenantId, plan }
+  tenant:quota-warning { tenantId, resource, percent }
+  tenant:quota-exceeded { tenantId, resource, limit }
+  tenant:plan-changed  { tenantId, oldPlan, newPlan }
+
+DEPENDENCIES: storage-module, auth-module, security-module
+
+FILES:
+  plugins/saas-tenant-module/index.ts      createTenantPlugin()
+  plugins/saas-tenant-module/isolation.ts  Per-tenant namespace manager
+  plugins/saas-tenant-module/quotas.ts     Resource limit enforcement
+  plugins/saas-tenant-module/admin.ts      Admin API for platform operators
+  plugins/saas-tenant-module/types.ts      Tenant, Plan, Quota
+
+--------------------------------------------------------------------------------
+  [NEW] #71. billing-module
+--------------------------------------------------------------------------------
+
+PRIORITY: P3 — only if going SaaS.
+
+Usage-based billing for AI calls, API quotas, and storage consumption.
+
+RESPONSIBILITIES:
+  - Usage metering: tracks billable events in real-time:
+      → AI completion requests (count + tokens)
+      → AI chat messages (count + tokens)
+      → FS operations via API adapter (count)
+      → Storage consumed (bytes)
+
+  - Billing periods: configurable per plan (monthly, per-use, prepaid).
+
+  - Quota enforcement: when a quota is exhausted:
+      → AI requests return 429 with retryAfter
+      → FS writes are queued (sync-module handles retry)
+      → UI shows upgrade prompt
+
+  - Integration: feeds into saas-tenant-module for per-tenant metering.
+      Feeds into telemetry-module for usage dashboards.
+
+  - Stripe/payment hooks: abstract billing provider interface.
+      Default implementation connects to Stripe webhooks.
+
+API:
+  ctx.billing.getUsage()                → current period usage
+  ctx.billing.getRemainingQuota(domain)  → remaining for AI/storage/etc
+  ctx.billing.onQuotaWarning(handler)   → 80% threshold alert
+  ctx.billing.onQuotaExceeded(handler)  → 100% threshold block
+
+EVENTS:
+  billing:usage-recorded   { domain, amount, tenantId }
+  billing:quota-warning    { domain, percent, tenantId }
+  billing:quota-exceeded   { domain, tenantId }
+  billing:period-reset     { tenantId, period }
+
+DEPENDENCIES: saas-tenant-module, telemetry-module, storage-module
+
+FILES:
+  plugins/billing-module/index.ts        createBillingPlugin()
+  plugins/billing-module/metering.ts     Real-time usage counter
+  plugins/billing-module/quotas.ts       Quota check + enforcement
+  plugins/billing-module/provider.ts     Abstract billing provider (Stripe default)
+  plugins/billing-module/types.ts        UsageRecord, BillingPlan, QuotaConfig
+
+--------------------------------------------------------------------------------
+  [NEW] #72. realtime-module
+--------------------------------------------------------------------------------
+
+PRIORITY: P3 — only if going SaaS / collaboration.
+
+Scalable real-time infrastructure for multi-user features: live cursors,
+collaborative editing, shared terminals, presence indicators.
+
+RESPONSIBILITIES:
+  - Transport abstraction: pluggable real-time backend:
+      → WebSocket (default, for single-server)
+      → Redis Pub/Sub (for horizontal scaling)
+      → Valkey / Dragonfly (Redis-compatible alternatives)
+      → Server-Sent Events (fallback for restricted environments)
+
+  - Channel system: named channels for different real-time features:
+      "cursor:workspace123"     → live cursor positions
+      "edit:file456"            → collaborative text edits (OT/CRDT)
+      "presence:workspace123"   → who's online
+      "terminal:session789"     → shared terminal output
+
+  - Presence: track connected users per workspace:
+      ctx.realtime.getPresence()  → [{ userId, name, avatar, cursor }]
+      Shown as colored cursors / avatars in the editor.
+
+  - Message fan-out: broadcast to all subscribers on a channel.
+      Automatic reconnection on disconnect.
+
+  - Conflict resolution: for collaborative editing, integrate with
+      sync-module for OT (Operational Transform) or CRDT merge.
+
+API:
+  ctx.realtime.subscribe(channel, handler)    → unsubscribe function
+  ctx.realtime.publish(channel, message)      → broadcast to channel
+  ctx.realtime.getPresence(workspaceId?)      → online users
+  ctx.realtime.setTransport(config)           → switch backend
+
+EVENTS:
+  realtime:connect       { userId, transport }
+  realtime:disconnect    { userId, reason }
+  realtime:message       { channel, userId, payload }
+  realtime:presence      { workspaceId, users }
+
+DEPENDENCIES: auth-module, sync-module, storage-module
+
+FILES:
+  plugins/realtime-module/index.ts         createRealtimePlugin()
+  plugins/realtime-module/transport.ts     WebSocket / Redis / SSE abstraction
+  plugins/realtime-module/channels.ts      Channel subscription manager
+  plugins/realtime-module/presence.ts      Online user tracking
+  plugins/realtime-module/types.ts         Channel, Transport, PresenceUser
+
+
+================================================================================
+  15. PHASE 3 EXPAND EXISTING
+================================================================================
+
+--------------------------------------------------------------------------------
+  [EXPAND] performance-module (#49) → Performance Budget System
+--------------------------------------------------------------------------------
+
+Formalize hard limits that trigger alerts or automatic throttling:
+
+  - Memory budget: max MB per tab. If exceeded → dispose oldest models,
+      show warning. Configurable per workspace size.
+  - CPU budget: if any operation exceeds N ms → log as perf:long-task,
+      auto-yield to main thread. Feeds into telemetry-module.
+  - AI latency budget: if AI response > N ms → show "AI is slow" indicator,
+      optionally switch to faster/smaller model (via fallback-module).
+  - Budget dashboard: dev-mode overlay showing real-time metrics vs budgets.
+
+FILES to add:
+  plugins/performance-module/budgets.ts     Budget definitions + enforcement
+  plugins/performance-module/dashboard.ts   Dev-mode real-time metrics overlay
+
+--------------------------------------------------------------------------------
+  [EXPAND] resource-module (#56) → Advanced GC Strategy
+--------------------------------------------------------------------------------
+
+Beyond basic dispose — proactive garbage collection:
+
+  - Idle cleanup: when system is idle (intent-module reports no activity),
+      scan for and dispose: unused models, stale caches, idle workers.
+  - Age-based eviction: resources older than configurable TTL are
+      candidates for disposal (unless actively referenced).
+  - Memory pressure response: listen for performance-module memory warnings.
+      On warning → aggressive cleanup. On critical → emergency dispose.
+  - GC stats: report disposed count, reclaimed MB, to telemetry-module.
+
+FILES to add:
+  plugins/resource-module/gc-strategy.ts    Proactive GC with idle/age/pressure
+
+--------------------------------------------------------------------------------
+  [EXPAND] ui-module (#50) → UX Polish Layer
+--------------------------------------------------------------------------------
+
+The "final 5%" that makes the IDE feel professional:
+
+  - Smooth animations: CSS transitions for panel open/close, tab switch,
+      sidebar collapse. Configurable: users can disable for performance.
+      Uses prefers-reduced-motion media query.
+  - Zero flicker: all layout changes batched in requestAnimationFrame.
+      No visible repaint between data load and render. Loading states
+      (WebviewLoadingConfig) prevent content flash.
+  - Instant feedback: every click/keypress has < 16ms visual response.
+      Button press → immediate visual state change before async handler.
+  - Keyboard-first UX: every feature reachable via keyboard. Focus
+      ring visible. Tab order logical. Escape closes overlays.
+  - Micro-interactions: subtle hover effects, smooth scroll, focus
+      animations, progress bar easing. All theme-aware.
+
+FILES to add:
+  plugins/ui-module/animations.ts      CSS transition orchestrator
+  plugins/ui-module/feedback.ts        Instant click/key response system
+  plugins/ui-module/keyboard-ux.ts     Global keyboard navigation manager
+
+
+================================================================================
+  16. UPDATED COUNTS (Phase 1 + Phase 2 + Phase 3 combined)
+================================================================================
+
+  EXISTING (context.txt):
+    Core modules:       23  (#1-#23)
+    Advanced modules:   19  (#24-#42)
+    v2.1 modules:        2  (#43-#44)
+    v2.2 modules:        2  (#45-#46)
+    ─────────────────────────────
+    Subtotal:           46
+
+  Phase 1 NEW (Section 2):     #47-#53        7 modules
+  Phase 2 NEW (Section 8):     #54-#64       11 modules
+  Phase 3 NEW (Section 14):    #65-#72        8 modules
+    ─────────────────────────────
+    Total modules:              72
+
+  Standalone plugins:            7
+
+  EXPANDED across all phases:
+    Phase 1:  8 expansions  (core-engine×2, extension×2, ai, settings,
+                              command, storage, telemetry)
+    Phase 2:  5 expansions  (snapshot, performance×2, feature-flags, core-engine)
+    Phase 3:  3 expansions  (performance, resource, ui)
+    ─────────────────────────────
+    Total expansions:       16
+
+  ─────────────────────────────────────────
+  GRAND TOTAL:  72 modules + 7 standalone = 79 components
+  ─────────────────────────────────────────
+
+
+================================================================================
+  17. DEPENDENCY TIER PLACEMENT (Phase 3 modules)
+================================================================================
+
+  TIER 0 — No dependencies:
+    fallback-module
+    api-stability-module (core-engine only)
+
+  TIER 1 — Depends on tier 0:
+    billing-module ............. saas-tenant-module, telemetry-module
+    realtime-module ............ auth-module, sync-module
+
+  TIER 2 — Depends on tier 0+1:
+    ai-memory-module ........... storage-module, rag-module, ai-module
+    saas-tenant-module ......... storage-module, auth-module, security-module
+
+  TIER 3 — Depends on tier 0+1+2:
+    context-fusion-module ...... ai-module, editor-module, knowledge-graph-module,
+                                  rag-module, terminal-module, git-module,
+                                  symbol-index-module, intent-module
+    predictive-module .......... knowledge-graph-module, intent-module,
+                                  command-module, editor-module
+
+
+================================================================================
+  18. IMPLEMENTATION PRIORITY (Phase 3 modules)
+================================================================================
+
+  P0 — Production requirement:
+    #68  fallback-module         (graceful degradation, zero downtime)
+
+  P1 — Required for good DX:
+    #65  context-fusion-module   (smarter AI = biggest competitive edge)
+    #67  ai-memory-module        (AI learns user's codebase over time)
+    #69  api-stability-module    (ecosystem trust, no breaking changes)
+
+  P2 — Nice to have:
+    #66  predictive-module       (feel-instant preloading)
+
+  P3 — SaaS / Enterprise only:
+    #70  saas-tenant-module      (multi-tenant isolation)
+    #71  billing-module          (usage metering + quotas)
+    #72  realtime-module         (collaboration infrastructure)
+

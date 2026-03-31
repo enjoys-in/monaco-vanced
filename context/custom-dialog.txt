@@ -1,0 +1,1516 @@
+FEATURE: Notification System + Dialog System + File Preview System
+
+GOAL:
+Three clearly separated UI subsystems:
+
+  SYSTEM 1 — NOTIFICATIONS (toasts)
+    Lightweight, non-blocking, transient status messages. Always visible
+    as floating toasts. Used for operational feedback: "Command not found",
+    "AI configured successfully", "LSP not connected". Max 1–2 action
+    buttons (e.g. "Retry", "View Logs"). User-configurable: enable/disable
+    categories, mute specific sources, customize durations.
+
+  SYSTEM 2 — DIALOGS (modals)
+    High-priority, modal/blocking UI for decision-based workflows. The
+    user MUST respond before continuing. Used for trust confirmations,
+    SSO login flows, multi-account selection, permission approval,
+    workspace trust, onboarding, destructive action confirmation.
+    Supports richer interaction: multiple buttons, form fields, validation
+    states, descriptions, follow-up steps.
+
+  SYSTEM 3 — FILE PREVIEW
+    Built-in preview for markdown, images, audio, video, PDF, fonts,
+    HTML, SVG, JSON, CSV. Opens in editor tabs or side panels.
+
+DESIGN PRINCIPLE:
+  Notifications = "the system is telling you something"
+  Dialogs       = "the system needs you to decide something"
+
+  These are SEPARATE services, SEPARATE event domains, SEPARATE renderers,
+  SEPARATE state machines. They share no queues, no UI layers, no lifecycle.
+  A notification can never become a dialog. A dialog never degrades to a toast.
+
+  The separation is based on WORKFLOW IMPACT:
+  - Notification: zero interruption, user keeps working
+  - Dialog: deliberate pause, user must focus and respond
+
+
+================================================================================
+                    ╔═══════════════════════════════════════╗
+                    ║  PART A — NOTIFICATION SYSTEM (TOASTS) ║
+                    ╚═══════════════════════════════════════╝
+================================================================================
+
+
+================================================================================
+SECTION 1 — NOTIFICATION EVENT CONTRACTS
+================================================================================
+
+  Lives in: core/events/notify.events.ts (EXISTING — expand with these)
+
+──────────────────────────────────────────────────────────────
+1A — NOTIFICATION EVENT ENUM
+──────────────────────────────────────────────────────────────
+
+  export const enum NotifyEvent {
+    // ── Fire a notification ─────────────────────────────
+    Show              = "notify:show",
+
+    // ── User interactions ───────────────────────────────
+    ActionClicked     = "notify:action-clicked",
+    Dismissed         = "notify:dismissed",
+    Expanded          = "notify:expanded",
+
+    // ── Lifecycle ───────────────────────────────────────
+    Queued            = "notify:queued",
+    Dequeued          = "notify:dequeued",
+    AutoDismissed     = "notify:auto-dismissed",
+    AllCleared        = "notify:all-cleared",
+
+    // ── User preferences ────────────────────────────────
+    CategoryMuted     = "notify:category-muted",
+    CategoryUnmuted   = "notify:category-unmuted",
+    PrefsChanged      = "notify:prefs-changed",
+  }
+
+──────────────────────────────────────────────────────────────
+1B — NOTIFICATION PAYLOAD TYPES
+──────────────────────────────────────────────────────────────
+
+  interface NotificationPayload {
+    /** Auto-generated unique ID for tracking */
+    id: string;
+
+    /** Severity level — controls styling + default duration */
+    level: "info" | "warning" | "error" | "success";
+
+    /** Primary message text (max 500 chars) */
+    message: string;
+
+    /** Optional secondary detail (max 2000 chars, collapsed by default) */
+    detail?: string;
+
+    /** Category for filtering/muting (e.g. "git", "ai", "lsp", "fs") */
+    category?: NotificationCategory;
+
+    /** Source label displayed in toast header (e.g. "Git", "AI", "ESLint") */
+    source?: string;
+
+    /** Codicon icon id (e.g. "$(check)", "$(warning)", "$(error)") */
+    icon?: string;
+
+    /** Explicit duration in ms. 0 = sticky. Overrides level defaults. */
+    duration?: number;
+
+    /** Where to render (default: "bottom-right") */
+    position?: NotificationPosition;
+
+    /** Show indeterminate spinner alongside message */
+    progress?: boolean;
+
+    /** Max 2 action buttons — keep it lightweight */
+    actions?: NotificationAction[];
+
+    /** Who triggered this notification */
+    source_origin: NotificationOrigin;
+  }
+
+  type NotificationCategory =
+    | "system"        // core engine events
+    | "editor"        // editor operations (format, save, etc.)
+    | "git"           // git operations
+    | "ai"            // AI module feedback
+    | "lsp"           // language server status
+    | "fs"            // file system operations
+    | "extension"     // extension messages
+    | "build"         // build/task output
+    | "debug"         // debugger status
+    | "custom";       // plugin-defined
+
+  type NotificationPosition =
+    | "bottom-right"  // default — VS Code style
+    | "top-right"
+    | "top-center"
+    | "status-bar";   // inline in status bar (no toast, text only)
+
+  type NotificationOrigin =
+    | { type: "core"; module: string }
+    | { type: "extension"; extId: string }
+    | { type: "ui"; surface: string };
+
+  interface NotificationAction {
+    id: string;
+    label: string;            // keep short: "Retry", "View Logs", "Show Terminal"
+  }
+
+  /** Response when user clicks an action */
+  interface NotifyActionPayload {
+    notificationId: string;
+    actionId: string;
+  }
+
+  RULES:
+  - Max 2 actions per notification (not 5, not 3 — exactly 2 max)
+  - No primary/destructive styling on notification actions — those belong in dialogs
+  - No form fields, no inputs, no checkboxes — those belong in dialogs
+  - If you need more than 2 buttons → use a dialog instead
+
+
+================================================================================
+SECTION 2 — NOTIFICATION SERVICE
+================================================================================
+
+  Lives in: plugins/infrastructure/notification-module/index.ts
+
+  IMPORTANT: This service handles ONLY notifications (toasts).
+  It does NOT handle dialogs, modals, confirms, inputs, or trust flows.
+
+──────────────────────────────────────────────────────────────
+2A — SERVICE API
+──────────────────────────────────────────────────────────────
+
+  class NotificationService {
+
+    constructor(
+      private eventBus: EventBus,
+      private prefs: NotificationPreferences,
+    ) {}
+
+    // ── Show notification ─────────────────────────────────
+
+    show(opts: Omit<NotificationPayload, "id">): Promise<string | undefined>
+      → Generates unique id
+      → Checks user preferences:
+          If category is muted → silently drops (returns undefined)
+          If "do not disturb" mode → queues for later
+      → Emits NotifyEvent.Show
+      → Returns: actionId if user clicked an action, undefined if auto-dismissed
+      → Promise resolves when notification is dismissed (any reason)
+
+    // ── Convenience methods (same as show with preset level) ──
+
+    info(message: string, opts?): Promise<string | undefined>
+    success(message: string, opts?): Promise<string | undefined>
+    warn(message: string, opts?): Promise<string | undefined>
+    error(message: string, opts?): Promise<string | undefined>
+
+    // ── Programmatic control ──────────────────────────────
+
+    dismiss(notificationId: string): void
+      → Removes toast, emits NotifyEvent.Dismissed
+
+    dismissAll(): void
+      → Clears all active and queued toasts
+
+    // ── Query ─────────────────────────────────────────────
+
+    getActive(): NotificationPayload[]
+      → Returns currently visible toasts
+
+    getQueued(): NotificationPayload[]
+      → Returns toasts waiting for a slot
+
+    // ── Internal ──────────────────────────────────────────
+
+    private activeToasts: Map<string, NotificationPayload>;  // max 3
+    private queue: NotificationPayload[];                    // FIFO overflow
+    private pendingPromises: Map<string, PromiseResolver>;
+  }
+
+──────────────────────────────────────────────────────────────
+2B — NOTIFICATION USER PREFERENCES
+──────────────────────────────────────────────────────────────
+
+  Lives in: plugins/infrastructure/notification-module/preferences.ts [NEW]
+
+  Users can configure notification behavior through the settings module.
+
+  interface NotificationPreferences {
+    /** Global on/off switch */
+    enabled: boolean;                         // default: true
+
+    /** Do not disturb — suppress all toasts, queue for later */
+    doNotDisturb: boolean;                    // default: false
+
+    /** Per-category mute list */
+    mutedCategories: Set<NotificationCategory>;  // default: empty
+
+    /** Per-source mute list (e.g. mute "ESLint" but keep "Git") */
+    mutedSources: Set<string>;                // default: empty
+
+    /** Duration overrides by level (ms) */
+    durations: {
+      info: number;                           // default: 5000
+      success: number;                        // default: 5000
+      warning: number;                        // default: 8000
+      error: number;                          // default: 0 (sticky)
+    };
+
+    /** Max visible toasts at once */
+    maxVisible: number;                       // default: 3
+
+    /** Position preference */
+    position: NotificationPosition;           // default: "bottom-right"
+
+    /** Show source label in toast header */
+    showSource: boolean;                      // default: true
+  }
+
+  Settings integration (registered in settings-module):
+  {
+    "notifications.enabled": true,
+    "notifications.doNotDisturb": false,
+    "notifications.mutedCategories": [],
+    "notifications.durations.info": 5000,
+    "notifications.durations.warning": 8000,
+    "notifications.durations.error": 0,
+    "notifications.maxVisible": 3,
+    "notifications.position": "bottom-right"
+  }
+
+  Live updates:
+  - Changing any setting immediately applies to NEW notifications
+  - Active toasts are NOT affected (they finish their current lifecycle)
+  - Muting a category dismisses all active toasts of that category
+
+
+================================================================================
+SECTION 3 — TOAST RENDERER
+================================================================================
+
+  Lives in: plugins/infrastructure/notification-module/toast-queue.ts
+
+  The toast renderer is the ONLY visual component of the notification system.
+  It listens for NotifyEvent.Show and renders floating toast UI.
+
+──────────────────────────────────────────────────────────────
+3A — TOAST VISUAL DESIGN
+──────────────────────────────────────────────────────────────
+
+  ┌──────────────────────────────────────────────┐
+  │ $(icon) [SOURCE]                         [X] │
+  │ Message text goes here                       │
+  │ ▸ Detail text (click to expand)              │
+  │ ━━━━━━━━━━━━━━━━━━━━━ (progress bar, opt.)  │
+  │               [Show Terminal]  [View Logs]   │
+  └──────────────────────────────────────────────┘
+
+  Components:
+  - Icon: level-based color (info=blue, success=green, warn=yellow, error=red)
+  - Source label: top-right, subtle text (e.g. "Git", "AI")
+  - Message: primary text, single line or 2 lines max
+  - Detail: collapsed by default, expandable on click
+  - Progress bar: indeterminate spinner at bottom (if progress=true)
+  - Actions: max 2 text buttons, right-aligned at bottom
+  - Close button: always present (X)
+
+──────────────────────────────────────────────────────────────
+3B — TOAST BEHAVIOR
+──────────────────────────────────────────────────────────────
+
+  Lifecycle:
+  - Slide-in animation from position edge
+  - Auto-dismiss timer starts on mount (paused on hover)
+  - Fade-out animation on dismiss
+  - Dismissed by: timer, X click, action click, Escape (top toast), swipe
+
+  Queue rules:
+  - Max 3 visible at once (configurable via preferences)
+  - New toasts while full → queued (FIFO)
+  - On dismiss → dequeue next
+  - Error level toasts jump to front of queue (higher priority)
+
+  Auto-dismiss defaults (overridable via preferences):
+    info:    5000ms
+    success: 5000ms
+    warning: 8000ms
+    error:   0ms (sticky — must be manually dismissed)
+
+  If toast has actions → pause auto-dismiss timer (treat as sticky until
+  user clicks action or X)
+
+──────────────────────────────────────────────────────────────
+3C — STATUS BAR NOTIFICATION MODE
+──────────────────────────────────────────────────────────────
+
+  When position is "status-bar", the notification renders INLINE in the
+  status bar instead of a floating toast:
+
+    [$(icon) Message text...  ━━━  ]
+
+  - No actions (status bar is too small)
+  - No detail
+  - Auto-dismiss after duration
+  - Useful for transient status: "Saving...", "Formatting...", "Syncing..."
+
+  EXAMPLES (notification usage):
+
+    // LSP status
+    notificationService.info("LSP: Python server connected", {
+      category: "lsp",
+      source: "Python",
+      icon: "$(check)",
+    });
+
+    // Command not found
+    notificationService.warn("Command not found: 'git.foobar'", {
+      category: "system",
+      source: "Command Palette",
+    });
+
+    // AI configured
+    notificationService.success("AI provider configured successfully", {
+      category: "ai",
+      source: "AI",
+      actions: [{ id: "test", label: "Test Connection" }],
+    });
+
+    // Build error with action
+    notificationService.error("Build failed: 3 errors", {
+      category: "build",
+      source: "Task Runner",
+      actions: [
+        { id: "show-terminal", label: "Show Terminal" },
+        { id: "view-errors", label: "View Errors" },
+      ],
+    });
+
+    // Transient status bar message
+    notificationService.info("Formatting document...", {
+      position: "status-bar",
+      category: "editor",
+      duration: 2000,
+    });
+
+
+================================================================================
+                    ╔═══════════════════════════════════════╗
+                    ║     PART B — DIALOG SYSTEM (MODALS)    ║
+                    ╚═══════════════════════════════════════╝
+================================================================================
+
+
+================================================================================
+SECTION 4 — DIALOG EVENT CONTRACTS
+================================================================================
+
+  Lives in: core/events/interaction.events.ts (EXISTING — rename to dialog)
+
+──────────────────────────────────────────────────────────────
+4A — DIALOG EVENT ENUM
+──────────────────────────────────────────────────────────────
+
+  export const enum DialogEvent {
+    // ── Request events (caller → dialog layer) ──────────
+    ShowConfirm        = "dialog:show-confirm",
+    ShowInputBox       = "dialog:show-input",
+    ShowQuickPick      = "dialog:show-quick-pick",
+    ShowTrustDialog    = "dialog:show-trust",
+    ShowAuthDialog     = "dialog:show-auth",
+    ShowPermission     = "dialog:show-permission",
+    ShowCustomDialog   = "dialog:show-custom",
+    ShowProgress       = "dialog:show-progress",
+
+    // ── Response events (dialog layer → caller) ─────────
+    ConfirmResult      = "dialog:confirm-result",
+    InputResult        = "dialog:input-result",
+    QuickPickResult    = "dialog:quick-pick-result",
+    TrustResult        = "dialog:trust-result",
+    AuthResult         = "dialog:auth-result",
+    PermissionResult   = "dialog:permission-result",
+    CustomResult       = "dialog:custom-result",
+    ProgressUpdate     = "dialog:progress-update",
+    ProgressDone       = "dialog:progress-done",
+
+    // ── Lifecycle ───────────────────────────────────────
+    Opened             = "dialog:opened",
+    Closed             = "dialog:closed",
+    StepChanged        = "dialog:step-changed",
+    ValidationFailed   = "dialog:validation-failed",
+    QueueChanged       = "dialog:queue-changed",
+  }
+
+  NOTE: Completely separate from NotifyEvent. No shared enum values.
+
+──────────────────────────────────────────────────────────────
+4B — DIALOG PAYLOAD TYPES
+──────────────────────────────────────────────────────────────
+
+  // ── Base (all dialogs share this) ───────────────────
+
+  interface DialogBase {
+    /** Unique ID for correlating request ↔ response */
+    id: string;
+    /** Who triggered this dialog */
+    source: DialogSource;
+    /** Always true — dialogs are ALWAYS modal */
+    modal: true;
+  }
+
+  type DialogSource =
+    | { type: "core"; module: string }
+    | { type: "extension"; extId: string }
+    | { type: "ui"; surface: string };
+
+  // ── Confirmation Dialog ──────────────────────────────
+
+  interface ConfirmDialogPayload extends DialogBase {
+    message: string;
+    detail?: string;
+    icon?: "info" | "warning" | "error" | "question";
+    actions: DialogAction[];
+    defaultActionId?: string;   // pre-focused action (Enter key)
+    cancelActionId?: string;    // Escape key action
+  }
+
+  interface DialogAction {
+    id: string;
+    label: string;
+    isPrimary?: boolean;        // blue/accent styling
+    isDestructive?: boolean;    // red styling (for delete, discard, etc.)
+    disabled?: boolean;         // grayed out, not clickable
+    tooltip?: string;
+  }
+
+  interface ConfirmResultPayload extends DialogBase {
+    actionId: string;
+    dismissed: boolean;         // true if Escape with no cancelAction
+  }
+
+  // ── Input Box Dialog ─────────────────────────────────
+
+  interface InputDialogPayload extends DialogBase {
+    title?: string;
+    prompt: string;
+    placeholder?: string;
+    value?: string;             // pre-filled
+    password?: boolean;
+    validateInput?: string;     // regex pattern
+    validationMessage?: string; // shown when validation fails
+  }
+
+  interface InputResultPayload extends DialogBase {
+    value: string | undefined;  // undefined = cancelled
+    cancelled: boolean;
+  }
+
+  // ── Quick Pick Dialog ────────────────────────────────
+
+  interface QuickPickPayload extends DialogBase {
+    title?: string;
+    placeholder?: string;
+    items: QuickPickItem[];
+    canPickMany?: boolean;
+    matchOnDescription?: boolean;
+    matchOnDetail?: boolean;
+  }
+
+  interface QuickPickItem {
+    id: string;
+    label: string;
+    description?: string;
+    detail?: string;
+    icon?: string;
+    picked?: boolean;
+    separator?: boolean;
+  }
+
+  interface QuickPickResultPayload extends DialogBase {
+    selected: string[];
+    cancelled: boolean;
+  }
+
+  // ── Trust Dialog ─────────────────────────────────────
+
+  interface TrustDialogPayload extends DialogBase {
+    message: string;
+    detail?: string;
+    trustLabel?: string;        // default: "Trust"
+    denyLabel?: string;         // default: "Don't Trust"
+    rememberKey?: string;       // persistence key
+    showRememberCheckbox?: boolean;   // default: true
+  }
+
+  interface TrustResultPayload extends DialogBase {
+    trusted: boolean;
+    remembered: boolean;
+  }
+
+  // ── Auth Dialog (SSO / Multi-Account) ────────────────
+
+  interface AuthDialogPayload extends DialogBase {
+    title: string;
+    providers: AuthProviderOption[];
+    message?: string;
+    allowMultiple?: boolean;    // show account picker
+    accounts?: AuthAccountOption[];  // for multi-account selection
+  }
+
+  interface AuthProviderOption {
+    id: string;                 // "github" | "google" | "custom"
+    label: string;
+    icon?: string;
+    description?: string;
+  }
+
+  interface AuthAccountOption {
+    id: string;
+    email: string;
+    name: string;
+    avatar?: string;
+    provider: string;
+  }
+
+  interface AuthResultPayload extends DialogBase {
+    providerId?: string;        // selected provider
+    accountId?: string;         // selected account
+    cancelled: boolean;
+  }
+
+  // ── Permission Dialog ────────────────────────────────
+
+  interface PermissionDialogPayload extends DialogBase {
+    title: string;
+    message: string;
+    detail?: string;
+    requestor: string;          // who's asking (extension name, module name)
+    permissions: PermissionRequest[];
+    rememberKey?: string;
+  }
+
+  interface PermissionRequest {
+    id: string;
+    label: string;              // "Access to file system"
+    description?: string;       // "Read and write files in /workspace"
+    required: boolean;          // false = optional, can be unchecked
+    granted?: boolean;          // pre-selected state
+  }
+
+  interface PermissionResultPayload extends DialogBase {
+    approved: boolean;
+    grantedPermissions: string[];   // ids of granted permissions
+    remembered: boolean;
+  }
+
+  // ── Custom Dialog (form builder) ─────────────────────
+
+  interface CustomDialogPayload extends DialogBase {
+    title: string;
+    description?: string;
+    body: DialogBodyItem[];
+    actions: DialogAction[];
+    width?: "sm" | "md" | "lg";    // 400px | 560px | 720px
+    steps?: DialogStep[];           // multi-step wizard (optional)
+    currentStep?: number;
+  }
+
+  type DialogBodyItem =
+    | { type: "text"; content: string }
+    | { type: "input"; id: string; label: string; placeholder?: string;
+        value?: string; required?: boolean; validation?: string }
+    | { type: "password"; id: string; label: string; placeholder?: string }
+    | { type: "textarea"; id: string; label: string; rows?: number;
+        placeholder?: string; value?: string }
+    | { type: "checkbox"; id: string; label: string; checked?: boolean;
+        description?: string }
+    | { type: "radio"; id: string; label: string;
+        options: { id: string; label: string }[]; value?: string }
+    | { type: "select"; id: string; label: string;
+        options: { id: string; label: string }[]; value?: string }
+    | { type: "separator" }
+    | { type: "warning"; content: string }
+    | { type: "info"; content: string };
+
+  interface DialogStep {
+    id: string;
+    title: string;
+    body: DialogBodyItem[];
+    validation?: (values: Record<string, unknown>) => string | undefined;
+  }
+
+  interface CustomDialogResultPayload extends DialogBase {
+    actionId: string;
+    values: Record<string, string | boolean>;
+    step?: number;              // which step was completed (for multi-step)
+    dismissed: boolean;
+  }
+
+  // ── Progress Dialog ──────────────────────────────────
+
+  interface ProgressDialogPayload extends DialogBase {
+    title: string;
+    location: ProgressLocation;
+    cancellable?: boolean;
+    total?: number;
+  }
+
+  type ProgressLocation =
+    | "notification"            // toast with progress bar (delegates to NotificationService)
+    | "status-bar"              // status bar spinner (delegates to NotificationService)
+    | "editor"                  // thin bar at top of editor
+    | "sidebar"                 // spinner in sidebar header
+    | "modal";                  // centered modal with spinner (only this is a dialog)
+
+  interface ProgressUpdatePayload extends DialogBase {
+    increment?: number;
+    message?: string;
+  }
+
+  interface ProgressDonePayload extends DialogBase {
+    cancelled: boolean;
+  }
+
+  // ── Shared utilities ─────────────────────────────────
+
+  interface ProgressReporter {
+    report(update: { increment?: number; message?: string }): void;
+  }
+
+  interface CancellationToken {
+    readonly isCancellationRequested: boolean;
+    onCancellationRequested: (handler: () => void) => IDisposable;
+  }
+
+
+================================================================================
+SECTION 5 — DIALOG SERVICE
+================================================================================
+
+  Lives in: plugins/infrastructure/dialog-module/index.ts [NEW MODULE]
+
+  IMPORTANT: This service handles ONLY dialogs (modals).
+  It does NOT handle notifications, toasts, or transient messages.
+
+──────────────────────────────────────────────────────────────
+5A — SERVICE API
+──────────────────────────────────────────────────────────────
+
+  class DialogService {
+
+    constructor(
+      private eventBus: EventBus,
+      private trustStore: TrustStore,
+    ) {}
+
+    // ── Confirmation ──────────────────────────────────────
+
+    showConfirm(opts: Omit<ConfirmDialogPayload, "id" | "source" | "modal">):
+      Promise<ConfirmResultPayload>
+      → Queues if another dialog is active
+      → Emits DialogEvent.ShowConfirm
+      → Returns: { actionId, dismissed }
+
+    // ── Input Box ─────────────────────────────────────────
+
+    showInputBox(opts: Omit<InputDialogPayload, "id" | "source" | "modal">):
+      Promise<string | undefined>
+      → Emits DialogEvent.ShowInputBox
+      → Returns: string or undefined if cancelled
+
+    // ── Quick Pick ────────────────────────────────────────
+
+    showQuickPick(opts: Omit<QuickPickPayload, "id" | "source" | "modal">):
+      Promise<string[] | undefined>
+      → Emits DialogEvent.ShowQuickPick
+      → Returns: selected ids or undefined if cancelled
+
+    // ── Trust ─────────────────────────────────────────────
+
+    showTrustDialog(opts: Omit<TrustDialogPayload, "id" | "source" | "modal">):
+      Promise<boolean>
+      → Checks trustStore first (cached decision)
+      → If no cache: emit DialogEvent.ShowTrustDialog
+      → Persists if remembered
+      → Returns: true/false
+
+    // ── Auth / SSO ────────────────────────────────────────
+
+    showAuthDialog(opts: Omit<AuthDialogPayload, "id" | "source" | "modal">):
+      Promise<AuthResultPayload>
+      → Shows provider picker (GitHub, Google, etc.)
+      → If allowMultiple: shows account picker
+      → Returns: { providerId, accountId, cancelled }
+
+    // ── Permission ────────────────────────────────────────
+
+    showPermissionDialog(opts: Omit<PermissionDialogPayload, "id" | "source" | "modal">):
+      Promise<PermissionResultPayload>
+      → Shows permission request with checkboxes
+      → Required permissions can't be unchecked
+      → Returns: { approved, grantedPermissions, remembered }
+
+    // ── Custom Dialog ─────────────────────────────────────
+
+    showCustomDialog(opts: Omit<CustomDialogPayload, "id" | "source" | "modal">):
+      Promise<CustomDialogResultPayload>
+      → Renders form body items
+      → If steps: renders multi-step wizard with Back/Next/Finish
+      → Validates per step
+      → Returns: { actionId, values, step, dismissed }
+
+    // ── Progress ──────────────────────────────────────────
+
+    withProgress<T>(
+      opts: Omit<ProgressDialogPayload, "id" | "source" | "modal">,
+      task: (progress: ProgressReporter, token: CancellationToken) => Promise<T>,
+    ): Promise<T>
+      → If location is "notification" or "status-bar":
+          DELEGATES to NotificationService (not a dialog)
+      → If location is "modal", "editor", or "sidebar":
+          Renders progress UI as dialog/overlay
+      → Returns task result
+
+    // ── Internal ──────────────────────────────────────────
+
+    private pendingRequests: Map<string, PromiseResolver>;
+    private activeDialog: DialogBase | null;    // one at a time
+    private dialogQueue: DialogBase[];          // FIFO for queued modals
+  }
+
+──────────────────────────────────────────────────────────────
+5B — TRUST STORE (persisted decisions)
+──────────────────────────────────────────────────────────────
+
+  Lives in: plugins/infrastructure/dialog-module/trust-store.ts [MOVED]
+
+  class TrustStore {
+    constructor(private storage: StorageAdapter) {}
+
+    async get(key: string): Promise<boolean | undefined>
+    async set(key: string, trusted: boolean): Promise<void>
+    async remove(key: string): Promise<void>
+    async getAll(): Promise<Map<string, boolean>>
+  }
+
+  Scoped keys:
+    "workspace:<path>"     → trust this workspace
+    "extension:<extId>"    → trust this extension
+    "network:<domain>"     → trust this domain
+    "permission:<permId>"  → remember permission grant
+
+
+================================================================================
+SECTION 6 — DIALOG RENDERER
+================================================================================
+
+  Lives in: plugins/infrastructure/dialog-module/renderer.ts [NEW]
+
+──────────────────────────────────────────────────────────────
+6A — MODAL RENDERER
+──────────────────────────────────────────────────────────────
+
+  All dialogs render as centered modals with backdrop overlay.
+
+  Rules:
+  - One dialog at a time (queue the rest)
+  - Focus trap: Tab cycles within dialog
+  - Keyboard:
+      Enter   → triggers defaultActionId (or first primary action)
+      Escape  → triggers cancelActionId (or dismissed=true)
+  - Backdrop click → same as Escape
+  - Animation: fade-in backdrop (150ms), scale-in dialog (200ms)
+  - Responsive: max-width scales with dialog width (sm/md/lg)
+
+  Content by dialog type:
+
+  ┌──────────────┬──────────────────────────────────────────────────────┐
+  │ Type         │ Layout                                               │
+  ├──────────────┼──────────────────────────────────────────────────────┤
+  │ confirm      │ [icon]  message  [detail]  ──  [actions]            │
+  │              │                                                      │
+  │ input        │ [title]  prompt  [input field]  [validation msg]     │
+  │              │ ──  [OK]  [Cancel]                                   │
+  │              │                                                      │
+  │ trust        │ $(shield)  "Do you trust this workspace?"            │
+  │              │ [detail]  [✓ Remember]  ──  [Trust]  [Don't Trust]   │
+  │              │                                                      │
+  │ auth         │ "Sign in to continue"                                │
+  │              │ [GitHub btn]  [Google btn]  [Custom btn]             │
+  │              │ ── or ── Account picker (radio list + avatars)       │
+  │              │                                                      │
+  │ permission   │ "Extension X requests access:"                       │
+  │              │ [✓] File system (required)                           │
+  │              │ [✓] Network access                                   │
+  │              │ [ ] Clipboard                                        │
+  │              │ [✓ Remember]  ──  [Allow]  [Deny]                    │
+  │              │                                                      │
+  │ custom       │ [title]  [description]  [form body items]            │
+  │              │ [validation states]  ──  [actions]                   │
+  │              │                                                      │
+  │ custom+steps │ [Step 1 of 3: Title]  [progress dots]               │
+  │              │ [form body for step]                                 │
+  │              │ ──  [Back]  [Next / Finish]  [Cancel]                │
+  └──────────────┴──────────────────────────────────────────────────────┘
+
+──────────────────────────────────────────────────────────────
+6B — QUICK PICK RENDERER
+──────────────────────────────────────────────────────────────
+
+  Quick pick is a DIALOG (not a notification). It's a VS Code–style
+  dropdown anchored at the top-center of the editor:
+
+  - Text input for filtering (fuzzy match)
+  - Scrollable item list with icons
+  - matchOnDescription / matchOnDetail for extended search
+  - Multi-select checkboxes when canPickMany=true
+  - Separator items for visual grouping
+  - Keyboard: Up/Down to navigate, Enter to select, Escape to cancel
+  - Focus on mount, auto-select first match
+  - Overlay with backdrop (same as other dialogs)
+
+──────────────────────────────────────────────────────────────
+6C — PROGRESS RENDERER (modal variant only)
+──────────────────────────────────────────────────────────────
+
+  Only location="modal" renders as a dialog:
+  - Centered modal with spinner
+  - Title + current message
+  - Determinate progress bar (if total provided)
+  - [Cancel] button (if cancellable=true)
+  - No backdrop click to dismiss (must wait or cancel)
+
+  Other progress locations delegate:
+  - "notification" → NotificationService.show({ progress: true })
+  - "status-bar"   → status bar spinner text
+  - "editor"       → thin progress bar at top of editor (layout-module)
+  - "sidebar"      → spinner in sidebar panel header
+
+
+================================================================================
+SECTION 7 — STATE MANAGEMENT (separate per system)
+================================================================================
+
+──────────────────────────────────────────────────────────────
+7A — NOTIFICATION STATE (managed by NotificationService)
+──────────────────────────────────────────────────────────────
+
+  interface NotificationState {
+    activeToasts: Map<string, NotificationPayload>;   // max N visible
+    queue: NotificationPayload[];                     // FIFO overflow
+    pendingPromises: Map<string, PromiseResolver>;    // action resolution
+    preferences: NotificationPreferences;             // user config
+    history: NotificationPayload[];                   // last 50 for review
+  }
+
+  CLEANUP:
+  - Auto-dismiss timer → remove from activeToasts, dequeue next
+  - On extension unload → dismiss all from that extension
+  - History capped at 50 entries (configurable)
+
+──────────────────────────────────────────────────────────────
+7B — DIALOG STATE (managed by DialogService)
+──────────────────────────────────────────────────────────────
+
+  interface DialogState {
+    activeDialog: DialogBase | null;                  // one at a time
+    dialogQueue: DialogBase[];                        // FIFO for waiting
+    pendingRequests: Map<string, PromiseResolver>;    // result resolution
+    activeProgress: Map<string, ProgressState>;       // progress trackers
+  }
+
+  interface ProgressState {
+    payload: ProgressDialogPayload;
+    current: number;            // 0–100 or -1 (indeterminate)
+    message: string;
+    cancelled: boolean;
+  }
+
+  CLEANUP:
+  - Timeout: dialogs auto-reject after 120s (longer than notifications)
+  - On extension unload → reject all pending from that extension
+  - On dialog close → dequeue next
+
+
+================================================================================
+SECTION 8 — RPC BRIDGE (extension → main thread → services)
+================================================================================
+
+  Extensions cannot render UI. All calls go through RPC to the correct service.
+
+  Extension Host (iframe/worker)
+       │
+       │  RPC call
+       ▼
+  Main Thread (rpc-bridge.ts)
+       │
+       ├── notification.* methods → NotificationService
+       │
+       └── dialog.* methods → DialogService
+       │
+       ▼
+  UI renders → user interacts → Promise resolves → RPC response
+
+──────────────────────────────────────────────────────────────
+8A — RPC METHOD MAP
+──────────────────────────────────────────────────────────────
+
+  NOTIFICATION RPC:
+  ┌────────────────────────────────┬────────────────────────────────────┐
+  │ RPC Method                     │ Service Call                       │
+  ├────────────────────────────────┼────────────────────────────────────┤
+  │ notification.show              │ NotificationService.show()         │
+  │ notification.info              │ NotificationService.info()         │
+  │ notification.warn              │ NotificationService.warn()         │
+  │ notification.error             │ NotificationService.error()        │
+  │ notification.dismiss           │ NotificationService.dismiss()      │
+  │ notification.dismissAll        │ NotificationService.dismissAll()   │
+  └────────────────────────────────┴────────────────────────────────────┘
+
+  DIALOG RPC:
+  ┌────────────────────────────────┬────────────────────────────────────┐
+  │ RPC Method                     │ Service Call                       │
+  ├────────────────────────────────┼────────────────────────────────────┤
+  │ dialog.showConfirm             │ DialogService.showConfirm()        │
+  │ dialog.showInputBox            │ DialogService.showInputBox()       │
+  │ dialog.showQuickPick           │ DialogService.showQuickPick()      │
+  │ dialog.showTrustDialog         │ DialogService.showTrustDialog()    │
+  │ dialog.showAuthDialog          │ DialogService.showAuthDialog()     │
+  │ dialog.showPermissionDialog    │ DialogService.showPermissionDialog()│
+  │ dialog.showCustomDialog        │ DialogService.showCustomDialog()   │
+  │ dialog.withProgress            │ DialogService.withProgress()       │
+  └────────────────────────────────┴────────────────────────────────────┘
+
+  Note: vscode.window.showInformationMessage → notification.info (NOT dialog)
+        vscode.window.showQuickPick → dialog.showQuickPick (IS a dialog)
+
+
+================================================================================
+SECTION 9 — VSCODE SHIM API (for extensions)
+================================================================================
+
+  The extension-facing API maps to the CORRECT service:
+
+  // ── These map to NOTIFICATION SERVICE ───────────────
+
+  ctx.window.showInformationMessage(message, ...actions):
+    → notificationService.info(message, { actions })
+
+  ctx.window.showWarningMessage(message, ...actions):
+    → notificationService.warn(message, { actions })
+
+  ctx.window.showErrorMessage(message, ...actions):
+    → notificationService.error(message, { actions })
+
+  // ── These map to DIALOG SERVICE ─────────────────────
+
+  ctx.window.showInputBox(opts):
+    → dialogService.showInputBox(opts)
+
+  ctx.window.showQuickPick(items, opts):
+    → dialogService.showQuickPick({ items, ...opts })
+
+  ctx.window.withProgress(opts, task):
+    → dialogService.withProgress(opts, task)
+    → (internally: "notification" location delegates to NotificationService)
+
+  ctx.window.createStatusBarItem(alignment, priority):
+    → Creates status bar item (direct, no service)
+
+  // ── These are NEW (not in VS Code) ──────────────────
+
+  ctx.window.showTrustDialog(opts):
+    → dialogService.showTrustDialog(opts)
+
+  ctx.window.showAuthDialog(opts):
+    → dialogService.showAuthDialog(opts)
+
+  ctx.window.showPermissionDialog(opts):
+    → dialogService.showPermissionDialog(opts)
+
+  ctx.window.showCustomDialog(opts):
+    → dialogService.showCustomDialog(opts)
+
+
+================================================================================
+SECTION 10 — UI SURFACE BINDINGS
+================================================================================
+
+  Both services can be triggered from ANY UI surface:
+
+──────────────────────────────────────────────────────────────
+10A — NOTIFICATIONS FROM ANY SURFACE
+──────────────────────────────────────────────────────────────
+
+  // Status bar click → shows notification
+  statusBar.onClick("lsp-status", () => {
+    notificationService.warn("LSP server disconnected", {
+      category: "lsp", source: "Python",
+      actions: [{ id: "retry", label: "Retry Connection" }],
+    });
+  });
+
+  // Sidebar button → shows notification
+  sidebarPanel.onNewFile(() => {
+    notificationService.success("File created: index.ts", {
+      category: "fs", source: "Explorer",
+    });
+  });
+
+  // Build task completes → shows notification
+  taskRunner.onComplete((result) => {
+    if (result.errors > 0) {
+      notificationService.error(`Build failed: ${result.errors} errors`, {
+        category: "build", source: "Task Runner",
+        actions: [{ id: "terminal", label: "Show Terminal" }],
+      });
+    }
+  });
+
+──────────────────────────────────────────────────────────────
+10B — DIALOGS FROM ANY SURFACE
+──────────────────────────────────────────────────────────────
+
+  // Header → new connection flow (custom multi-step dialog)
+  headerButton.onClick("new-connection", async () => {
+    const result = await dialogService.showCustomDialog({
+      title: "New Connection",
+      width: "md",
+      steps: [
+        { id: "type", title: "Connection Type",
+          body: [
+            { type: "radio", id: "adapter", label: "Choose adapter",
+              options: [
+                { id: "sftp", label: "SFTP" },
+                { id: "api", label: "REST API" },
+                { id: "local", label: "Local Folder" },
+              ] },
+          ] },
+        { id: "config", title: "Configuration",
+          body: [
+            { type: "input", id: "host", label: "Host", required: true },
+            { type: "input", id: "port", label: "Port", value: "22" },
+            { type: "password", id: "password", label: "Password" },
+          ] },
+      ],
+    });
+  });
+
+  // Explorer → delete confirmation (confirm dialog)
+  explorerContextMenu.onDelete(async (file) => {
+    const result = await dialogService.showConfirm({
+      message: `Delete "${file.name}"?`,
+      detail: "This action cannot be undone.",
+      icon: "warning",
+      actions: [
+        { id: "delete", label: "Delete", isDestructive: true },
+        { id: "cancel", label: "Cancel" },
+      ],
+    });
+  });
+
+  // Extension install → permission dialog
+  marketplace.onInstall(async (ext) => {
+    const result = await dialogService.showPermissionDialog({
+      title: `Install "${ext.displayName}"?`,
+      message: "This extension requests the following permissions:",
+      requestor: ext.displayName,
+      permissions: [
+        { id: "fs", label: "File system access", required: true },
+        { id: "network", label: "Network access", description: "api.example.com", required: false },
+      ],
+    });
+  });
+
+  // First launch → workspace trust
+  workspace.onFirstOpen(async (path) => {
+    const trusted = await dialogService.showTrustDialog({
+      message: "Do you trust the authors of this workspace?",
+      detail: `You are opening: ${path}`,
+      rememberKey: `workspace:${path}`,
+    });
+  });
+
+  // Git push force → confirm dialog
+  gitModule.onForcePush(async () => {
+    const result = await dialogService.showConfirm({
+      message: "Force push will overwrite remote history",
+      detail: "This is a destructive operation that cannot be reversed.",
+      icon: "error",
+      actions: [
+        { id: "force", label: "Force Push", isDestructive: true },
+        { id: "cancel", label: "Cancel" },
+      ],
+    });
+  });
+
+  // Command palette → rename symbol (input dialog)
+  commandModule.onRenameSymbol(async (currentName) => {
+    const newName = await dialogService.showInputBox({
+      title: "Rename Symbol",
+      prompt: "Enter new name",
+      value: currentName,
+      validateInput: "^[a-zA-Z_][a-zA-Z0-9_]*$",
+      validationMessage: "Must start with letter or underscore",
+    });
+  });
+
+  // Header → sign in (auth dialog)
+  headerProfile.onSignIn(async () => {
+    const result = await dialogService.showAuthDialog({
+      title: "Sign in to continue",
+      providers: [
+        { id: "github", label: "Continue with GitHub", icon: "$(github)" },
+        { id: "google", label: "Continue with Google", icon: "$(mail)" },
+      ],
+    });
+  });
+
+
+================================================================================
+SECTION 11 — SECURITY
+================================================================================
+
+  NOTIFICATION SECURITY:
+  - Messages are plain text only (no HTML injection)
+  - Source labels are sanitized
+  - Extensions can only fire notifications for their own source
+  - Max message length: 500 chars
+  - Max detail length: 2000 chars
+  - Max actions: 2
+
+  DIALOG SECURITY:
+  - Custom dialog body items are type-checked enum — no arbitrary content
+  - No raw HTML in any dialog field
+  - Input validation regex is validated before use (reject ReDoS patterns)
+  - Trust/permission decisions stored in encrypted storage (not extension-accessible)
+  - Auth dialogs cannot be spoofed by extensions (provider list is verified)
+  - Max limits:
+      actions: 5 per dialog
+      body items: 20 per dialog
+      quick pick items: 10,000
+      steps: 10 per wizard
+
+  GENERAL:
+  - Extensions CANNOT render their own UI (all goes through RPC)
+  - All text fields are HTML-escaped before rendering
+  - Focus trap on all dialogs (prevent focus escape)
+
+
+================================================================================
+                    ╔═══════════════════════════════════════╗
+                    ║    PART C — FILE PREVIEW SYSTEM        ║
+                    ╚═══════════════════════════════════════╝
+================================================================================
+
+
+================================================================================
+SECTION 12 — PREVIEW SYSTEM OVERVIEW
+================================================================================
+
+Built-in preview for common file types. Opens in an editor tab (or side
+panel) using sandboxed webview iframes. No extension needed for these —
+they're core capabilities.
+
+  ┌──────────────┬───────────────────┬───────────────────────────────────┐
+  │ File Type    │ Extensions        │ Preview Renderer                  │
+  ├──────────────┼───────────────────┼───────────────────────────────────┤
+  │ Markdown     │ .md, .mdx         │ Markdown → HTML (marked/remark)   │
+  │ Image        │ .png .jpg .gif    │ <img> tag with zoom/pan           │
+  │              │ .svg .webp .ico   │                                   │
+  │ Audio        │ .mp3 .wav .ogg    │ <audio> with waveform visualizer  │
+  │              │ .flac .aac        │                                   │
+  │ Video        │ .mp4 .webm .mov   │ <video> with playback controls    │
+  │ PDF          │ .pdf              │ pdf.js renderer                   │
+  │ Font         │ .ttf .otf .woff   │ Font preview with sample text     │
+  │              │ .woff2            │                                   │
+  │ HTML         │ .html .htm        │ Live preview in sandboxed iframe  │
+  │ SVG          │ .svg              │ Rendered SVG + source toggle      │
+  │ JSON         │ .json             │ Tree viewer + raw toggle          │
+  │ CSV          │ .csv .tsv         │ Table viewer                      │
+  └──────────────┴───────────────────┴───────────────────────────────────┘
+
+
+================================================================================
+SECTION 13 — PREVIEW ARCHITECTURE
+================================================================================
+
+──────────────────────────────────────────────────────────────
+13A — TYPE DEFINITIONS
+──────────────────────────────────────────────────────────────
+
+  Lives in: plugins/editor/preview-module/types.ts
+
+  type PreviewableType =
+    | "markdown" | "image" | "audio" | "video"
+    | "pdf" | "font" | "html" | "svg" | "json" | "csv";
+
+  interface PreviewProvider {
+    id: PreviewableType;
+    extensions: string[];
+    mimeTypes: string[];
+    render(file: PreviewFile): Promise<string>;
+    supportsLiveUpdate?: boolean;
+    toolbarActions?: PreviewToolbarAction[];
+  }
+
+  interface PreviewFile {
+    uri: string;
+    name: string;
+    extension: string;
+    content: Uint8Array | string;
+    objectUrl?: string;
+    size: number;
+  }
+
+  interface PreviewToolbarAction {
+    id: string;
+    icon: string;
+    tooltip: string;
+    toggle?: boolean;
+  }
+
+  interface PreviewPanel {
+    readonly id: string;
+    readonly fileUri: string;
+    readonly previewType: PreviewableType;
+    readonly panel: WebviewPanel;
+
+    refresh(): void;
+    updateContent(content: Uint8Array | string): void;
+  }
+
+──────────────────────────────────────────────────────────────
+13B — PREVIEW SERVICE
+──────────────────────────────────────────────────────────────
+
+  Lives in: plugins/editor/preview-module/index.ts
+
+  class PreviewService {
+
+    private providers: Map<string, PreviewProvider>;
+    private activePreviews: Map<string, PreviewPanel>;
+
+    constructor(
+      private eventBus: EventBus,
+      private tabService: TabService,
+      private webviewService: WebviewService,
+      private fsService: FileSystemService,
+    ) {}
+
+    registerProvider(provider: PreviewProvider): IDisposable
+    async openPreview(uri: string, opts?: PreviewOptions): Promise<PreviewPanel>
+    async openSideBySide(uri: string): Promise<void>
+    async togglePreview(uri: string): Promise<void>
+    canPreview(uri: string): boolean
+    getActivePreview(uri: string): PreviewPanel | undefined
+    disposePreview(uri: string): void
+  }
+
+  interface PreviewOptions {
+    location?: "tab" | "side" | "right-panel" | "bottom-panel";
+    lockToSource?: boolean;
+    sideBySide?: boolean;
+  }
+
+──────────────────────────────────────────────────────────────
+13C — PREVIEW EVENTS (core/events/preview.events.ts)
+──────────────────────────────────────────────────────────────
+
+  export const enum PreviewEvent {
+    Open            = "preview:open",
+    Close           = "preview:close",
+    Refresh         = "preview:refresh",
+    LiveUpdate      = "preview:live-update",
+    ToolbarAction   = "preview:toolbar-action",
+    Error           = "preview:error",
+    ProviderAdded   = "preview:provider-added",
+    ProviderRemoved = "preview:provider-removed",
+  }
+
+
+================================================================================
+SECTION 14 — BUILT-IN PREVIEW PROVIDERS
+================================================================================
+
+──────────────────────────────────────────────────────────────
+14A — MARKDOWN PREVIEW
+──────────────────────────────────────────────────────────────
+  plugins/editor/preview-module/providers/markdown.ts
+  Parser: marked/remark. GFM, syntax highlighting, mermaid, KaTeX.
+  Scroll sync, live update (300ms debounce). DOMPurify sanitization.
+  Toolbar: [Refresh] [Scroll Sync] [Open in Browser]
+
+──────────────────────────────────────────────────────────────
+14B — IMAGE PREVIEW
+──────────────────────────────────────────────────────────────
+  plugins/editor/preview-module/providers/image.ts
+  Zoom/pan, fit/actual toggle, checkerboard transparency background.
+  Pixel info on hover. Supported: png, jpg, gif, svg, webp, ico, bmp, avif.
+  Toolbar: [Zoom +/-] [Fit] [Actual Size] [Background]
+
+──────────────────────────────────────────────────────────────
+14C — AUDIO PREVIEW
+──────────────────────────────────────────────────────────────
+  plugins/editor/preview-module/providers/audio.ts
+  Custom controls, waveform (Web Audio API + AnalyserNode).
+  Supported: mp3, wav, ogg, flac, aac, m4a, webm.
+  Toolbar: [Play/Pause] [Speed] [Loop] [Volume]
+
+──────────────────────────────────────────────────────────────
+14D — VIDEO PREVIEW
+──────────────────────────────────────────────────────────────
+  plugins/editor/preview-module/providers/video.ts
+  Custom controls, PiP, fullscreen. Supported: mp4, webm, mov, ogg.
+  Toolbar: [Play/Pause] [Speed] [PiP] [Fullscreen]
+
+──────────────────────────────────────────────────────────────
+14E — PDF PREVIEW
+──────────────────────────────────────────────────────────────
+  plugins/editor/preview-module/providers/pdf.ts
+  pdf.js (lazy-loaded). Page nav, zoom, search, thumbnails.
+  Toolbar: [Page -/+] [Zoom -/+] [Search] [Thumbnails]
+
+──────────────────────────────────────────────────────────────
+14F — FONT PREVIEW
+──────────────────────────────────────────────────────────────
+  plugins/editor/preview-module/providers/font.ts
+  @font-face dynamic load. Sample text, sizes, glyph grid, metadata.
+  Supported: ttf, otf, woff, woff2.
+  Toolbar: [Edit Sample] [Glyph Map]
+
+──────────────────────────────────────────────────────────────
+14G — HTML PREVIEW
+──────────────────────────────────────────────────────────────
+  plugins/editor/preview-module/providers/html.ts
+  Sandboxed iframe. Live preview on save, viewport emulation, console forwarding.
+  Toolbar: [Refresh] [Device] [Console]
+
+──────────────────────────────────────────────────────────────
+14H — JSON TREE VIEWER
+──────────────────────────────────────────────────────────────
+  plugins/editor/preview-module/providers/json.ts
+  Collapsible tree, copy path/value, search, tree↔raw toggle.
+  Toolbar: [Expand All] [Collapse All] [Search] [Raw Toggle]
+
+──────────────────────────────────────────────────────────────
+14I — CSV TABLE VIEWER
+──────────────────────────────────────────────────────────────
+  plugins/editor/preview-module/providers/csv.ts
+  Virtual scrolling table, column sort/resize, auto-detect delimiter.
+  Supported: .csv, .tsv.
+  Toolbar: [Sort] [Delimiter] [Row Count]
+
+
+================================================================================
+SECTION 15 — PREVIEW TRIGGERS + TAB INTEGRATION
+================================================================================
+
+  ┌────────────────────────┬──────────────────────────────────────────────┐
+  │ Trigger                │ How                                          │
+  ├────────────────────────┼──────────────────────────────────────────────┤
+  │ Double-click explorer  │ Previewable type → preview tab               │
+  │ Command Palette        │ "Preview: Open/Side/Toggle"                  │
+  │ Tab context menu       │ Right-click tab → "Open Preview"             │
+  │ Editor right-click     │ .md: "Open Preview to the Side"             │
+  │ Keybinding             │ Ctrl+Shift+V toggle, Ctrl+K V side-by-side │
+  │ Explorer context menu  │ Right-click .png → "Open Preview"            │
+  │ Binary auto-detect     │ Binary + previewable → auto preview tab     │
+  │ Extension API          │ ctx.preview.openPreview(uri, opts)          │
+  └────────────────────────┴──────────────────────────────────────────────┘
+
+  Preview tab interface:
+  interface PreviewTab {
+    uri: string;
+    label: string;                // "Preview: README.md"
+    icon: string;
+    isPreview: true;
+    previewType: PreviewableType;
+    sourceUri: string;
+    lockToSource: boolean;
+  }
+
+  Tab behaviors:
+  - lockToSource: source closes → preview closes; source changes → preview refreshes
+  - Double-click preview tab → pin (remove preview flag)
+  - Preview tabs reused (unless pinned)
+  - Binary files auto-open as preview (switchable to hex view)
+
+
+================================================================================
+SECTION 16 — FILE MAP (actual project paths)
+================================================================================
+
+  ──── NOTIFICATION SYSTEM ────────────────────────────────────
+
+  ┌────────────────────────────────────────────────────────────┬────────────┐
+  │ File                                                       │ Section    │
+  ├────────────────────────────────────────────────────────────┼────────────┤
+  │ core/events/notify.events.ts                               │ S1 Events  │
+  │ plugins/infrastructure/notification-module/index.ts        │ S2 Service │
+  │ plugins/infrastructure/notification-module/types.ts        │ S1 Types   │
+  │ plugins/infrastructure/notification-module/toast-queue.ts  │ S3 Toast   │
+  │ plugins/infrastructure/notification-module/preferences.ts  │ S2B Prefs  │
+  └────────────────────────────────────────────────────────────┴────────────┘
+
+  ──── DIALOG SYSTEM ──────────────────────────────────────────
+
+  ┌────────────────────────────────────────────────────────────┬────────────┐
+  │ File                                                       │ Section    │
+  ├────────────────────────────────────────────────────────────┼────────────┤
+  │ core/events/interaction.events.ts                          │ S4 Events  │
+  │ plugins/infrastructure/dialog-module/index.ts              │ S5 Service │
+  │ plugins/infrastructure/dialog-module/types.ts              │ S4 Types   │
+  │ plugins/infrastructure/dialog-module/renderer.ts           │ S6 Render  │
+  │ plugins/infrastructure/dialog-module/quick-pick.ts         │ S6B QPick  │
+  │ plugins/infrastructure/dialog-module/trust-store.ts        │ S5B Trust  │
+  └────────────────────────────────────────────────────────────┴────────────┘
+
+  ──── PREVIEW SYSTEM ─────────────────────────────────────────
+
+  ┌────────────────────────────────────────────────────────────┬────────────┐
+  │ File                                                       │ Section    │
+  ├────────────────────────────────────────────────────────────┼────────────┤
+  │ core/events/preview.events.ts                              │ S13C       │
+  │ plugins/editor/preview-module/index.ts                     │ S13B       │
+  │ plugins/editor/preview-module/types.ts                     │ S13A       │
+  │ plugins/editor/preview-module/providers/markdown.ts        │ S14A       │
+  │ plugins/editor/preview-module/providers/image.ts           │ S14B       │
+  │ plugins/editor/preview-module/providers/audio.ts           │ S14C       │
+  │ plugins/editor/preview-module/providers/video.ts           │ S14D       │
+  │ plugins/editor/preview-module/providers/pdf.ts             │ S14E       │
+  │ plugins/editor/preview-module/providers/font.ts            │ S14F       │
+  │ plugins/editor/preview-module/providers/html.ts            │ S14G       │
+  │ plugins/editor/preview-module/providers/json.ts            │ S14H       │
+  │ plugins/editor/preview-module/providers/csv.ts             │ S14I       │
+  │ plugins/editor/preview-module/providers/svg.ts             │ (SVG)      │
+  └────────────────────────────────────────────────────────────┴────────────┘
+
+  ──── SHARED (both systems use) ──────────────────────────────
+
+  ┌────────────────────────────────────────────────────────────┬────────────┐
+  │ plugins/extensions/extension-module/rpc-bridge.ts          │ S8 RPC     │
+  │ plugins/infrastructure/command-module/registry.ts          │ S15 cmds   │
+  │ plugins/layout/context-menu-module/registry.ts             │ S15 menus  │
+  │ plugins/editor/tabs-module/tab-state.ts                    │ S15 tabs   │
+  └────────────────────────────────────────────────────────────┴────────────┘
+
+
+================================================================================
+SECTION 17 — WHAT TO AVOID
+================================================================================
+
+  NOTIFICATION SYSTEM:
+  - ❌ Never use a notification for something that needs a decision
+  - ❌ Never put more than 2 action buttons on a notification
+  - ❌ Never put form fields or inputs inside a notification
+  - ❌ Never use notifications for auth, trust, or permission flows
+  - ❌ Never use browser alert()
+
+  DIALOG SYSTEM:
+  - ❌ Never use a dialog for transient status messages
+  - ❌ Never show a dialog for "save successful" or "command not found"
+  - ❌ Never render modals without a focus trap
+  - ❌ Never let extensions inject HTML into dialogs
+  - ❌ Never use browser confirm() or prompt()
+
+  PREVIEW SYSTEM:
+  - ❌ Never auto-play audio/video previews
+  - ❌ Never load pdf.js eagerly (lazy-load on first PDF open)
+  - ❌ Never preview files > 50MB without user override
+  - ❌ Never forget to revoke Object URLs on preview close
+
+  BOUNDARY RULE:
+  If you're unsure whether something is a notification or dialog:
+    → Does the user NEED to respond before continuing?
+      YES → Dialog
+      NO  → Notification

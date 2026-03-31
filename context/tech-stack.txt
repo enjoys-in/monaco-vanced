@@ -1,0 +1,91 @@
+================================================================================
+  0. TECH STACK & BUILD PIPELINE
+================================================================================
+
+RUNTIME & PACKAGE MANAGER:
+  Bun — used as the JavaScript runtime AND the package manager.
+  All scripts (dev, build, test, lint) run via `bun run`.
+  Lock file: bun.lockb. No npm/yarn/pnpm.
+
+BUILD TOOL:
+  Vite — development server and build orchestrator.
+  Dev mode:   `bun run dev`  → Vite dev server with HMR.
+  Prod build: `bun run build` → Vite calls the configured bundler.
+
+BUNDLER (production):
+  One of the following (pick one, configure in vite.config.ts):
+    - Rollup    — Vite's default. Tree-shaking, code-splitting, ESM output.
+    - esbuild   — Fast transpilation + bundling. Used by Vite for dep pre-bundling.
+    - Rolldown  — Rust-based Rollup-compatible bundler (preferred when stable).
+                  Drop-in replacement for Rollup with significantly faster builds.
+
+  Recommended: Rolldown as primary bundler, esbuild as fallback/transpiler.
+
+OUTPUT FORMATS:
+  1. NPM Package (primary)
+     - Entry:  `src/index.ts`
+     - Output: `dist/` with ESM + CJS + type declarations (.d.ts)
+     - Published to npm: `monaco-vanced`
+     - Tree-shakeable — users import only the plugins they need:
+         import { createEditorPlugin, createAIPlugin } from "monaco-vanced";
+     - package.json exports map:
+         "exports": {
+           ".":              { "import": "./dist/index.mjs", "require": "./dist/index.cjs" },
+           "./editor/*":      { "import": "./dist/plugins/editor/*/index.mjs" },
+           "./language/*":    { "import": "./dist/plugins/language/*/index.mjs" },
+           "./filesystem/*":  { "import": "./dist/plugins/filesystem/*/index.mjs" },
+           "./layout/*":      { "import": "./dist/plugins/layout/*/index.mjs" },
+           "./ai/*":          { "import": "./dist/plugins/ai/*/index.mjs" },
+           "./scm/*":         { "import": "./dist/plugins/scm/*/index.mjs" },
+           "./devtools/*":    { "import": "./dist/plugins/devtools/*/index.mjs" },
+           "./extensions/*":  { "import": "./dist/plugins/extensions/*/index.mjs" },
+           "./theming/*":     { "import": "./dist/plugins/theming/*/index.mjs" },
+           "./infrastructure/*": { "import": "./dist/plugins/infrastructure/*/index.mjs" },
+           "./platform/*":    { "import": "./dist/plugins/platform/*/index.mjs" },
+           "./enterprise/*":  { "import": "./dist/plugins/enterprise/*/index.mjs" }
+         }
+
+  2. Demo App (development & testing)
+     - Path:   `demo/` — a standalone Vite app that imports the local package
+     - Runs via `bun run dev` — uses Vite dev server with HMR
+     - Purpose: live testing of all plugins, visual playground for layouts,
+       theme switching, FS adapters, AI chat, terminal, etc.
+     - NOT shipped to npm — demo/ is excluded in package.json `files` field.
+
+BUILD COMMANDS:
+  bun run dev       — Start Vite dev server (demo app on localhost)
+  bun run build     — Bundle the npm package to dist/
+  bun run preview   — Preview the production build locally
+  bun run typecheck — tsc --noEmit (type-checking only)
+  bun run lint      — ESLint across src/
+  bun run test      — Vitest unit tests
+
+TYPESCRIPT:
+  Strict mode enabled. All source in TypeScript.
+  tsconfig.json targets ESNext, module: ESNext, moduleResolution: bundler.
+  Separate tsconfig.build.json for dist declarations (excludes demo/ and tests/).
+
+MONOREPO: No. Single package. All plugins live under `plugins/`, grouped
+into 12 categories:
+
+  plugins/
+  ├── editor/           # Monaco editor, tabs, decorations, snippets, virtualization
+  ├── language/          # Language intelligence: providers, LSP, diagnostics, linters, grammars
+  ├── filesystem/        # FS abstraction, adapters, indexer, workspace, search
+  ├── layout/            # Visual shell: layout, sidebar, header, title, statusbar, UI, nav, context menu
+  ├── ai/                # AI: chat client, agent, RAG, memory, eval, predictions, knowledge graph
+  ├── scm/               # Source control: git, collab, review, snapshots, sync
+  ├── devtools/          # Developer tools: terminal, debugger, tests, profiler, tasks, notebooks
+  ├── extensions/        # Extension ecosystem: VSIX, extension runtime, marketplace, embed
+  ├── theming/           # Visual appearance: themes, icons
+  ├── infrastructure/    # Plumbing: storage, settings, auth, commands, keybindings, notifications, deep-link
+  ├── platform/          # Reliability: crash recovery, performance, resources, concurrency, security, workers
+  └── enterprise/        # SaaS: tenants, billing, realtime, audit, secrets, telemetry, policy, API stability
+
+  No index.ts barrel files per category — import modules directly:
+    import { EditorPlugin } from "plugins/editor/editor-module/index";
+    import { AIPlugin }     from "plugins/ai/ai-module/client";
+
+CSS: Tailwind.
+Storage: Use IndexDb(for themes, settings,extentions,etc)  , use DexieJS for indexdbAPI, Cache Storage for web url icons, things to store that is not going to change for so long
+Local:Zustand

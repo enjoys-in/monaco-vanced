@@ -1,0 +1,97 @@
+================================================================================
+  4. AUTH MODULE — GITHUB & GMAIL OAUTH
+================================================================================
+
+The auth module is a plugin that wraps OAuth flows. It exposes a simple
+interface and emits events the rest of the system can react to. No other
+module calls auth APIs directly — they just listen for auth events.
+
+SUPPORTED PROVIDERS:
+  - GitHub (OAuth2 — PKCE flow for browser, device flow for CLI)
+  - Google / Gmail (OAuth2 — PKCE flow)
+  - Custom provider (you supply the config)
+
+USER SETUP:
+
+  const auth = new AuthPlugin({
+    providers: [
+      {
+        id: "github",
+        clientId: "YOUR_GITHUB_CLIENT_ID",
+        scopes: ["read:user", "repo", "gist"],
+        redirectUri: "https://yourapp.com/auth/callback/github",
+        // PKCE is automatic — no client secret needed in browser
+      },
+      {
+        id: "google",
+        clientId: "YOUR_GOOGLE_CLIENT_ID",
+        scopes: ["openid", "email", "profile"],
+        redirectUri: "https://yourapp.com/auth/callback/google",
+      },
+    ],
+
+    // where to store the session
+    storage: "indexeddb",        // "indexeddb" | "memory" | "custom"
+
+    // called when session is restored on page load
+    onRestore: (user) => { },
+
+    // auto-refresh token before expiry
+    autoRefresh: true,
+  });
+
+AUTH FLOW:
+
+  Step 1 — User clicks "Login with GitHub" in the header bar
+  Step 2 — Header bar emits: auth:login-request { provider: "github" }
+  Step 3 — Auth module opens OAuth popup or redirect
+  Step 4 — Callback page receives code + state
+  Step 5 — Auth module exchanges code for token (PKCE — no server needed)
+  Step 6 — Auth module stores token in IndexedDB (encrypted)
+  Step 7 — Auth module emits: auth:login { user: User, provider: "github" }
+  Step 8 — Header bar, git-module, AI-module all react to auth:login
+
+USER OBJECT:
+
+  interface User {
+    id: string;
+    email: string;
+    name: string;
+    avatarUrl: string;
+    provider: "github" | "google" | "custom";
+    accessToken: string;         // never logged, never sent to AI
+    scopes: string[];
+    expiresAt: number;           // unix timestamp
+  }
+
+AUTH MODULE EVENTS (full list):
+
+  auth:login-request     { provider: string }           — user clicked login
+  auth:login             { user: User }                 — login succeeded
+  auth:logout            {}                             — user logged out
+  auth:token-refresh     { provider: string }           — token auto-refreshed
+  auth:token-expired     { provider: string }           — token expired, re-login
+  auth:error             { provider: string, msg: string } — OAuth failed
+  auth:ready             { user: User | null }          — session restored on load
+
+HOW OTHER MODULES USE AUTH:
+
+  git-module listens for auth:login and uses the GitHub token automatically:
+    eventBus.on("auth:login", ({ user }) => {
+      if (user.provider === "github") {
+        this.githubToken = user.accessToken;
+      }
+    });
+
+  auth-module exposes a method too, for modules that need the token on-demand:
+    const token = await ctx.auth.getToken("github");
+
+ROUTE PROTECTION PATTERN:
+  Some features (git push, marketplace install) require auth.
+  The pattern is:
+
+    eventBus.on("git:push-request", async () => {
+      const user = await ctx.auth.requireAuth("github");
+      if (!user) return; // auth module emitted auth:login-request, user sees popup
+      await this.push(user.accessToken);
+    });

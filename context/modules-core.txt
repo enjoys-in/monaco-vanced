@@ -1,0 +1,254 @@
+================================================================================
+  6. ALL 23 CORE MODULES
+================================================================================
+
+1.  core-engine
+    Manages plugin lifecycle. Resolves dependency order. Hosts the EventBus.
+    Provides the DI container. Holds global state (active file, theme, user).
+    Never unloaded.
+
+2.  editor-module
+    Boots Monaco. Creates and destroys text models per file URI. Applies themes.
+    Manages editor options. Registers language providers on behalf of other modules.
+
+3.  context-module
+    Registers all 26 Monaco language intelligence providers:
+    completion, hover, definition, references, rename, format, code actions,
+    document symbols, workspace symbols, signature help, color provider,
+    folding, semantic tokens, inlay hints, linked editing, selection range,
+    on-type formatting, code lens, document link, and more.
+
+4.  ai-module
+    AI chat client. Configurable baseUrl. Transport: SSE / REST / WebSocket /
+    Socket. Custom request/response schema. No editor coupling — only handles
+    communication with an AI backend.
+
+5.  vsix-module
+    Fetches VS Code VSIX extension files. Extracts package.json, themes,
+    TextMate grammars, icon themes. Converts to Monaco-compatible formats.
+    Hands off to theme-module and icon-module.
+
+6.  theme-module
+    Loads, converts, and applies themes. Translates VS Code token color rules
+    to Monaco IStandaloneThemeData. Dynamic switching. Custom registration.
+
+7.  icon-module
+    Extension → SVG icon mapping. Lazy-fetches icon SVGs. Caches in Cache
+    Storage API. Integrates with sidebar for file tree icons.
+
+8.  fs-module
+    Adapter abstraction. CRUD + watch. Emits all file events. Handles retry,
+    error recovery, and conflict detection.
+
+9.  indexer-module
+    Runs in a Web Worker. Parses every workspace file. Builds symbol table.
+    Powers go-to-definition, find-references, workspace symbol search.
+    Incremental updates on file change.
+
+10. storage-module
+    IndexedDB or OPFS. KV async API with TTL expiry. Used by all modules
+    to persist state (settings, cached extensions, symbol index, auth tokens).
+
+11. sidebar-module
+    Panel container. Manages which view panels exist, which is active,
+    width resizing, collapse state. Does NOT render file tree — that is a
+    sidebar view panel registered by the fs-module.
+
+12. tabs-module
+    Tab strip. Open/close files. Active tab. Dirty state (unsaved indicator).
+    Middle-click close. Tab reorder. Overflow menu. Synced with editor models.
+
+13. statusbar-module
+    Bottom status bar. Cursor position, language mode, encoding, line ending,
+    error/warning count, AI status indicator, git branch. Each item is a
+    registered slot — any module can add a status item.
+
+14. terminal-module
+    xterm.js embedded terminal. PTY via WebSocket backend. Parses stderr for
+    error patterns, feeds to diagnostics-module. Multi-terminal tabs.
+    AI "explain this error" integration.
+
+15. command-module
+    Central command registry. All modules register named commands here.
+    Command palette (Ctrl+Shift+P). When-clause context evaluation.
+    Recently-used list. Quick-open integration.
+
+16. keybinding-module
+    Maps key combos to command IDs. Chord sequences. Context-sensitive
+    overrides. User-defined bindings. VS Code keybindings.json import.
+    Conflict detection.
+
+17. layout-module
+    IDE shell geometry. Split panes (horizontal and vertical). Resizable
+    dividers. Editor groups. Panel visibility. Drag-and-drop panel reorder.
+    Persists layout state.
+
+18. diagnostics-module
+    Collects errors from language servers, terminal output, and type-checkers.
+    Injects Monaco editor markers (red/yellow squiggles). Populates the
+    Problems panel. Drives statusbar error count. Quick-fix integration.
+
+19. collab-module
+    Real-time multi-user editing. OT or CRDT sync over WebSocket. Redis
+    pub/sub for session broadcasting. Shared cursors with user colors and
+    name labels. Presence awareness. Terminal sharing.
+
+20. notification-module
+    Toast queue. Progress indicators with cancel. Modal alerts with action
+    buttons. Severity levels (info, warning, error). Auto-dismiss. Any module
+    can call it.
+
+21. extension-module
+    Manages installable extensions on top of the core. Runtime enable/disable.
+    Manifest validation. Sandboxed Web Worker execution. Hot-reload.
+    Extension store client.
+
+22. title-module
+    Standalone per-editor-group title bar. Shows active file name, dirty
+    indicator, language mode selector, encoding selector, git branch name.
+    Listens for tab:switch, tab:dirty, git:branch-change, editor:language-change.
+    Emits titlebar:language-click, titlebar:encoding-click, titlebar:breadcrumb-click.
+    Independent of header-module — does NOT import it.
+
+23. header-module
+    Standalone anti-gravity app header bar (Electron-style). Contains: logo,
+    menu bar (File/Edit/View/Help), global search, notification bell, AI status
+    indicator, auth avatar + profile dropdown. Listens for auth:login,
+    auth:logout, ai:status, notification:badge. Emits header:menu-open,
+    header:search-open, header:command-open. Independent of title-module,
+    sidebar, editor, and file system — purely session + global state.
+
+================================================================================
+  7. NEW ADVANCED MODULES (19 additions)
+================================================================================
+
+RUNTIME INTELLIGENCE LAYER:
+
+24. agent-module
+    Autonomous multi-step task execution. The user or AI describes a goal
+    ("refactor all API calls to use async/await"). The agent reads files,
+    makes edits, runs tests, checks diagnostics, and iterates.
+    Uses: ai-module, fs-module, terminal-module, diagnostics-module.
+    Events: agent:task-start, agent:step, agent:task-complete, agent:task-fail.
+
+25. memory-module
+    Persistent AI context across sessions. Stores: user coding conventions,
+    frequently edited files, project structure summary, last task state.
+    Injected into AI prompts automatically as context header.
+    Uses: storage-module, indexer-module.
+    Events: memory:update, memory:clear.
+
+26. rag-module
+    Vector index of the entire workspace. Embeds code chunks using a local
+    or remote embedding model. On every AI request, retrieves the most
+    relevant chunks and injects them as context. Makes AI answers project-aware.
+    Uses: indexer-module, storage-module, ai-module.
+    Events: rag:indexed, rag:query, rag:results.
+
+27. eval-module
+    Scores AI output quality. Runs acceptance tests against AI suggestions.
+    Tracks which suggestions the user accepts/rejects to fine-tune prompting.
+    Reports to telemetry-module.
+    Events: eval:score, eval:accept, eval:reject.
+
+DEVELOPER EXPERIENCE LAYER:
+
+28. lsp-bridge-module
+    Connects real Language Server Protocol servers over WebSocket. Forwards
+    Monaco provider calls to the server. Translates LSP responses back to
+    Monaco. Supports any language with an LSP server: rust-analyzer, pyright,
+    tsserver, clangd, gopls, ruby-lsp, etc.
+    Events: lsp:connected, lsp:disconnected, lsp:diagnostics.
+
+29. debugger-module
+    Implements the Debug Adapter Protocol (DAP). Breakpoints rendered as
+    Monaco gutter decorations. Call stack, variables, watch expressions in
+    the right panel. Step over/in/out. Supports any DAP-compatible debugger.
+    Events: debug:start, debug:stop, debug:breakpoint, debug:paused, debug:step.
+
+30. git-module
+    Full source control panel. Diff view in Monaco (side-by-side or inline).
+    Stage hunks. Commit. Push/pull using auth-module GitHub token.
+    Branch create/switch/merge. File status in sidebar (M/A/D/R decorations).
+    Conflict resolution inline.
+    Events: git:status, git:commit, git:push, git:pull, git:branch-change,
+            git:conflict, git:diff-open.
+
+31. test-module
+    Discovers and runs tests (Jest, Vitest, pytest, go test, etc.).
+    Results shown inline as gutter icons (pass/fail). Watch mode. Coverage
+    overlay. Failed test diffs in the problems panel.
+    Events: test:run, test:pass, test:fail, test:coverage.
+
+ENTERPRISE INFRASTRUCTURE LAYER:
+
+32. auth-module
+    (Fully described in Section 4 — see context/auth-module.txt.)
+    OAuth2 PKCE for GitHub and Google. Token storage in IndexedDB.
+    Auto-refresh. Session restore. Provider plugin system for custom IdPs.
+
+33. audit-module
+    Streams every user action to a log sink. Events captured: file open,
+    file save, AI prompt text, AI response, git operations, command executions.
+    Configurable redaction (never log file content if configured so).
+    Exports to: console, HTTP endpoint, S3, Kafka.
+    Events: audit:event { action, user, timestamp, payload }.
+
+34. secrets-module
+    Integrates with HashiCorp Vault, AWS Secrets Manager, or Doppler.
+    Fetches secrets at session start. Injects into terminal environment.
+    Never exposes secrets in the editor or AI context.
+    Events: secrets:loaded, secrets:inject, secrets:expired.
+
+35. telemetry-module
+    OpenTelemetry-compatible. Emits spans for: editor startup time,
+    file load time, AI response latency, LSP request duration,
+    extension load time. Error tracking with stack traces.
+    Pluggable exporters (Jaeger, Tempo, Datadog, console).
+    Events: telemetry:span, telemetry:error.
+
+PLATFORM REACH LAYER:
+
+36. marketplace-module
+    Extension discovery browser inside the IDE. Shows installed, popular,
+    and recommended extensions. Install/uninstall/update. Ratings. Changelog.
+    Backed by a registry API (self-hosted or public).
+    Events: marketplace:search, marketplace:install, marketplace:uninstall.
+
+37. embed-module
+    iframe SDK so any web app can embed this editor. Exposes a postMessage
+    API: open file, set content, get content, subscribe to save events.
+    Used by platforms like Vercel, Linear, or internal tools.
+    Events: embed:ready, embed:set-content, embed:get-content, embed:save.
+
+38. notebook-module
+    Jupyter-style notebook support. Alternating code cells and prose (markdown)
+    cells. Kernel management (connects to Jupyter kernel via WebSocket).
+    Inline output (text, images, charts). Export to .ipynb.
+    Events: notebook:cell-run, notebook:kernel-start, notebook:output.
+
+OBSERVABILITY LAYER:
+
+39. profiler-module
+    Runtime performance profiling. CPU flame graphs rendered in a panel.
+    Memory usage over time. Annotates editor with performance hotspots.
+    Integrates with Chrome DevTools Protocol or Node inspector.
+    Events: profiler:start, profiler:stop, profiler:data.
+
+40. review-module
+    Fetches PR comments from GitHub or GitLab using auth-module token.
+    Renders them as inline Monaco decorations at the exact line. You can
+    reply, resolve, or create new comments from inside the editor.
+    Events: review:load, review:comment, review:resolve, review:reply.
+
+41. snapshot-module
+    Time-travel undo for the entire editor state (beyond Monaco's built-in
+    undo). Captures: all open files, all model content, tab state, cursor
+    positions. User can restore the IDE to any point in the last hour.
+    Events: snapshot:capture, snapshot:restore, snapshot:list.
+
+42. search-module (workspace)
+    Full-text search across all workspace files using ripgrep (Electron) or
+    a regex engine in a Worker. Semantic search via rag-module.
+    Results shown in a sidebar view panel with file, line, and context.
+    Events: search:query, search:results, search:replace.

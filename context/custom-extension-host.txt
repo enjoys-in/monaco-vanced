@@ -1,0 +1,1038 @@
+PROJECT: Custom Extension Host (Monaco-based)
+
+GOAL:
+Build a VS Code–like extension system (not 1:1) that supports commands,
+menus, LSP, webview panels, and basic workspace APIs. Extensions are stored
+entirely in the browser using OPFS for file data and Dexie.js (IndexedDB)
+for metadata indexing & search.
+
+================================================================================
+SECTION 1 — CORE COMPONENTS
+================================================================================
+
+1. Extension Host Runtime
+   - Run extensions in isolated iframes (iframe-sandbox.ts) or Web Workers
+   - Each extension exports:
+       activate(context)
+       deactivate()
+   - Lives in: plugins/extensions/extension-module/
+
+2. Main Thread (App Layer)
+   - Monaco editor
+   - UI (command palette, context menu, webview panels)
+   - File system (OPFS for extension storage, FS adapters for workspace)
+   - LSP client
+
+3. RPC Layer (CRITICAL)
+   - Bi-directional communication:
+       Extension Host <—> Main Thread
+   - Use JSON-RPC or structured-clone message protocol
+   - ALL actions go through RPC (no direct Monaco/FS access)
+   - Lives in: plugins/extensions/extension-module/rpc-bridge.ts
+
+
+================================================================================
+SECTION 2 — EXTENSION STRUCTURE (package.json)
+================================================================================
+
+Every extension is a folder with a package.json and a main entry file.
+
+extension/
+  package.json
+  index.js
+  README.md          (optional)
+  icon.png           (optional)
+  media/             (optional — webview assets)
+
+package.json FULL SCHEMA:
+{
+  "name": "ext-name",
+  "displayName": "My Extension",
+  "version": "1.0.0",
+  "main": "index.js",
+  "icon": "icon.png",
+
+  "activationEvents": [
+    "onStartup",
+    "onCommand:ext.hello",
+    "onLanguage:python",
+    "onFileOpen",
+    "onWebviewPanel:ext.myPanel"
+  ],
+
+  "contributes": {
+
+    ── COMMANDS ──────────────────────────────────────────────
+    "commands": [
+      {
+        "command": "ext.hello",
+        "title": "Hello World",
+        "category": "My Extension",
+        "icon": "$(info)"
+      }
+    ],
+
+    ── MENUS ─────────────────────────────────────────────────
+    "menus": {
+      "editor/context": [
+        {
+          "command": "ext.hello",
+          "group": "1_modification",
+          "when": "editorHasSelection"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "ext.newFile",
+          "group": "navigation",
+          "when": "isDirectory"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "ext.hello",
+          "when": "editorLangId == python"
+        }
+      ]
+    },
+
+    ── KEYBINDINGS ───────────────────────────────────────────
+    "keybindings": [
+      {
+        "command": "ext.hello",
+        "key": "ctrl+shift+h",
+        "mac": "cmd+shift+h",
+        "when": "editorTextFocus"
+      }
+    ],
+
+    ── ICON THEMES ───────────────────────────────────────────
+    "iconThemes": [
+      {
+        "id": "my-icons",
+        "label": "My Icon Theme",
+        "path": "./icons/icons.json"
+      }
+    ],
+
+    ── COLOR THEMES ──────────────────────────────────────────
+    "themes": [
+      {
+        "id": "my-dark-theme",
+        "label": "My Dark Theme",
+        "uiTheme": "vs-dark",
+        "path": "./themes/dark.json"
+      }
+    ],
+
+    ── LANGUAGES ─────────────────────────────────────────────
+    "languages": [
+      {
+        "id": "myLang",
+        "extensions": [".mlang"],
+        "aliases": ["MyLang"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+
+    ── GRAMMARS (TextMate → converted to Monarch) ───────────
+    "grammars": [
+      {
+        "language": "myLang",
+        "scopeName": "source.myLang",
+        "path": "./syntaxes/myLang.tmLanguage.json"
+      }
+    ],
+
+    ── SNIPPETS ──────────────────────────────────────────────
+    "snippets": [
+      {
+        "language": "javascript",
+        "path": "./snippets/js.json"
+      }
+    ],
+
+    ── WEBVIEW PANELS ────────────────────────────────────────
+    "webviewPanels": [
+      {
+        "viewType": "ext.myPanel",
+        "title": "My Panel",
+        "icon": "$(preview)",
+        "commandToOpen": "ext.openMyPanel",
+        "showInMenu": {
+          "commandPalette": true,
+          "editorContext": false,
+          "explorerContext": false
+        }
+      }
+    ],
+
+    ── CONFIGURATION (settings) ──────────────────────────────
+    "configuration": {
+      "title": "My Extension",
+      "properties": {
+        "myExt.enableFeatureX": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Feature X"
+        }
+      }
+    }
+  },
+
+  ── PERMISSIONS (optional — sandbox restrictions) ──────────
+  "permissions": {
+    "network": ["https://api.example.com"],
+    "clipboard": true,
+    "localStorage": true
+  }
+}
+
+
+================================================================================
+SECTION 3 — EXTENSION VIRTUAL FILE SYSTEM (OPFS)
+================================================================================
+
+Extensions are stored using the Browser Origin Private File System (OPFS).
+This gives each extension its own isolated directory tree, persisted across
+sessions, accessible only from this origin.
+
+──────────────────────────────────────────────────────────────
+3A — OPFS DIRECTORY LAYOUT
+──────────────────────────────────────────────────────────────
+
+  OPFS Root
+  └── extensions/
+      ├── _registry.json            ← master list of installed extensions
+      ├── ext-name@1.0.0/
+      │   ├── package.json
+      │   ├── index.js
+      │   ├── icon.png
+      │   ├── themes/
+      │   │   └── dark.json
+      │   ├── syntaxes/
+      │   │   └── myLang.tmLanguage.json
+      │   ├── snippets/
+      │   │   └── js.json
+      │   └── media/                ← webview HTML/CSS/JS assets
+      │       ├── panel.html
+      │       └── panel.js
+      ├── another-ext@2.1.0/
+      │   └── ...
+      └── .disabled/                ← disabled extensions (moved here)
+          └── old-ext@0.9.0/
+
+  Key: extension folder name = "${name}@${version}"
+       This prevents collisions and supports side-by-side versions.
+
+──────────────────────────────────────────────────────────────
+3B — ExtensionVFS CLASS (Browser OPFS backed)
+──────────────────────────────────────────────────────────────
+
+  Lives in: plugins/infrastructure/storage-module/opfs.ts
+
+  class ExtensionVFS {
+
+    // ── Core OPFS operations ──────────────────────────────
+
+    constructor()
+      → Calls navigator.storage.getDirectory() to get OPFS root
+      → Navigates to /extensions/ subfolder (creates if missing)
+
+    async writeFile(extId: string, path: string, content: Uint8Array): Promise<void>
+      → Resolves OPFS: /extensions/{extId}/{path}
+      → Creates parent directories as needed
+      → Writes content to file using FileSystemWritableFileStream
+      → SECURITY: path is validated (no ../ traversal, must be under extId)
+
+    async readFile(extId: string, path: string): Promise<Uint8Array>
+      → Resolves OPFS: /extensions/{extId}/{path}
+      → Returns file content as Uint8Array (caller decodes)
+
+    async readFileText(extId: string, path: string): Promise<string>
+      → Convenience: readFile() + TextDecoder
+
+    async mkdir(extId: string, path: string): Promise<void>
+      → Creates directory recursively under /extensions/{extId}/
+
+    async readdir(extId: string, path: string): Promise<DirEntry[]>
+      → Lists entries: { name: string, kind: "file" | "directory" }
+
+    async unlink(extId: string, path: string): Promise<void>
+      → Deletes file at /extensions/{extId}/{path}
+
+    async rmdir(extId: string, path: string, recursive?: boolean): Promise<void>
+      → Deletes directory (recursive: true removes contents)
+
+    async exists(extId: string, path: string): Promise<boolean>
+      → Check if file/directory exists
+
+    async stat(extId: string, path: string): Promise<FileStat>
+      → Returns: { kind, size, lastModified } (from OPFS handle)
+
+    // ── Extension lifecycle ───────────────────────────────
+
+    async installExtension(extId: string, zipBlob: Blob): Promise<void>
+      → Extracts ZIP (VSIX) into /extensions/{extId}/
+      → Reads package.json → validates → indexes in Dexie (see Section 4)
+      → Fires event: ExtensionEvent.Installed
+
+    async uninstallExtension(extId: string): Promise<void>
+      → Recursively deletes /extensions/{extId}/
+      → Removes Dexie index entries
+      → Fires event: ExtensionEvent.Uninstalled
+
+    async disableExtension(extId: string): Promise<void>
+      → Moves /extensions/{extId}/ → /extensions/.disabled/{extId}/
+      → Updates Dexie: enabled = false
+
+    async enableExtension(extId: string): Promise<void>
+      → Moves /extensions/.disabled/{extId}/ → /extensions/{extId}/
+      → Updates Dexie: enabled = true
+
+    async getInstalledExtensions(): Promise<string[]>
+      → Lists all folder names under /extensions/ (excluding .disabled/)
+
+    // ── Loading ───────────────────────────────────────────
+
+    async loadPackageJson(extId: string): Promise<ExtensionManifest>
+      → readFileText(extId, "package.json") → JSON.parse → validate
+
+    async loadMainModule(extId: string): Promise<{ activate, deactivate }>
+      → Reads main entry from package.json
+      → readFile(extId, main) → creates Blob URL → dynamic import()
+      → Returns { activate, deactivate } functions
+
+    async loadAsset(extId: string, path: string): Promise<string>
+      → Reads file → creates Object URL (for images, HTML, etc.)
+      → Used by webview panels to load media/ assets
+  }
+
+  IMPORTANT:
+  - All paths scoped to extension ID — no cross-extension access
+  - Path validation rejects: "..", absolute paths, paths outside extId
+  - Errors are caught per-extension — one bad extension doesn't crash others
+
+──────────────────────────────────────────────────────────────
+3C — WHY OPFS (NOT regular FS or localStorage)
+──────────────────────────────────────────────────────────────
+
+  ✓ Persistent across sessions (survives refresh)
+  ✓ Per-origin isolation (automatic browser security)
+  ✓ Supports large files (no 5MB localStorage limit)
+  ✓ Supports directory trees (package.json, themes/, syntaxes/, media/)
+  ✓ Accessible from Web Workers (important for extension host)
+  ✓ No user permission prompts (unlike File System Access API)
+  ✗ Not available in Firefox < 111 (fallback: IndexedDB file store)
+
+
+================================================================================
+SECTION 4 — DEXIE.JS INDEX LAYER (IndexedDB)
+================================================================================
+
+OPFS stores the actual files. Dexie.js (IndexedDB wrapper) stores structured
+metadata for fast querying, searching, and filtering.
+
+  Lives in: plugins/infrastructure/storage-module/idb.ts
+
+──────────────────────────────────────────────────────────────
+4A — DATABASE SCHEMA (Dexie v4)
+──────────────────────────────────────────────────────────────
+
+  import Dexie from "dexie";
+
+  class ExtensionDB extends Dexie {
+    extensions!: Table<ExtensionRecord>;
+    commands!: Table<CommandRecord>;
+    menus!: Table<MenuRecord>;
+    themes!: Table<ThemeRecord>;
+    languages!: Table<LanguageRecord>;
+    snippets!: Table<SnippetRecord>;
+    keybindings!: Table<KeybindingRecord>;
+    webviewPanels!: Table<WebviewPanelRecord>;
+    activationEvents!: Table<ActivationRecord>;
+
+    constructor() {
+      super("ExtensionStore");
+      this.version(1).stores({
+        extensions:      "extId, name, displayName, version, enabled, installedAt",
+        commands:        "++id, extId, command, title, category",
+        menus:           "++id, extId, location, command, group, when",
+        themes:          "++id, extId, themeId, label, type",
+        languages:       "++id, extId, languageId, [extId+languageId]",
+        snippets:        "++id, extId, language",
+        keybindings:     "++id, extId, command, key",
+        webviewPanels:   "++id, extId, viewType, commandToOpen",
+        activationEvents:"++id, extId, event"
+      });
+    }
+  }
+
+──────────────────────────────────────────────────────────────
+4B — RECORD TYPES
+──────────────────────────────────────────────────────────────
+
+  interface ExtensionRecord {
+    extId: string;           // "ext-name@1.0.0"
+    name: string;
+    displayName: string;
+    version: string;
+    main: string;
+    icon?: string;
+    enabled: boolean;
+    installedAt: number;     // Date.now()
+    permissions?: object;
+  }
+
+  interface CommandRecord {
+    id?: number;             // auto-increment
+    extId: string;
+    command: string;         // "ext.hello"
+    title: string;
+    category?: string;
+    icon?: string;
+  }
+
+  interface MenuRecord {
+    id?: number;
+    extId: string;
+    location: "editor/context" | "explorer/context" | "commandPalette";
+    command: string;
+    group?: string;
+    when?: string;           // when-clause expression
+  }
+
+  interface ThemeRecord {
+    id?: number;
+    extId: string;
+    themeId: string;
+    label: string;
+    type: "color" | "icon";
+    uiTheme?: string;        // "vs" | "vs-dark" | "hc-black"
+    path: string;             // relative path in OPFS
+  }
+
+  interface LanguageRecord {
+    id?: number;
+    extId: string;
+    languageId: string;
+    extensions: string[];
+    aliases?: string[];
+    configPath?: string;
+  }
+
+  interface SnippetRecord {
+    id?: number;
+    extId: string;
+    language: string;
+    path: string;
+  }
+
+  interface KeybindingRecord {
+    id?: number;
+    extId: string;
+    command: string;
+    key: string;
+    mac?: string;
+    when?: string;
+  }
+
+  interface WebviewPanelRecord {
+    id?: number;
+    extId: string;
+    viewType: string;        // "ext.myPanel"
+    title: string;
+    icon?: string;
+    commandToOpen: string;   // command that opens this panel
+    showInCommandPalette: boolean;
+    showInEditorContext: boolean;
+    showInExplorerContext: boolean;
+  }
+
+  interface ActivationRecord {
+    id?: number;
+    extId: string;
+    event: string;           // "onStartup", "onCommand:ext.hello", etc.
+  }
+
+──────────────────────────────────────────────────────────────
+4C — INDEX SERVICE (queries)
+──────────────────────────────────────────────────────────────
+
+  class ExtensionIndexService {
+
+    constructor(private db: ExtensionDB) {}
+
+    // ── Indexing (called on install) ──────────────────────
+
+    async indexExtension(manifest: ExtensionManifest): Promise<void>
+      → Parses contributes.* from package.json
+      → Inserts records into all relevant tables
+      → Called by: ExtensionVFS.installExtension()
+
+    async removeIndex(extId: string): Promise<void>
+      → Deletes all records for extId across ALL tables
+      → Called by: ExtensionVFS.uninstallExtension()
+
+    // ── Search / Query ────────────────────────────────────
+
+    async searchExtensions(query: string): Promise<ExtensionRecord[]>
+      → Searches name, displayName fields (case-insensitive)
+
+    async getCommandsByExtension(extId: string): Promise<CommandRecord[]>
+    async getAllCommands(): Promise<CommandRecord[]>
+      → Used by command palette to show extension commands
+
+    async getMenusByLocation(
+      location: "editor/context" | "explorer/context" | "commandPalette"
+    ): Promise<MenuRecord[]>
+      → Used by context menu module to build menu items
+
+    async getThemes(type: "color" | "icon"): Promise<ThemeRecord[]>
+      → Used by theme selector
+
+    async getLanguages(): Promise<LanguageRecord[]>
+      → Used by language selector
+
+    async getSnippetsByLanguage(lang: string): Promise<SnippetRecord[]>
+      → Used by completion provider
+
+    async getActivationEventsFor(event: string): Promise<ActivationRecord[]>
+      → e.g. getActivationEventsFor("onLanguage:python")
+      → Returns all extensions that should activate for this event
+
+    async getWebviewPanels(): Promise<WebviewPanelRecord[]>
+      → Used by command palette / menu to list available panels
+
+    async getEnabledExtensions(): Promise<ExtensionRecord[]>
+    async getDisabledExtensions(): Promise<ExtensionRecord[]>
+
+    async getExtensionById(extId: string): Promise<ExtensionRecord | undefined>
+  }
+
+  WHY DEXIE.JS:
+  - Clean Promise API over raw IndexedDB
+  - Compound indexes, multi-entry indexes
+  - Built-in versioning/migrations
+  - ~16KB gzipped, zero dependencies
+  - Works in Web Workers (same as extension host)
+
+
+================================================================================
+SECTION 5 — INSTALL FLOW (OPFS + Dexie)
+================================================================================
+
+  User clicks "Install" (from marketplace or drag-drop .vsix)
+  │
+  ├─1. Validate
+  │    → Check ZIP contains package.json
+  │    → Parse JSON, validate required fields (name, main, version)
+  │    → Reject: malformed JSON, missing fields, excessive size
+  │
+  ├─2. Security check
+  │    → Scan for dangerous patterns in main entry (eval, Function(), etc.)
+  │    → Check permissions field against allowed capabilities
+  │    → Reject: no permission model → deny network/clipboard by default
+  │
+  ├─3. Extract to OPFS
+  │    → extId = "${name}@${version}"
+  │    → ExtensionVFS.installExtension(extId, zipBlob)
+  │    → Recursively writes all files to /extensions/{extId}/
+  │
+  ├─4. Index in Dexie
+  │    → ExtensionIndexService.indexExtension(manifest)
+  │    → Inserts into: extensions, commands, menus, themes, languages,
+  │       snippets, keybindings, webviewPanels, activationEvents
+  │
+  ├─5. Register activation events
+  │    → activationEvents list stored in Dexie
+  │    → Extension host runtime subscribes to these events
+  │
+  └─6. Fire event
+       → EventBus.emit(ExtensionEvent.Installed, { extId, manifest })
+
+
+================================================================================
+SECTION 6 — PACKAGE.JSON CONTRIBUTION PARSER
+================================================================================
+
+  Lives in: plugins/extensions/extension-module/manifest-validator.ts
+
+  The manifest validator reads package.json and extracts ALL contribution
+  points. This is the bridge between "files on OPFS" → "features in the app".
+
+──────────────────────────────────────────────────────────────
+6A — WHAT WE PARSE (contributes.*)
+──────────────────────────────────────────────────────────────
+
+  ┌────────────────────┬─────────────────────────────────────────────┐
+  │ Contribution       │ What it does                                │
+  ├────────────────────┼─────────────────────────────────────────────┤
+  │ commands           │ Register in command-module registry         │
+  │ menus              │ Register in context-menu-module             │
+  │                    │   → editor/context (Monaco addAction)       │
+  │                    │   → explorer/context (custom renderer)      │
+  │                    │   → commandPalette (command-module palette)  │
+  │ keybindings        │ Register in keybinding-module               │
+  │ themes             │ Register color themes (theme-loader.ts)     │
+  │ iconThemes         │ Register icon themes (icon-loader.ts)       │
+  │ languages          │ Register language ID + extensions           │
+  │ grammars           │ TextMate → Monarch conversion + register    │
+  │ snippets           │ Load snippet files, register provider       │
+  │ webviewPanels      │ Register viewType + create open command     │
+  │ configuration      │ Add settings entries to settings module     │
+  └────────────────────┴─────────────────────────────────────────────┘
+
+──────────────────────────────────────────────────────────────
+6B — PARSING FLOW
+──────────────────────────────────────────────────────────────
+
+  async function parseManifest(raw: unknown): Promise<ExtensionManifest> {
+
+    // 1. Structural validation
+    assert(raw.name, "name is required");
+    assert(raw.main, "main entry is required");
+    assert(raw.version, "version is required");
+    assert(typeof raw.main === "string");
+    assert(semverValid(raw.version));
+
+    // 2. Parse activationEvents
+    const activationEvents = (raw.activationEvents ?? ["onStartup"])
+      .filter(isValidActivationEvent);
+
+    // 3. Parse contributes
+    const contributes = raw.contributes ?? {};
+
+    // 3a. Commands
+    const commands = (contributes.commands ?? []).map(cmd => ({
+      command: assertString(cmd.command),
+      title:   assertString(cmd.title),
+      category: cmd.category ?? undefined,
+      icon:     cmd.icon ?? undefined,
+    }));
+
+    // 3b. Menus
+    const menus = {};
+    for (const [location, items] of Object.entries(contributes.menus ?? {})) {
+      assertValidMenuLocation(location);
+      menus[location] = items.map(item => ({
+        command: assertString(item.command),
+        group:   item.group ?? "navigation",
+        when:    item.when ?? undefined,
+      }));
+    }
+
+    // 3c. Keybindings
+    const keybindings = (contributes.keybindings ?? []).map(kb => ({
+      command: assertString(kb.command),
+      key:     assertString(kb.key),
+      mac:     kb.mac ?? undefined,
+      when:    kb.when ?? undefined,
+    }));
+
+    // 3d. Icon themes
+    const iconThemes = (contributes.iconThemes ?? []).map(t => ({
+      id:    assertString(t.id),
+      label: assertString(t.label),
+      path:  assertRelativePath(t.path),
+    }));
+
+    // 3e. Color themes
+    const themes = (contributes.themes ?? []).map(t => ({
+      id:      assertString(t.id),
+      label:   assertString(t.label),
+      uiTheme: assertEnum(t.uiTheme, ["vs", "vs-dark", "hc-black"]),
+      path:    assertRelativePath(t.path),
+    }));
+
+    // 3f. Languages
+    const languages = (contributes.languages ?? []).map(l => ({
+      id:         assertString(l.id),
+      extensions: l.extensions ?? [],
+      aliases:    l.aliases ?? [],
+      configuration: l.configuration ? assertRelativePath(l.configuration) : undefined,
+    }));
+
+    // 3g. Grammars
+    const grammars = (contributes.grammars ?? []).map(g => ({
+      language:  assertString(g.language),
+      scopeName: assertString(g.scopeName),
+      path:      assertRelativePath(g.path),
+    }));
+
+    // 3h. Snippets
+    const snippets = (contributes.snippets ?? []).map(s => ({
+      language: assertString(s.language),
+      path:     assertRelativePath(s.path),
+    }));
+
+    // 3i. Webview panels
+    const webviewPanels = (contributes.webviewPanels ?? []).map(wp => ({
+      viewType:      assertString(wp.viewType),
+      title:         assertString(wp.title),
+      icon:          wp.icon ?? undefined,
+      commandToOpen: assertString(wp.commandToOpen),
+      showInMenu:    wp.showInMenu ?? { commandPalette: true },
+    }));
+
+    // 3j. Configuration (settings)
+    const configuration = contributes.configuration ?? undefined;
+
+    // 4. Permissions
+    const permissions = parsePermissions(raw.permissions);
+
+    return {
+      name: raw.name,
+      displayName: raw.displayName ?? raw.name,
+      version: raw.version,
+      main: raw.main,
+      icon: raw.icon,
+      activationEvents,
+      contributes: {
+        commands, menus, keybindings,
+        iconThemes, themes, languages, grammars,
+        snippets, webviewPanels, configuration,
+      },
+      permissions,
+    };
+  }
+
+  SECURITY ASSERTIONS:
+  - assertRelativePath(p): rejects "..", absolute paths, paths with schemes
+  - assertString(v): rejects non-strings, empty strings
+  - assertEnum(v, allowed): rejects values not in allowed list
+  - All array fields default to [] (never undefined)
+
+
+================================================================================
+SECTION 7 — CONTRIBUTION LOADERS (vsix-module/loaders/)
+================================================================================
+
+After parsing, each contribution type has a dedicated loader that converts
+the package.json declaration into a live runtime feature.
+
+  ┌───────────────────────────┬──────────────────────────────────────────┐
+  │ Loader                    │ What it does                             │
+  ├───────────────────────────┼──────────────────────────────────────────┤
+  │ command-loader.ts         │ Reads commands[] → registers in         │
+  │                           │   command-module/registry.ts             │
+  │                           │ Each command wraps an RPC call to the    │
+  │                           │   extension host to invoke handler       │
+  │                           │                                          │
+  │ theme-loader.ts           │ Reads themes[] → loads JSON from OPFS   │
+  │                           │   → converts to Monaco theme → registers │
+  │                           │                                          │
+  │ icon-loader.ts            │ Reads iconThemes[] → loads icon JSON    │
+  │                           │   from OPFS → applies icon definitions  │
+  │                           │                                          │
+  │ language-loader.ts        │ Reads languages[] → registers language  │
+  │                           │   ID, file extensions, configuration    │
+  │                           │                                          │
+  │ grammar-loader.ts         │ Reads grammars[] → loads .tmLanguage    │
+  │                           │   from OPFS → textmate-to-monarch       │
+  │                           │   converter → registers tokenizer       │
+  │                           │                                          │
+  │ snippet-loader.ts         │ Reads snippets[] → loads JSON from OPFS │
+  │                           │   → registers completion provider       │
+  │                           │                                          │
+  │ keybinding-loader.ts      │ Reads keybindings[] → registers in      │
+  │                           │   keybinding-module                      │
+  └───────────────────────────┴──────────────────────────────────────────┘
+
+  All loaders:
+  - Read file content from OPFS via ExtensionVFS.readFileText(extId, path)
+  - Run on main thread (not in extension host)
+  - Are idempotent: can re-run after disable/enable cycle
+
+
+================================================================================
+SECTION 8 — WEBVIEW PANEL SUPPORT
+================================================================================
+
+Extensions can contribute webview panels — custom HTML/CSS/JS panels that
+render inside the editor layout (like VS Code's webview panels).
+
+──────────────────────────────────────────────────────────────
+8A — HOW WEBVIEW PANELS WORK
+──────────────────────────────────────────────────────────────
+
+  1. Extension declares webviewPanels in contributes (Section 2)
+  2. On install, parser indexes the panel in Dexie (webviewPanels table)
+  3. The commandToOpen is auto-registered as a command
+  4. User triggers the command via:
+     → Command Palette (if showInMenu.commandPalette: true)
+     → Editor right-click (if showInMenu.editorContext: true)
+     → Explorer right-click (if showInMenu.explorerContext: true)
+  5. Command handler creates a sandboxed iframe in the editor layout
+  6. iframe loads panel.html from OPFS via Object URL
+  7. Panel communicates with extension via RPC message passing
+
+──────────────────────────────────────────────────────────────
+8B — WEBVIEW LIFECYCLE
+──────────────────────────────────────────────────────────────
+
+  User triggers "ext.openMyPanel" command
+  │
+  ├─1. Command handler looks up WebviewPanelRecord from Dexie
+  │
+  ├─2. Load HTML from OPFS:
+  │    const html = await vfs.readFileText(extId, "media/panel.html");
+  │    const url  = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+  │
+  ├─3. Create sandboxed iframe:
+  │    <iframe
+  │      src={url}
+  │      sandbox="allow-scripts"
+  │      style="width:100%; height:100%; border:none;"
+  │    />
+  │    → NO allow-same-origin (prevents OPFS/cookie access)
+  │    → Scripts allowed for interactivity
+  │
+  ├─4. Inject message bridge:
+  │    iframe.contentWindow.postMessage({ type: "init", ... })
+  │    → Panel receives: theme info, extension data
+  │
+  ├─5. Bi-directional messaging:
+  │    Panel → Host:  window.parent.postMessage({ command: "ext.doSomething" })
+  │    Host → Panel:  iframe.contentWindow.postMessage({ type: "update", data })
+  │
+  └─6. Dispose:
+       → User closes tab/panel
+       → URL.revokeObjectURL(url)
+       → iframe removed from DOM
+       → Extension notified via RPC: onWebviewDisposed(viewType)
+
+──────────────────────────────────────────────────────────────
+8C — WEBVIEW API (available inside iframe)
+──────────────────────────────────────────────────────────────
+
+  The panel HTML can use a small injected API:
+
+  <script>
+    // Provided by host via postMessage bridge
+    const vscode = acquireVsCodeApi();
+
+    // Send message to extension
+    vscode.postMessage({ command: "getData", payload: { id: 1 } });
+
+    // Receive message from extension
+    window.addEventListener("message", (event) => {
+      const msg = event.data;
+      if (msg.type === "response") {
+        document.getElementById("output").textContent = msg.data;
+      }
+    });
+
+    // State persistence (survives panel hide/show, NOT refresh)
+    vscode.setState({ scrollPosition: 100 });
+    const state = vscode.getState();
+  </script>
+
+──────────────────────────────────────────────────────────────
+8D — MENU REGISTRATION FOR WEBVIEW PANELS
+──────────────────────────────────────────────────────────────
+
+  When a webviewPanel declares showInMenu, the system auto-registers:
+
+  IF showInMenu.commandPalette === true:
+    → command-module/registry.ts registers commandToOpen
+    → Appears in command palette: "My Extension: My Panel"
+
+  IF showInMenu.editorContext === true:
+    → context-menu-module adds to editor/context menu group
+    → when-clause: from the webviewPanel config (or always visible)
+
+  IF showInMenu.explorerContext === true:
+    → context-menu-module adds to explorer/context menu group
+
+  This means extension authors DON'T need to manually register menus
+  for their webview panels — the contribution system handles it.
+
+
+================================================================================
+SECTION 9 — ACTIVATION SYSTEM
+================================================================================
+
+  - Lazy load extensions (NEVER load all at startup)
+  - Activate only when needed
+
+  Activation triggers:
+  ┌─────────────────────────────┬──────────────────────────────────┐
+  │ Event                       │ When                              │
+  ├─────────────────────────────┼──────────────────────────────────┤
+  │ onStartup                   │ App boots (use sparingly)        │
+  │ onCommand:<command>         │ User runs command                │
+  │ onLanguage:<lang>           │ File with language opened        │
+  │ onFileOpen                  │ Any file opened                  │
+  │ onWebviewPanel:<viewType>   │ Webview panel opened             │
+  └─────────────────────────────┴──────────────────────────────────┘
+
+  Flow:
+  1. Event fires (e.g. user opens .py file → "onLanguage:python")
+  2. ExtensionIndexService.getActivationEventsFor("onLanguage:python")
+  3. Returns list of extIds that registered for this event
+  4. For each extId:
+     a. ExtensionVFS.loadMainModule(extId)
+     b. Create ExtensionContext (sandbox API)
+     c. Call activate(context)
+     d. Mark activated in memory (don't re-activate)
+
+  IMPORTANT:
+  - Static contributions (themes, languages, grammars, snippets, menus)
+    are loaded from Dexie index WITHOUT activating the extension.
+  - activate() is only needed for runtime behavior (commands, providers).
+
+
+================================================================================
+SECTION 10 — API DESIGN (VSCODE SHIM)
+================================================================================
+
+  Extension code calls these APIs. All go through RPC to main thread.
+
+  ctx.commands.register(id, handler)
+  ctx.commands.execute(id, ...args)
+
+  ctx.window.showMessage(text, type?)
+  ctx.window.createWebviewPanel(viewType, title, options)
+
+  ctx.workspace.openTextDocument(uri)
+  ctx.workspace.getConfiguration(section)
+
+  ctx.languages.registerCompletionProvider(selector, provider)
+  ctx.languages.registerHoverProvider(selector, provider)
+  ctx.languages.registerDefinitionProvider(selector, provider)
+
+  IMPORTANT:
+  - All APIs internally call RPC bridge (rpc-bridge.ts)
+  - No direct Monaco or FS access from extension code
+  - The RPC bridge serializes provider results back to main thread
+
+
+================================================================================
+SECTION 11 — FILE MAP (actual project paths)
+================================================================================
+
+  Each piece of this system maps to an existing project scaffold:
+
+  ┌─────────────────────────────────────────────────────────────┬─────────────┐
+  │ File                                                        │ Section     │
+  ├─────────────────────────────────────────────────────────────┼─────────────┤
+  │ plugins/infrastructure/storage-module/opfs.ts               │ S3 — VFS    │
+  │ plugins/infrastructure/storage-module/idb.ts                │ S4 — Dexie  │
+  │ plugins/infrastructure/storage-module/types.ts              │ S4 — Types  │
+  │ plugins/infrastructure/storage-module/index.ts              │ S4 — Barrel │
+  │ plugins/infrastructure/storage-module/session.ts            │ Session stor│
+  │                                                             │             │
+  │ plugins/extensions/extension-module/manifest-validator.ts   │ S6 — Parser │
+  │ plugins/extensions/extension-module/types.ts                │ S2/S6 Types │
+  │ plugins/extensions/extension-module/lifecycle.ts            │ S9 — Activ. │
+  │ plugins/extensions/extension-module/rpc-bridge.ts           │ S1/S10 RPC  │
+  │ plugins/extensions/extension-module/sandbox.ts              │ S1 — Sandbox│
+  │ plugins/extensions/extension-module/iframe-sandbox.ts       │ S8 — Webview│
+  │ plugins/extensions/extension-module/capability.ts           │ S2 — Perms  │
+  │ plugins/extensions/extension-module/migrator.ts             │ S16 — Migr. │
+  │ plugins/extensions/extension-module/updater.ts              │ S16 — Update│
+  │ plugins/extensions/extension-module/index.ts                │ Barrel      │
+  │                                                             │             │
+  │ plugins/extensions/vsix-module/manifest-parser.ts           │ S6 — Parse  │
+  │ plugins/extensions/vsix-module/extractor.ts                 │ S5 — Unzip  │
+  │ plugins/extensions/vsix-module/cache.ts                     │ S14 — Cache │
+  │ plugins/extensions/vsix-module/fetcher.ts                   │ S16 — Fetch │
+  │ plugins/extensions/vsix-module/registry.ts                  │ S4 — Reg.   │
+  │ plugins/extensions/vsix-module/types.ts                     │ S2 — Types  │
+  │ plugins/extensions/vsix-module/index.ts                     │ Barrel      │
+  │ plugins/extensions/vsix-module/loaders/command-loader.ts    │ S7 — Cmds   │
+  │ plugins/extensions/vsix-module/loaders/theme-loader.ts      │ S7 — Themes │
+  │ plugins/extensions/vsix-module/loaders/icon-loader.ts       │ S7 — Icons  │
+  │ plugins/extensions/vsix-module/loaders/language-loader.ts   │ S7 — Langs  │
+  │ plugins/extensions/vsix-module/loaders/grammar-loader.ts    │ S7 — Grammar│
+  │ plugins/extensions/vsix-module/loaders/snippet-loader.ts    │ S7 — Snips  │
+  │ plugins/extensions/vsix-module/loaders/keybinding-loader.ts │ S7 — Keys   │
+  │ plugins/extensions/vsix-module/converters/textmate-to-monarch.ts│ S7      │
+  │ plugins/extensions/vsix-module/converters/theme-converter.ts    │ S7      │
+  │ plugins/extensions/vsix-module/converters/icon-converter.ts     │ S7      │
+  │                                                             │             │
+  │ plugins/extensions/marketplace-module/installer.ts          │ S5 — Install│
+  │ plugins/extensions/marketplace-module/search.ts             │ S4 — Search │
+  │ plugins/extensions/marketplace-module/api-client.ts         │ S16 — API   │
+  │ plugins/extensions/marketplace-module/types.ts              │ S16 — Types │
+  │ plugins/extensions/marketplace-module/index.ts              │ Barrel      │
+  │                                                             │             │
+  │ plugins/extensions/embed-module/api.ts                      │ Embed API   │
+  │ plugins/extensions/embed-module/message-handler.ts          │ Embed msgs  │
+  │ plugins/extensions/embed-module/types.ts                    │ Embed types │
+  │ plugins/extensions/embed-module/index.ts                    │ Barrel      │
+  │                                                             │             │
+  │ plugins/infrastructure/command-module/registry.ts           │ S8 — Cmds   │
+  │ plugins/layout/context-menu-module/registry.ts              │ S8 — Menus  │
+  │ plugins/infrastructure/keybinding-module/resolver.ts        │ S7 — Keys   │
+  │                                                             │             │
+  │ core/event-bus.ts                                           │ S5/S9 Events│
+  └─────────────────────────────────────────────────────────────┴─────────────┘
+
+
+================================================================================
+SECTION 12 — ERROR HANDLING
+================================================================================
+
+  - Extension crash does NOT crash the app
+  - Each extension runs in isolated iframe/worker
+  - Errors caught per-extension:
+      try { await activate(ctx); }
+      catch (e) { logger.error(extId, e); markFailed(extId); }
+  - Failed extensions: auto-disabled, user notified
+  - RPC timeout: if extension doesn't respond in 10s, kill + mark failed
+
+
+================================================================================
+SECTION 13 — SECURITY
+================================================================================
+
+  1. Sandbox execution (iframe sandbox="allow-scripts")
+  2. No eval/Function() in extension code (CSP enforced)
+  3. Permissions model:
+     - Network: explicitly list allowed domains
+     - Clipboard: opt-in
+     - File system: only via RPC (no direct OPFS access from extension)
+  4. Path traversal protection in ExtensionVFS
+  5. Content Security Policy on webview iframes:
+     Content-Security-Policy: default-src 'none';
+       script-src 'unsafe-inline';
+       style-src 'unsafe-inline';
+       img-src blob: data:;
+
+
+================================================================================
+SECTION 14 — PERFORMANCE
+================================================================================
+
+  - Lazy activation (Section 9) — only load when triggered
+  - Static contributions (themes, snippets) loaded from Dexie index,
+    NOT from extension code — no activate() needed
+  - Cache parsed manifests in Dexie (avoid re-parsing OPFS JSON)
+  - Web Workers for extension host (off main thread)
+  - Blob URLs for webview assets (no network round-trips)
+
+
+================================================================================
+SECTION 15 — WHAT TO AVOID
+================================================================================
+
+  - Don't try full VS Code API (we support a focused subset)
+  - Don't allow direct system access from extensions
+  - Don't load all extensions at startup
+  - Don't tightly couple extensions with core
+  - Don't give extensions raw OPFS/IndexedDB access
+  - Don't trust extension code (always sandbox + CSP)
+
+
+================================================================================
+SECTION 16 — FUTURE
+================================================================================
+
+  - Marketplace support (VSIX fetcher already scaffolded)
+  - Extension signing (verify author identity)
+  - AI-powered extensions (use ai-module as provider)
+  - Remote extensions (run extension host on server)
+  - Extension dependency resolution (ext A requires ext B)
+  - OPFS ↔ IndexedDB fallback for Firefox < 111

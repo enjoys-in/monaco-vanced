@@ -1,0 +1,292 @@
+================================================================================
+  SECTION 12.  SETTINGS MODULE — VSCODE-STYLE CONFIGURATION SYSTEM
+================================================================================
+
+OVERVIEW
+--------
+The settings-module is a plugin that owns the entire configuration surface of
+the IDE. It mirrors VSCode's settings architecture: every setting has a typed
+schema, a default, and up to three override layers (default → user → workspace).
+Users can edit settings via a full Settings UI panel, via JSON files, or via
+dot-object notation in code. Any module reads its own settings through the
+module — nothing is hardcoded.
+
+The settings-module is the SINGLE SOURCE OF TRUTH for all configuration.
+No module reads localStorage or env directly. Everything goes through this API.
+
+
+SETTING LAYERS (priority order, lowest to highest)
+---------------------------------------------------
+  1. defaults     — shipped with each module (never edited by user)
+  2. user         — stored in IndexedDB, applies globally
+  3. workspace    — stored in .vscode/settings.json (or fs-module path),
+                    applies to the current project only
+
+
+SETTINGS CATEGORIES (mirrors VSCode sidebar)
+--------------------------------------------
+  themes          — color theme, icon theme, font, font size, minimap
+  editor          — tab size, word wrap, rulers, format on save, bracket pairs
+  snippets        — user-defined and extension snippets (see below)
+  keybindings     — key → command mappings (editable as JSON or UI table)
+  account         — linked providers (GitHub, Google), session info, tokens
+  command palette — pinned commands, recently used, custom commands
+  layout          — sidebar position, panel sizes, editor group splits
+  extensions      — per-extension settings namespaced by extension ID
+  language        — per-language overrides (e.g. "[python]": { tabSize: 4 })
+  terminal        — shell path, env vars, font, scrollback buffer size
+  linting         — ESLint config path, rules override, severity map
+  formatting      — Prettier config path, format on save toggle, per-language
+
+
+SETTINGS API (what modules use internally)
+------------------------------------------
+
+  // Read a setting (dot-path notation)
+  const fontSize = ctx.settings.get("editor.fontSize");            // → 14
+  const theme    = ctx.settings.get("themes.colorTheme");          // → "dark-plus"
+  const tabSize  = ctx.settings.get("[typescript].editor.tabSize");// → 2
+
+  // Write a setting programmatically
+  ctx.settings.set("editor.fontSize", 16, "user");
+  ctx.settings.set("editor.tabSize", 4,   "workspace");
+
+  // Watch a setting for changes
+  const unsub = ctx.settings.watch("themes.colorTheme", (newVal) => {
+    themeModule.apply(newVal);
+  });
+  unsub.dispose();
+
+  // Get all settings under a namespace
+  const editorSettings = ctx.settings.getAll("editor");
+
+  // Reset to default
+  ctx.settings.reset("editor.fontSize");
+
+  // Register a module's own schema + defaults (called in init())
+  ctx.settings.register({
+    namespace: "eslint",
+    schema: {
+      "eslint.enable":       { type: "boolean", default: true },
+      "eslint.configPath":   { type: "string",  default: ".eslintrc.json" },
+      "eslint.runOn":        { type: "enum",    default: "type", values: ["type","save"] },
+      "eslint.severity":     { type: "object",  default: { "no-unused-vars": "warning" } },
+    }
+  });
+
+
+SETTINGS INTERFACE (SettingsModule)
+------------------------------------
+
+  interface SettingsModule {
+    get<T>(key: string, layer?: SettingLayer): T;
+    set<T>(key: string, value: T, layer?: SettingLayer): void;
+    reset(key: string, layer?: SettingLayer): void;
+    getAll(namespace: string): Record<string, unknown>;
+    watch(key: string, cb: (value: unknown) => void): IDisposable;
+    register(schema: SettingSchema): void;
+    export(layer: SettingLayer): string;          // → JSON string
+    import(json: string, layer: SettingLayer): void;
+    openUI(section?: string): void;               // opens Settings Panel
+    openJSON(layer?: SettingLayer): void;         // opens settings.json in editor
+  }
+
+  type SettingLayer = "defaults" | "user" | "workspace";
+
+
+SETTINGS UI PANEL
+-----------------
+The Settings Panel is a registered right sidebar view (or full editor tab,
+user-configurable). It is built as a plugin-rendered component — the
+settings-module renders it via ctx.layout.registerRightView().
+
+UI structure mirrors VSCode exactly:
+
+  ┌─────────────────────────────────────────────────────────────┐
+  │  Settings                              [Open JSON] [Search] │
+  ├──────────────────────┬──────────────────────────────────────┤
+  │  CATEGORIES          │  SETTINGS EDITOR                     │
+  │  ─────────────────   │  ────────────────────────────────    │
+  │  › Themes            │  Editor                              │
+  │  › Editor            │    Font Size          [  14  ] ↑↓   │
+  │  › Snippets          │    Font Family        [JetBrains Mono│
+  │  › Keybindings       │    Tab Size           [   2  ] ↑↓   │
+  │  › Account           │    Format On Save     [✓ enabled   ] │
+  │  › Command Palette   │    Word Wrap          [off ▾      ] │
+  │  › Layout            │                                      │
+  │  › Extensions        │  Modified in: User  Workspace        │
+  │  › Terminal          │                                      │
+  │  › Linting           │  [Reset to Default]                  │
+  │  › Formatting        │                                      │
+  └──────────────────────┴──────────────────────────────────────┘
+
+Three ways to edit settings (all in sync):
+  A) Settings UI     — form controls, dropdowns, toggles, color pickers
+  B) settings.json   — opens in Monaco editor with IntelliSense + schema
+  C) Dot-object API  — programmatic, used by other modules and CLI tools
+
+When the user edits in JSON, the UI reflects instantly (and vice versa).
+The EventBus is the sync mechanism — no two-way binding needed.
+
+
+SETTINGS JSON FORMAT
+--------------------
+User settings stored as settings.json (user layer):
+
+  {
+    "editor.fontSize": 14,
+    "editor.fontFamily": "JetBrains Mono",
+    "editor.tabSize": 2,
+    "editor.formatOnSave": true,
+    "themes.colorTheme": "One Dark Pro",
+    "themes.iconTheme": "Material Icons",
+    "terminal.shell": "/bin/zsh",
+    "eslint.runOn": "save",
+    "prettier.singleQuote": true,
+    "[python]": {
+      "editor.tabSize": 4,
+      "editor.formatOnSave": false
+    }
+  }
+
+Workspace overrides go in <root>/.vscode/settings.json (same format).
+The settings-module merges layers at read time — workspace wins over user.
+
+
+SNIPPETS SUBSYSTEM
+------------------
+Snippets are managed inside the settings-module as a sub-registry.
+The user creates snippets in a separate snippets.json file or inside the
+Settings UI → Snippets section.
+
+Snippet schema:
+
+  // snippets/typescript.json
+  {
+    "Arrow Function": {
+      "prefix":      "af",
+      "body":        ["const ${1:name} = (${2:args}) => {", "  $0", "};"],
+      "description": "Arrow function"
+    },
+    "Console Log": {
+      "prefix":      "cl",
+      "body":        "console.log($1);",
+      "description": "console.log shortcut"
+    }
+  }
+
+The snippets-module (part of settings-module) registers all snippets into
+Monaco via:
+
+  monaco.languages.registerCompletionItemProvider(language, {
+    provideCompletionItems: (model, position) => {
+      return { suggestions: snippets.map(toMonacoSnippet) };
+    }
+  });
+
+Snippet variables supported: $1..$9, $0 (final cursor), ${1:placeholder},
+${1|option1,option2|} (choice), TM_FILENAME, TM_FILEPATH, CURRENT_DATE, etc.
+
+Per-language snippet files:
+  snippets/global.json         — all languages
+  snippets/typescript.json     — TypeScript only
+  snippets/python.json         — Python only
+  snippets/<language>.json     — any Monaco language ID
+
+Extension snippets (from VSIX) are loaded by the vsix-module and registered
+here via ctx.settings.registerSnippets(language, snippets).
+
+
+ACCOUNT SECTION
+---------------
+The Account section in the Settings UI reads from the auth-module:
+  - Shows connected providers (GitHub, Google, custom IdP)
+  - Shows username, email, avatar, token expiry countdown
+  - Login / Logout buttons (emit auth:login-request / auth:logout)
+  - Scopes granted per provider
+  - "Manage on GitHub" deep link
+
+The account section does NOT own auth logic — it is purely a UI surface
+that delegates everything to the auth-module via the EventBus.
+
+
+COMMAND PALETTE SETTINGS
+-------------------------
+The command palette section shows:
+  - Pinned commands (always at top of palette)
+  - Recently used commands (auto-tracked by command-module)
+  - Custom commands (user-defined name → command ID mappings)
+  - Keybinding per command (editable inline)
+
+Custom command example:
+
+  // In settings.json
+  "commandPalette.customCommands": [
+    { "label": "Deploy to Staging", "command": "terminal.run",
+      "args": { "text": "npm run deploy:staging" } },
+    { "label": "Open Logs", "command": "sftp.openFile",
+      "args": { "path": "/var/log/app.log" } }
+  ]
+
+
+LAYOUT SETTINGS
+---------------
+Layout settings control the visual shell geometry:
+
+  "layout.sidebarPosition":    "left",          // "left" | "right"
+  "layout.sidebarWidth":       240,
+  "layout.rightPanelWidth":    320,
+  "layout.bottomPanelHeight":  200,
+  "layout.editorGroups":       1,               // 1 | 2 | 3 (splits)
+  "layout.panelVisible":       true,
+  "layout.rightPanelVisible":  true,
+  "layout.activityBarVisible": true,
+  "layout.statusBarVisible":   true,
+  "layout.minimap":            true,
+  "layout.breadcrumbs":        true,
+  "layout.stickyScroll":       false
+
+The layout-module watches these settings and re-renders on change.
+The user can also drag-resize panels — the new dimensions write back
+to layout settings automatically.
+
+
+SETTINGS EVENTS
+---------------
+  settings:change        { key, value, layer, previousValue }
+  settings:reset         { key, layer }
+  settings:import        { layer, count }
+  settings:export        { layer }
+  settings:schema-register { namespace }
+  settings:ui-open       { section }
+  settings:json-open     { layer }
+  snippets:register      { language, count }
+  snippets:change        { language }
+
+
+SETTINGS MODULE PLUGIN REGISTRATION
+-------------------------------------
+  class SettingsPlugin implements Plugin {
+    name = "settings-module";
+    dependencies = ["storage-module", "fs-module", "command-module"];
+
+    init(ctx: ModuleContext) {
+      // 1. Load user settings from IndexedDB
+      // 2. Load workspace settings from fs-module (.vscode/settings.json)
+      // 3. Merge layers
+      // 4. Register Settings UI in layout
+      // 5. Register "Preferences: Open Settings" command
+      // 6. Register "Preferences: Open Settings (JSON)" command
+      // 7. Watch fs:change for .vscode/settings.json (live reload)
+      ctx.commands.register("preferences.openSettings",
+        () => ctx.settings.openUI());
+      ctx.commands.register("preferences.openSettingsJSON",
+        () => ctx.settings.openJSON("user"));
+    }
+  }
+
+Dependency position in registration order:
+  storage-module     → boots first
+  fs-module          → needed for workspace settings.json
+  settings-module    → boots right after fs, before all feature modules
+  (all other modules) → can call ctx.settings.register() in their init()

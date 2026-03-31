@@ -1,0 +1,678 @@
+================================================================================
+  5. FILE SYSTEM CONNECTIONS
+================================================================================
+
+The fs-module abstracts the backend. The user creates an adapter and passes
+it as an option. The rest of the system never knows which adapter is active.
+
+EVERY adapter implements the same FSAdapter interface. The fs-module is
+the ONLY module that calls adapter methods. All other modules communicate
+through EventBus events. This guarantees identical behavior regardless of
+which adapter backs the file system.
+
+  interface FSAdapter {
+    // --- Identity ---
+    readonly name: string;                    // "sftp" | "api" | "local" | "opfs" | "indexeddb"
+    readonly type: AdapterType;               // "remote" | "local"
+
+    // --- Capabilities ---
+    readonly capabilities: AdapterCapabilities;
+
+    // --- CRUD ---
+    read(path: string): Promise<Uint8Array>;
+    write(path: string, data: Uint8Array): Promise<void>;
+    delete(path: string, opts?: { recursive?: boolean }): Promise<void>;
+    rename(from: string, to: string): Promise<void>;
+    copy(from: string, to: string): Promise<void>;
+    move(from: string, to: string): Promise<void>;
+
+    // --- Directory ---
+    list(dir: string): Promise<DirEntry[]>;
+    mkdir(path: string, opts?: { recursive?: boolean }): Promise<void>;
+
+    // --- Query ---
+    exists(path: string): Promise<boolean>;
+    stat(path: string): Promise<FileStat>;
+
+    // --- Watch ---
+    watch(glob: string, cb: WatchCallback): IDisposable;
+  }
+
+  interface DirEntry {
+    name: string;
+    path: string;
+    isDirectory: boolean;
+    size: number;
+    modified: number;    // unix timestamp
+  }
+
+  interface FileStat {
+    size: number;
+    modified: number;
+    created: number;
+    isDirectory: boolean;
+    permissions?: string;
+  }
+
+  type WatchCallback = (event: {
+    path: string;
+    changeType: "modify" | "create" | "delete";
+  }) => void;
+
+
+ADAPTER TYPES & CAPABILITIES:
+
+  type AdapterType = "remote" | "local";
+
+  interface AdapterCapabilities {
+    indexing:       boolean;    // can the adapter be fully indexed? (walk all files)
+    watch:          boolean;    // does the adapter support real-time file watching?
+    search:         boolean;    // does the adapter support server-side search?
+    streaming:      boolean;    // does the adapter support chunked upload/download?
+    vectorIndex:    boolean;    // can files be embedded for RAG/vector search?
+    symbolGraph:    boolean;    // can a full symbol/call graph be built?
+  }
+
+  ADAPTER CAPABILITY MATRIX:
+
+    Adapter         │ type   │ indexing │ watch │ search │ streaming │ vectorIndex │ symbolGraph
+    ────────────────┼────────┼─────────┼───────┼────────┼───────────┼─────────────┼────────────
+    SFTPAdapter     │ remote │  false  │ poll  │ false  │   true    │   false     │  false
+    APIAdapter      │ remote │  false  │ false │ false  │   true    │   false     │  false
+    LocalFSAdapter  │ local  │  true   │ true  │ true   │   true    │   true      │  true
+    OPFSAdapter     │ local  │  true   │ true  │ true   │   false   │   true      │  true
+    IndexedDBAdapter│ local  │  true   │ true  │ true   │   false   │   true      │  true
+
+  WHY REMOTE ADAPTERS CANNOT INDEX:
+    SFTP and API adapters connect to remote servers. Walking the entire file
+    tree is prohibitively expensive (latency, bandwidth, rate limits). The
+    system cannot maintain an up-to-date symbol index or vector embedding
+    store for files that live on a remote server. Therefore:
+      - indexing = false → no full workspace indexing
+      - vectorIndex = false → no RAG embeddings
+      - symbolGraph = false → no call graph / knowledge graph
+
+  The fs-module exposes capabilities to other modules via:
+
+    ctx.fs.getCapabilities(): AdapterCapabilities;
+    ctx.fs.getAdapterType(): AdapterType;               // "remote" | "local"
+    ctx.fs.getAdapterName(): string;                     // "sftp", "api", etc.
+
+
+AI MODULE CAPABILITY GATING (adapter-aware):
+────────────────────────────────────────────
+
+  When the active FS adapter is remote (SFTP or API), advanced AI modules
+  that depend on full workspace indexing are AUTOMATICALLY DISABLED. Only
+  the core ai-module (chat, inline completions, streaming) works on remote
+  adapters because it talks directly to the AI backend — no local indexing.
+
+  MODULE                   │ local adapter │ remote adapter │ WHY
+  ─────────────────────────┼───────────────┼────────────────┼─────────────────────────────────
+  ai-module                │   ✅ active    │   ✅ active     │ Direct AI backend call, no indexing
+  agent-module             │   ✅ active    │   ✅ active     │ Uses ai-module + fs read/write (ok over remote)
+  memory-module            │   ✅ active    │   ✅ active     │ IndexedDB-local, no FS dependency
+  eval-module              │   ✅ active    │   ✅ active     │ Scores AI output, no FS dependency
+  rag-module               │   ✅ active    │   ❌ disabled   │ Needs full workspace vector index
+  predictive-module        │   ✅ active    │   ❌ disabled   │ Needs knowledge-graph + intent analysis
+  knowledge-graph-module   │   ✅ active    │   ❌ disabled   │ Needs symbol-index from full workspace scan
+  context-fusion-module    │   ✅ active    │   ⚠️ degraded  │ Works but without RAG/graph context signals
+  ai-memory-module         │   ✅ active    │   ⚠️ degraded  │ Works but can't learn from full codebase
+
+  DEGRADED MODE: context-fusion-module and ai-memory-module still function
+  on remote adapters but with reduced context quality. They use only:
+    - Current editor buffer
+    - Open tabs content
+    - Git diff (if available)
+    - Chat history
+  They CANNOT use: RAG results, knowledge graph, full symbol index.
+
+  HOW GATING WORKS:
+
+  1. fs-module boots and emits: fs:connected { adapter, type, capabilities }
+
+  2. CoreEngine reads capabilities and sets feature flags:
+
+     ctx.eventBus.on("fs:connected", ({ type, capabilities }) => {
+       ctx.settings.set("ai.ragEnabled",           capabilities.vectorIndex,  "defaults");
+       ctx.settings.set("ai.predictiveEnabled",     capabilities.symbolGraph,  "defaults");
+       ctx.settings.set("ai.knowledgeGraphEnabled", capabilities.symbolGraph,  "defaults");
+       ctx.settings.set("ai.contextFusionMode",
+         capabilities.vectorIndex ? "full" : "degraded", "defaults");
+       ctx.settings.set("ai.memoryMode",
+         capabilities.indexing ? "full" : "degraded",    "defaults");
+     });
+
+  3. Each AI module checks its setting in init():
+
+     // rag-module init
+     init(ctx: ModuleContext) {
+       const enabled = ctx.settings.get("ai.ragEnabled");
+       if (!enabled) {
+         ctx.eventBus.emit("plugin:skipped", {
+           module: "rag-module",
+           reason: "Remote FS adapter does not support workspace indexing",
+         });
+         return;  // skip all registration, module stays dormant
+       }
+       // ... normal init ...
+     }
+
+  4. If user switches adapters at runtime (e.g. disconnects SFTP, connects
+     local), the fs-module emits fs:connected again, and the gating re-runs.
+     Modules that were dormant spin up; modules that can no longer run
+     gracefully dispose their providers.
+
+  5. The Settings UI shows these as read-only flags under "AI Features":
+
+     AI Features (auto-configured by adapter)
+       RAG Search         [✗ disabled — remote adapter]
+       Predictive Preload [✗ disabled — remote adapter]
+       Knowledge Graph    [✗ disabled — remote adapter]
+       Context Fusion     [degraded — limited signals]
+       AI Memory          [degraded — limited signals]
+
+     The user CANNOT override these — they are enforced by adapter capabilities.
+
+  EVENT:
+    ai:capability-change { module, enabled: boolean, mode: "full"|"degraded"|"disabled", reason }
+
+
+DISTINCTION — write vs save:
+
+  file:write-request / file:written
+    Low-level adapter call. fs-module calls adapter.write(). Any module can
+    trigger a write (e.g. extension-module writing config, indexer writing cache).
+
+  file:save / file:saved
+    User-facing action. Triggered by Ctrl+S. The editor-module reads the
+    dirty buffer from the active text model, then internally emits
+    file:write-request. tabs-module clears the dirty indicator on file:saved.
+
+  Rule: file:save is the intent. file:write-request is the execution.
+  A save always produces a write. A write does not always come from a save.
+
+
+UNIFIED FS OPERATION WIRING TABLE:
+
+  This is the CANONICAL reference. Every adapter, every event, every payload
+  MUST conform to this table. If an adapter section below contradicts this
+  table, this table wins.
+
+  OPERATION       │ REQUEST EVENT                                    │ ADAPTER CALL                    │ CONFIRM EVENT                                     │ ERROR
+  ────────────────┼──────────────────────────────────────────────────┼─────────────────────────────────┼───────────────────────────────────────────────────┼──────────
+  list            │ fs:list-request { dir: string }                  │ adapter.list(dir)               │ fs:listed { dir: string, entries: DirEntry[] }     │ file:error { op:"list", path, message }
+  read            │ file:read-request { path: string }               │ adapter.read(path)              │ file:read { path: string, data: Uint8Array }       │ file:error { op:"read", path, message }
+  write           │ file:write-request { path: string, data: Uint8Array } │ adapter.write(path, data)  │ file:written { path: string }                      │ file:error { op:"write", path, message }
+  delete          │ file:delete-request { path: string, isDirectory: boolean } │ adapter.delete(path, { recursive: isDirectory }) │ file:deleted { path: string } │ file:error { op:"delete", path, message }
+  rename          │ file:rename-request { from: string, to: string } │ adapter.rename(from, to)        │ file:renamed { from: string, to: string }          │ file:error { op:"rename", path: from, message }
+  copy            │ file:copy-request { from: string, to: string }   │ adapter.copy(from, to)          │ file:copied { from: string, to: string }           │ file:error { op:"copy", path: from, message }
+  move            │ file:move-request { from: string, to: string }   │ adapter.move(from, to)          │ file:moved { from: string, to: string }            │ file:error { op:"move", path: from, message }
+  mkdir           │ file:create-request { path: string, isDirectory: true } │ adapter.mkdir(path)       │ file:created { path: string, isDirectory: true }   │ file:error { op:"mkdir", path, message }
+  create file     │ file:create-request { path: string, isDirectory: false }│ adapter.write(path, new Uint8Array(0)) │ file:created { path: string, isDirectory: false } │ file:error { op:"create", path, message }
+  exists          │ file:exists-request { path: string }             │ adapter.exists(path)            │ file:exists { path: string, exists: boolean }      │ file:error { op:"exists", path, message }
+  stat            │ file:stat-request { path: string }               │ adapter.stat(path)              │ file:stat { path: string, stat: FileStat }         │ file:error { op:"stat", path, message }
+  upload          │ file:upload-request { path: string, data: Uint8Array } │ adapter.write(path, data)  │ file:uploaded { path: string }                     │ file:error { op:"upload", path, message }
+  download        │ file:download-request { path: string }           │ adapter.read(path)              │ file:downloaded { path: string, data: Uint8Array } │ file:error { op:"download", path, message }
+  watch           │ (programmatic — not event-driven)                │ adapter.watch(glob, cb)         │ fs:change { path, changeType }                     │ fs:watch-error { path, error }
+
+  PROGRESS EVENTS (emitted by adapters that support streaming):
+    file:upload-progress   { path: string, loaded: number, total: number, percent: number }
+    file:download-progress { path: string, loaded: number, total: number, percent: number }
+
+  CONNECTION EVENTS (remote adapters only — SFTP, API):
+    fs:connected     { adapter: string }
+    fs:disconnected  { adapter: string }
+
+  SAVE EVENTS (editor/user-facing — NOT adapter calls):
+    file:save   { path: string }               — user pressed Ctrl+S
+    file:saved  { path: string }               — write completed, dirty cleared
+    file:open   { path: string }               — file opened in editor tab
+    file:close  { path: string }               — file closed
+
+  SIDE EFFECTS (fs-module triggers these automatically):
+    On delete:  tabs-module closes any open tab for that path.
+                indexer-module removes symbols for that file.
+    On rename:  tabs-module updates the URI for the open tab.
+                indexer-module re-indexes at the new path.
+    On move:    Same as rename (move = rename to different directory).
+
+
+  HOW THE WIRING WORKS (the full flow for any operation):
+
+    1. User action in explorer (e.g. rightclick → rename)
+    2. Explorer UI emits REQUEST event: file:rename-request { from, to }
+    3. fs-module listener receives the event
+    4. fs-module calls the configured adapter: adapter.rename(from, to)
+    5. Adapter performs the operation (SFTP/API/Local/OPFS/IndexedDB)
+    6. On success: fs-module emits CONFIRM event: file:renamed { from, to }
+    7. On failure: fs-module emits ERROR event: file:error { op, path, message }
+    8. Other modules react to the CONFIRM event (tabs, indexer, sidebar, etc.)
+
+    This pattern is IDENTICAL for every operation and every adapter.
+    The adapter never emits events — only the fs-module does.
+
+  EXTENDED FEATURES (see context/filesystem-advanced.txt):
+    → Per-operation custom handlers — Strategy Pattern: mix transports per op
+      (e.g. rename via WebSocket, upload via REST, watch via chokidar)
+    → FS operation lifecycle hooks — onSuccess/onError per operation
+      (fire AFTER adapter call, BEFORE EventBus event)
+    → File explorer context menu — plugin-extensible right-click menu
+      (any plugin can add items via ctx.contextMenu.register())
+
+--------------------------------------------------------------------------------
+  5a. SFTP ADAPTER
+--------------------------------------------------------------------------------
+
+The user creates an SFTPAdapter and passes it to the fs-module:
+
+  const fs = new FSPlugin({
+    adapter: new SFTPAdapter({
+      host: "your-server.com",
+      port: 22,
+      username: "deploy",
+      privateKey: "...",          // or password: "..."
+      rootPath: "/var/www",
+
+      // connection pooling
+      maxConnections: 4,
+      keepAliveInterval: 10000,   // ms
+
+      // retry on drop
+      autoReconnect: true,
+      reconnectDelay: 2000,
+    }),
+  });
+
+SFTP-SPECIFIC BEHAVIOR:
+
+  All events and payloads follow the UNIFIED WIRING TABLE above exactly.
+  Below are SFTP-specific implementation notes only.
+
+  RENAME:   adapter.rename(from, to) → calls sftp.rename()
+  DELETE:   adapter.delete(path, { recursive }) → sftp.unlink() for files,
+            sftp.rmdir(path, recursive) for directories
+  COPY:     adapter.copy(from, to) → SFTP has no native copy, so SFTPAdapter
+            internally does sftp.read(from) then sftp.write(to, data).
+            The fs-module calls adapter.copy() — it does NOT know about this.
+  MOVE:     adapter.move(from, to) → sftp.rename(from, to)
+            (rename = move in SFTP protocol)
+  CREATE:   file: adapter.write(path, empty). dir: adapter.mkdir(path).
+  READ:     adapter.read(path) → sftp.read() → returns Uint8Array
+  WRITE:    adapter.write(path, data) → sftp.write()
+  LIST:     adapter.list(dir) → sftp.readdir() → mapped to DirEntry[]
+  STAT:     adapter.stat(path) → sftp.stat() → mapped to FileStat
+  EXISTS:   adapter.exists(path) → sftp.stat() wrapped in try/catch
+  UPLOAD:   adapter.write(path, data) with chunked progress tracking
+            emits file:upload-progress { path, loaded, total, percent }
+  DOWNLOAD: adapter.read(path) with chunked progress tracking
+            emits file:download-progress { path, loaded, total, percent }
+
+  WATCH:
+    SFTP has no native watch. The SFTPAdapter polls by default, or the user
+    provides a WebSocket channel from their server:
+
+    new SFTPAdapter({
+      ...
+      watchMode: "poll",          // "poll" | "websocket"
+      pollInterval: 3000,         // ms
+      watchSocket: new WebSocket("wss://your-server/watch"),
+    });
+
+    Watch emits: fs:change { path, changeType: "modify" | "create" | "delete" }
+
+  CONNECTION:
+    SFTPAdapter emits fs:connected { adapter: "sftp" } on successful handshake
+    and fs:disconnected { adapter: "sftp" } on drop. Auto-reconnect if configured.
+
+--------------------------------------------------------------------------------
+  5b. API (HTTP REST) ADAPTER
+--------------------------------------------------------------------------------
+
+For backends that expose a REST API instead of SFTP. The user creates an
+APIAdapter with their endpoint config and handlers:
+
+  const fs = new FSPlugin({
+    adapter: new APIAdapter({
+      baseUrl: "https://api.yourservice.com/files",
+
+      // auth header — reads from auth-module token automatically
+      authProvider: ctx.auth,     // or: staticToken: "Bearer xyz"
+
+      // endpoint map — every operation has its own endpoint config
+      endpoints: {
+        list:     { method: "GET",    path: "/:dir" },
+        read:     { method: "GET",    path: "/:path/content" },
+        write:    { method: "PUT",    path: "/:path/content" },
+        delete:   { method: "DELETE", path: "/:path" },
+        rename:   { method: "POST",   path: "/:path/rename",   body: { to } },
+        copy:     { method: "POST",   path: "/:path/copy",     body: { to } },
+        move:     { method: "POST",   path: "/:path/move",     body: { to } },
+        mkdir:    { method: "POST",   path: "/directory",      body: { path } },
+        upload:   { method: "POST",   path: "/:path/upload",   multipart: true },
+        download: { method: "GET",    path: "/:path/download", binary: true },
+        stat:     { method: "GET",    path: "/:path/stat" },
+      },
+
+      // optional: transform responses to match DirEntry / FileStat shapes
+      transformers: {
+        list:   (data) => data.items.map(toEntry),
+        stat:   (data) => ({ size: data.fileSize, modified: data.updatedAt, ... }),
+      },
+    }),
+  });
+
+API-SPECIFIC BEHAVIOR:
+
+  All events and payloads follow the UNIFIED WIRING TABLE above exactly.
+  Below maps each adapter method to its HTTP endpoint.
+
+  OPERATION     │ HTTP CALL                                     │ NOTES
+  ──────────────┼───────────────────────────────────────────────┼───────────────────
+  list(dir)     │ GET    /files/:dir                            │ Response mapped via transformers.list → DirEntry[]
+  read(path)    │ GET    /files/:path/content                   │ Returns Uint8Array (binary) or text
+  write(path,d) │ PUT    /files/:path/content                   │ Body: file content
+  delete(path)  │ DELETE /files/:path ?recursive=true           │ Query param for dirs
+  rename(f,t)   │ POST   /files/:path/rename    body: { to }   │
+  copy(f,t)     │ POST   /files/:path/copy      body: { to }   │
+  move(f,t)     │ POST   /files/:path/move      body: { to }   │
+  mkdir(path)   │ POST   /files/directory        body: { path } │
+  exists(path)  │ HEAD   /files/:path                           │ 200 = exists, 404 = not
+  stat(path)    │ GET    /files/:path/stat                      │ Response mapped via transformers.stat → FileStat
+  upload        │ POST   /files/:path/upload     multipart      │ Chunked, emits progress
+  download      │ GET    /files/:path/download   binary: true   │ Content-Disposition, emits progress
+
+  WATCH (via WebSocket or SSE):
+    Endpoint:  WS /files/watch or GET /files/watch (SSE)
+    Message:   { type: "change", path, changeType: "modify"|"create"|"delete" }
+    Config:
+      new APIAdapter({
+        ...
+        watch: {
+          mode: "websocket",    // "websocket" | "sse" | "poll"
+          url: "wss://api.yourservice.com/files/watch",
+          reconnect: true,
+        },
+      });
+
+  CONNECTION:
+    APIAdapter emits fs:connected { adapter: "api" } on first successful
+    request and fs:disconnected { adapter: "api" } when requests fail
+    consistently (configurable retry count).
+
+USER-DEFINED HANDLER PATTERN:
+
+  The user can override any operation with a custom handler. This is the
+  "handler in options" pattern — the user creates the handler object and
+  passes it to the adapter. The adapter calls it instead of fetching.
+
+  const fs = new FSPlugin({
+    adapter: new APIAdapter({
+      baseUrl: "https://api.example.com",
+      handlers: {
+        // override just the delete operation
+        delete: async (path) => {
+          const confirmed = await myConfirmDialog("Delete " + path + "?");
+          if (!confirmed) throw new Error("Cancelled");
+          await myCustomAPI.deleteFile(path);
+        },
+
+        // override upload with your own chunking logic
+        upload: async (path, data, onProgress) => {
+          for (const chunk of chunkData(data, 1024 * 1024)) {
+            await myAPI.uploadChunk(path, chunk);
+            onProgress(chunk.end, data.byteLength);
+          }
+        },
+      },
+    }),
+  });
+
+  Any unoverridden operation falls back to the default endpoint config.
+
+--------------------------------------------------------------------------------
+  5c. LOCAL FILE SYSTEM ADAPTER
+--------------------------------------------------------------------------------
+
+For Electron or browser File System Access API:
+
+  const fs = new FSPlugin({
+    adapter: new LocalAdapter({
+      // browser: uses File System Access API (showDirectoryPicker)
+      // electron: uses Node fs module
+      mode: "browser",           // "browser" | "electron" | "node"
+      rootHandle: directoryHandle, // from showDirectoryPicker()
+    }),
+  });
+
+LOCAL-SPECIFIC BEHAVIOR:
+
+  All events and payloads follow the UNIFIED WIRING TABLE exactly.
+
+  OPERATION     │ BROWSER (File System Access API)          │ ELECTRON (Node fs)
+  ──────────────┼───────────────────────────────────────────┼────────────────────────────
+  list(dir)     │ dirHandle.values() → iterate entries      │ fs.readdir(dir, { withFileTypes })
+  read(path)    │ fileHandle.getFile() → arrayBuffer()      │ fs.readFile(path)
+  write(path,d) │ fileHandle.createWritable() → write(d)    │ fs.writeFile(path, d)
+  delete(path)  │ parentHandle.removeEntry(name, { recursive }) │ fs.rm(path, { recursive })
+  rename(f,t)   │ read(f) → write(t) → delete(f)           │ fs.rename(f, t)
+  copy(f,t)     │ read(f) → write(t)                        │ fs.copyFile(f, t)
+  move(f,t)     │ read(f) → write(t) → delete(f)           │ fs.rename(f, t)
+  mkdir(path)   │ dirHandle.getDirectoryHandle(name, { create: true }) │ fs.mkdir(path, { recursive })
+  exists(path)  │ try getFileHandle/getDirectoryHandle, catch → false  │ fs.access(path)
+  stat(path)    │ fileHandle.getFile() → { size, lastModified }        │ fs.stat(path)
+  upload        │ same as write (local = no transfer)       │ same as write
+  download      │ same as read (triggers showSaveFilePicker) │ same as read (triggers dialog)
+
+  WATCH:
+    Browser:   No native watch. Polls using periodic list() + stat() diff.
+    Electron:  Uses chokidar (or fs.watch). Native OS file watcher.
+
+    new LocalAdapter({
+      ...
+      watchMode: "native",        // "native" (Electron only) | "poll"
+      pollInterval: 2000,         // ms, used when watchMode = "poll"
+    });
+
+  CONNECTION:
+    LocalAdapter emits fs:connected { adapter: "local" } immediately on init.
+    No disconnect concept — local FS is always available.
+
+  BROWSER PERMISSION:
+    File System Access API requires user gesture to call showDirectoryPicker().
+    If the permission is revoked (tab refresh, user denied), the adapter emits:
+      fs:disconnected { adapter: "local" }
+    and shows a "Re-open folder" notification via notification-module.
+
+
+--------------------------------------------------------------------------------
+  5d. OPFS ADAPTER (Origin Private File System)
+--------------------------------------------------------------------------------
+
+OPFS is a browser-only, sandboxed file system built into the browser. It
+does NOT require user permission (no picker dialog). Ideal for:
+  - Offline-first projects that need a private workspace
+  - Caching compiled output, node_modules mirrors, temp files
+  - Projects where File System Access API is unavailable (e.g. Firefox)
+
+  const fs = new FSPlugin({
+    adapter: new OPFSAdapter({
+      rootDir: "my-project",     // virtual root inside OPFS
+    }),
+  });
+
+OPFS-SPECIFIC BEHAVIOR:
+
+  All events and payloads follow the UNIFIED WIRING TABLE exactly.
+
+  OPERATION     │ OPFS API CALL
+  ──────────────┼─────────────────────────────────────────────────────
+  list(dir)     │ dirHandle.values() → iterate entries
+  read(path)    │ fileHandle.getFile() → arrayBuffer() → Uint8Array
+  write(path,d) │ createSyncAccessHandle() → write(d) → flush() → close()
+                │ (uses sync access handle in Worker for perf, falls back
+                │  to createWritable() on main thread)
+  delete(path)  │ parentHandle.removeEntry(name, { recursive })
+  rename(f,t)   │ read(f) → write(t) → delete(f)  (OPFS has no native rename)
+  copy(f,t)     │ read(f) → write(t)
+  move(f,t)     │ rename (f,t)  — same as rename internally
+  mkdir(path)   │ dirHandle.getDirectoryHandle(name, { create: true })
+  exists(path)  │ try getFileHandle/getDirectoryHandle → true, catch → false
+  stat(path)    │ fileHandle.getFile() → { size, lastModified } → FileStat
+  upload        │ same as write (OPFS = local, no network transfer)
+  download      │ read → blob → URL.createObjectURL → trigger download
+
+  WATCH:
+    OPFS has no native watch. OPFSAdapter polls automatically.
+
+    new OPFSAdapter({
+      rootDir: "my-project",
+      pollInterval: 2000,        // ms — default 2000
+    });
+
+  CONNECTION:
+    OPFSAdapter emits fs:connected { adapter: "opfs" } after
+    navigator.storage.getDirectory() resolves successfully.
+    If the browser doesn't support OPFS, emits:
+      file:error { op: "init", path: "/", message: "OPFS not supported" }
+
+  PERSISTENCE:
+    OPFS data survives page refresh, tab close, and browser restart.
+    It is cleared only if the user clears site data or storage pressure
+    triggers eviction. To prevent eviction:
+
+      await navigator.storage.persist(); // request persistent storage
+
+  EXAMPLE — full setup:
+
+    const fs = new FSPlugin({
+      adapter: new OPFSAdapter({ rootDir: "workspace" }),
+    });
+
+    // Write a file
+    eventBus.emit("file:write-request", {
+      path: "/src/index.ts",
+      data: new TextEncoder().encode("console.log('hello')"),
+    });
+
+    // List files
+    eventBus.emit("fs:list-request", { dir: "/src" });
+    eventBus.on("fs:listed", ({ entries }) => {
+      console.log(entries); // [{ name: "index.ts", path: "/src/index.ts", ... }]
+    });
+
+
+--------------------------------------------------------------------------------
+  5e. INDEXEDDB ADAPTER
+--------------------------------------------------------------------------------
+
+IndexedDB as a virtual file system. Stores file paths as keys and content
+as Uint8Array values. Ideal for:
+  - Maximum browser compatibility (all browsers, including old ones)
+  - Storing structured metadata alongside files
+  - Projects that need transactional writes (IndexedDB is ACID per transaction)
+
+  const fs = new FSPlugin({
+    adapter: new IndexedDBAdapter({
+      dbName: "monaco-fs",       // IndexedDB database name
+      storeName: "files",        // object store name
+      version: 1,                // schema version
+    }),
+  });
+
+INDEXEDDB SCHEMA:
+
+  Database: "monaco-fs" (or user-configured)
+  Object stores:
+
+    "files" — stores file content
+      key:   path (string, e.g. "/src/index.ts")
+      value: {
+        path:        string,
+        data:        Uint8Array,
+        isDirectory: boolean,
+        size:        number,
+        created:     number,     // unix timestamp
+        modified:    number,     // unix timestamp
+      }
+      indexes: [byDirectory] — index on parent directory for fast list()
+
+INDEXEDDB-SPECIFIC BEHAVIOR:
+
+  All events and payloads follow the UNIFIED WIRING TABLE exactly.
+
+  OPERATION     │ INDEXEDDB CALL
+  ──────────────┼─────────────────────────────────────────────────────
+  list(dir)     │ index("byDirectory").getAll(dir) → mapped to DirEntry[]
+  read(path)    │ store.get(path) → record.data (Uint8Array)
+  write(path,d) │ store.put({ path, data: d, modified: Date.now(), ... })
+  delete(path)  │ store.delete(path). If directory: cursor on index,
+                │ delete all keys starting with path + "/" (recursive)
+  rename(f,t)   │ transaction: read(f) → put at key t → delete(f)
+  copy(f,t)     │ transaction: read(f) → put at key t (data unchanged)
+  move(f,t)     │ same as rename (read → write new key → delete old key)
+  mkdir(path)   │ store.put({ path, isDirectory: true, data: new Uint8Array(0), ... })
+  exists(path)  │ store.count(path) > 0
+  stat(path)    │ store.get(path) → { size: record.data.byteLength, modified, created, isDirectory }
+  upload        │ same as write (IndexedDB = local, no transfer)
+  download      │ read → blob → URL.createObjectURL → trigger download
+
+  WATCH:
+    IndexedDB has no native watch. The adapter polls by storing a snapshot
+    of modified timestamps and diffing on interval.
+
+    new IndexedDBAdapter({
+      ...
+      pollInterval: 2000,        // ms — default 2000
+    });
+
+  CONNECTION:
+    IndexedDBAdapter emits fs:connected { adapter: "indexeddb" } after the
+    database is opened and the object store is verified.
+    If IndexedDB is blocked (e.g. private browsing in some browsers):
+      file:error { op: "init", path: "/", message: "IndexedDB unavailable" }
+
+  TRANSACTIONS:
+    Each adapter method runs inside a single IndexedDB transaction.
+    Writes are ACID — either the full write succeeds or nothing changes.
+    This makes IndexedDB the safest adapter for crash recovery.
+
+  STORAGE LIMITS:
+    IndexedDB storage is subject to browser quotas (typically 50% of disk).
+    The adapter monitors storage usage and emits a warning via EventBus:
+      fs:storage-warning { used: number, quota: number, percent: number }
+    when usage exceeds 80% of quota.
+
+  EXAMPLE — full setup:
+
+    const fs = new FSPlugin({
+      adapter: new IndexedDBAdapter({
+        dbName: "my-ide-workspace",
+        storeName: "files",
+        version: 1,
+      }),
+    });
+
+    // Write a file
+    eventBus.emit("file:write-request", {
+      path: "/src/main.ts",
+      data: new TextEncoder().encode("export const app = {}"),
+    });
+
+    // Read it back
+    eventBus.emit("file:read-request", { path: "/src/main.ts" });
+    eventBus.on("file:read", ({ path, data }) => {
+      const text = new TextDecoder().decode(data);
+      console.log(text); // "export const app = {}"
+    });
+
+
+ADAPTER COMPARISON TABLE:
+
+  ADAPTER    │ NETWORK │ PERMISSION │ WATCH      │ PERSISTENCE     │ BROWSER COMPAT  │ BEST FOR
+  ───────────┼─────────┼────────────┼────────────┼─────────────────┼─────────────────┼──────────────────────
+  SFTP       │ YES     │ SSH key    │ poll / WS  │ server-side     │ N/A (proxy)     │ Remote server editing
+  API        │ YES     │ auth token │ WS/SSE/poll│ server-side     │ all (fetch)     │ Custom backend / SaaS
+  Local      │ NO      │ user gesture│ native/poll│ OS filesystem   │ Chrome 86+ / Electron │ Desktop IDE
+  OPFS       │ NO      │ none       │ poll       │ browser storage │ Chrome 86+, FF 111+ │ Offline / sandboxed
+  IndexedDB  │ NO      │ none       │ poll       │ browser storage │ ALL browsers    │ Max compatibility / ACID writes

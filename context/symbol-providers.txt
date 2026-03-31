@@ -1,0 +1,500 @@
+================================================================================
+  SECTION 13.  SYMBOL INDEX + PROVIDER SYSTEM
+================================================================================
+
+OVERVIEW
+--------
+When a file opens, the symbol-index-module collects all symbols (functions,
+classes, variables, interfaces, types, methods) and stores them in a fast
+in-memory Map plus a persistent IndexedDB index. This index powers ALL
+cross-file Monaco intelligence: go-to-definition, peek definition,
+find references, document symbols, workspace symbols, hover, and rename.
+
+The system is built in THREE layers:
+
+  Layer 1 — FSAdapter (interface)
+    Raw file operations: read, write, delete, rename, copy.
+    This is the same FSAdapter from Section 5. Symbol providers use it
+    to fetch files on demand when a definition lives in another file.
+
+  Layer 2 — SymbolIndex (in-memory + IndexedDB)
+    Parses every open or indexed file. Stores symbols keyed by
+    (filePath, symbolName) → SymbolEntry. Runs in a Web Worker.
+
+  Layer 3 — Provider Factory (Monaco registrations)
+    A factory that takes the SymbolIndex and FSAdapter and produces
+    all Monaco language providers. One factory call registers all 6
+    providers. The user wires them by passing in their FSAdapter.
+
+
+WHY THIS DESIGN
+---------------
+The FSAdapter interface is the boundary. Providers never call fetch() or
+fs.read() directly — they call adapter.read(path). This means:
+  - SFTP projects: definitions load from the remote server
+  - Local projects: definitions load from disk
+  - API projects: definitions load from the REST backend
+  - The providers don't change. Only the adapter changes.
+
+This is the Adapter + Factory + Index pattern — all three working together.
+
+
+SYMBOL ENTRY (what gets indexed)
+---------------------------------
+
+  interface SymbolEntry {
+    name:       string;               // "getUserById"
+    kind:       SymbolKind;           // Function | Class | Variable | ...
+    filePath:   string;               // "/src/users/service.ts"
+    range: {
+      startLine:   number;            // 0-indexed
+      startColumn: number;
+      endLine:     number;
+      endColumn:   number;
+    };
+    selectionRange: Range;            // just the name token (for highlight)
+    containerName?: string;           // "UserService" (parent class/namespace)
+    signature?:     string;           // "(id: string): Promise<User>"
+    documentation?: string;          // JSDoc comment above the symbol
+    exportedAs?:    string;           // default | named | none
+  }
+
+  enum SymbolKind {
+    File, Module, Namespace, Package, Class, Method, Property,
+    Field, Constructor, Enum, Interface, Function, Variable,
+    Constant, String, Number, Boolean, Array, Object, Key,
+    Null, EnumMember, Struct, Event, Operator, TypeParameter
+  }
+
+
+SYMBOL INDEX MODULE
+--------------------
+
+  interface SymbolIndexModule {
+    // Index a single file (called on open, save, fs:change)
+    indexFile(path: string, content: string): Promise<void>;
+
+    // Remove all symbols for a file (called on delete/close)
+    removeFile(path: string): void;
+
+    // Query
+    lookup(name: string, fromFile?: string): SymbolEntry[];
+    lookupInFile(path: string): SymbolEntry[];
+    lookupWorkspace(query: string): SymbolEntry[];   // fuzzy match
+    lookupAtPosition(path: string, line: number, col: number): SymbolEntry | null;
+
+    // Bulk index (called on workspace open)
+    indexWorkspace(paths: string[]): Promise<void>;
+
+    // Persistence
+    persist(): Promise<void>;      // flush to IndexedDB
+    restore(): Promise<void>;      // load from IndexedDB on startup
+    clear(): void;
+  }
+
+Storage keys in IndexedDB:
+  symbol-index:<filePath>          → SymbolEntry[] for that file
+  symbol-index:__manifest          → { path: string, mtime: number }[]
+  symbol-index:__version           → schema version (for migration)
+
+The index checks mtime on restore — stale entries are re-parsed.
+
+
+FSADAPTER INTERFACE (the boundary layer)
+-----------------------------------------
+Symbol providers use the same FSAdapter interface defined in Section 5.
+(See context/fs-connections.txt for the full interface.)
+
+The FSAdapter is created by the user (SFTPAdapter / APIAdapter / LocalAdapter)
+and injected into the FSPlugin. The SymbolProviderFactory receives it via
+ModuleContext (ctx.fs.adapter). This means every provider transparently
+works across all three backends — the provider only calls adapter.read().
+
+
+PROVIDER FACTORY
+-----------------
+The ProviderFactory registers all Monaco providers in one call.
+The user never registers providers manually — they just wire the adapter.
+
+  class SymbolProviderFactory {
+    constructor(
+      private index:   SymbolIndexModule,
+      private adapter: FSAdapter,
+      private eventBus: EventBus,
+    ) {}
+
+    // Call once per language in the plugin's init()
+    registerAll(language: string): IDisposable[] {
+      return [
+        this.registerDefinitionProvider(language),
+        this.registerReferenceProvider(language),
+        this.registerDocumentSymbolProvider(language),
+        this.registerWorkspaceSymbolProvider(),    // language-agnostic
+        this.registerHoverProvider(language),
+        this.registerRenameProvider(language),
+      ];
+    }
+  }
+
+The factory returns IDisposable[] so plugins can clean up on destroy().
+
+
+PROVIDER 1 — DEFINITION PROVIDER (most important)
+---------------------------------------------------
+Resolves: Ctrl+Click, F12 "Go to Definition", Ctrl+Alt+Click "Open to Side".
+
+How it works:
+  1. User Ctrl+Clicks on "getUserById"
+  2. Monaco calls provideDefinition(model, position)
+  3. Provider reads word at position from model
+  4. Looks up index: index.lookupAtPosition(filePath, line, col)
+  5. If not found locally: searches workspace index
+  6. If still not found: adapter.read() to fetch candidate files + re-parse
+  7. Returns monaco.languages.Location (filePath + range)
+  8. Monaco opens the file (emits file:open if not already open)
+
+  monaco.languages.registerDefinitionProvider(language, {
+    provideDefinition: async (model, position) => {
+      const word   = model.getWordAtPosition(position);
+      if (!word) return null;
+
+      const fromFile = model.uri.path;
+      const entries  = index.lookup(word.word, fromFile);
+
+      if (entries.length === 0) {
+        // Symbol not yet indexed — fetch and parse candidate files
+        const candidates = await resolveCandidates(word.word, fromFile, adapter);
+        for (const { path, content } of candidates) {
+          await index.indexFile(path, content);
+        }
+        entries.push(...index.lookup(word.word, fromFile));
+      }
+
+      return entries.map(e => ({
+        uri:   monaco.Uri.file(e.filePath),
+        range: toMonacoRange(e.range),
+      }));
+    }
+  });
+
+Cross-file fetch (the key SFTP-transparent step):
+  When the definition is in a file that isn't open, the provider calls
+  adapter.read(path) — which goes to SFTP, REST API, or local disk
+  transparently. The file content is parsed, indexed, and the symbol range
+  is returned. The user sees go-to-definition work just like a local project.
+
+  async function resolveCandidates(name, fromFile, adapter) {
+    // 1. Check import statements in fromFile for where name comes from
+    const imports = parseImports(fromFile);
+    const targetPaths = resolveImportPaths(imports, name);
+
+    // 2. Fetch each candidate file via adapter
+    const results = [];
+    for (const path of targetPaths) {
+      if (await adapter.exists(path)) {
+        const bytes   = await adapter.read(path);
+        const content = new TextDecoder().decode(bytes);
+        results.push({ path, content });
+      }
+    }
+    return results;
+  }
+
+
+PROVIDER 2 — REFERENCE PROVIDER
+---------------------------------
+Resolves: Shift+F12 "Find All References", "Peek References".
+
+  monaco.languages.registerReferenceProvider(language, {
+    provideReferences: async (model, position, context) => {
+      const word    = model.getWordAtPosition(position);
+      if (!word) return [];
+
+      // Search entire workspace index for occurrences of this name
+      const allEntries = index.lookupWorkspace(word.word);
+      const refs = [];
+
+      for (const entry of allEntries) {
+        // For files not yet open, fetch + parse to find exact ranges
+        if (!index.lookupInFile(entry.filePath).length) {
+          const bytes   = await adapter.read(entry.filePath);
+          const content = new TextDecoder().decode(bytes);
+          await index.indexFile(entry.filePath, content);
+        }
+        const occurrences = findOccurrences(entry.filePath, word.word, index);
+        refs.push(...occurrences.map(r => ({
+          uri:   monaco.Uri.file(entry.filePath),
+          range: toMonacoRange(r),
+        })));
+      }
+      return refs;
+    }
+  });
+
+
+PROVIDER 3 — DOCUMENT SYMBOL PROVIDER
+---------------------------------------
+Resolves: the Outline panel, Ctrl+Shift+O (go to symbol in file), breadcrumbs.
+
+  monaco.languages.registerDocumentSymbolProvider(language, {
+    provideDocumentSymbols: (model) => {
+      const path    = model.uri.path;
+      const entries = index.lookupInFile(path);
+
+      return entries.map(e => ({
+        name:           e.name,
+        detail:         e.signature || "",
+        kind:           toMonacoSymbolKind(e.kind),
+        range:          toMonacoRange(e.range),
+        selectionRange: toMonacoRange(e.selectionRange),
+        children:       [],  // nested symbols (methods inside a class)
+      }));
+    }
+  });
+
+The Outline panel is populated entirely from this provider.
+When the user clicks a symbol in Outline, Monaco calls revealRange().
+
+
+PROVIDER 4 — WORKSPACE SYMBOL PROVIDER
+-----------------------------------------
+Resolves: Ctrl+T "Go to Symbol in Workspace" (fuzzy search across all files).
+
+  monaco.languages.registerWorkspaceSymbolProvider({
+    provideWorkspaceSymbols: async (query) => {
+      // Fuzzy match across entire in-memory index
+      const results = index.lookupWorkspace(query);
+
+      // For unloaded files, the index still has their symbols from
+      // the initial workspace scan (indexWorkspace() on project open)
+      return results.map(e => ({
+        name:          e.name,
+        kind:          toMonacoSymbolKind(e.kind),
+        containerName: e.containerName || "",
+        location: {
+          uri:   monaco.Uri.file(e.filePath),
+          range: toMonacoRange(e.range),
+        }
+      }));
+    }
+  });
+
+Initial workspace indexing (called when project opens):
+  // In SymbolIndexModule.init()
+  const allFiles = await ctx.fs.list("/", { recursive: true, extensions: ["ts","js","py"] });
+  await index.indexWorkspace(allFiles.map(f => f.path));
+  // Files are fetched in parallel batches via adapter.read()
+  // Results are stored in IndexedDB for next session
+
+
+PROVIDER 5 — HOVER PROVIDER
+-----------------------------
+Resolves: mouse hover over a symbol shows type + JSDoc documentation.
+
+  monaco.languages.registerHoverProvider(language, {
+    provideHover: async (model, position) => {
+      const word  = model.getWordAtPosition(position);
+      if (!word) return null;
+
+      const entry = index.lookupAtPosition(model.uri.path, position.lineNumber - 1, position.column - 1)
+                 || index.lookup(word.word)[0];
+
+      if (!entry) return null;
+
+      const markdown = [
+        { value: "```" + language + "\n" + (entry.signature || entry.name) + "\n```" },
+        entry.documentation ? { value: entry.documentation } : null,
+        { value: `*Defined in* \`${entry.filePath}:${entry.range.startLine + 1}\`` },
+      ].filter(Boolean);
+
+      return {
+        range:    toMonacoRange(entry.selectionRange),
+        contents: markdown,
+      };
+    }
+  });
+
+
+PROVIDER 6 — RENAME PROVIDER
+------------------------------
+Resolves: F2 "Rename Symbol" — renames across ALL files that reference it.
+
+  monaco.languages.registerRenameProvider(language, {
+    // Step 1: validate the rename location
+    resolveRenameLocation: (model, position) => {
+      const entry = index.lookupAtPosition(model.uri.path, position.lineNumber - 1, position.column - 1);
+      if (!entry) return null;
+      return {
+        range: toMonacoRange(entry.selectionRange),
+        text:  entry.name,
+      };
+    },
+
+    // Step 2: return ALL edits across ALL files
+    provideRenameEdits: async (model, position, newName) => {
+      const word = model.getWordAtPosition(position);
+      const refs = index.lookupWorkspace(word.word);
+
+      const edits = {};
+      for (const entry of refs) {
+        const fileUri = monaco.Uri.file(entry.filePath).toString();
+        if (!edits[fileUri]) edits[fileUri] = [];
+        edits[fileUri].push({
+          range:    toMonacoRange(entry.selectionRange),
+          newText:  newName,
+        });
+      }
+
+      // Monaco applies all edits atomically — across open and closed files
+      return { edits: Object.entries(edits).map(([uri, e]) => ({ resource: monaco.Uri.parse(uri), edits: e })) };
+    }
+  });
+
+
+INDEX LIFECYCLE
+----------------
+When a file opens:
+  1. fs-module emits file:read { path, content }
+  2. symbol-index-module receives it, calls indexFile(path, content)
+  3. Parser (runs in Web Worker) extracts all SymbolEntry records
+  4. Results stored in in-memory Map AND written to IndexedDB
+  5. All 6 providers now have live data for that file
+
+When a file changes (user types):
+  1. editor-module emits editor:content-change { uri, content } (debounced 500ms)
+  2. symbol-index-module re-indexes just that file
+  3. Providers immediately reflect the new symbols
+
+When a file is saved:
+  1. file:saved event triggers a clean re-index (removes stale symbols)
+  2. IndexedDB is flushed to reflect final state
+
+When a file is deleted:
+  1. file:deleted event triggers index.removeFile(path)
+  2. All references to that file are purged from the index
+
+On workspace open:
+  1. symbol-index-module.restore() loads prior IndexedDB state
+  2. Checks mtimes — re-indexes only stale files
+  3. Emits index:ready when complete
+  4. Workspace symbol search is live immediately
+
+
+SYMBOL INDEX EVENTS
+--------------------
+  index:file-start     { path }
+  index:file-done      { path, symbolCount }
+  index:workspace-done { fileCount, symbolCount }
+  index:file-remove    { path }
+  index:ready          {}
+  index:error          { path, message }
+
+
+PLUGIN WIRING (how the user assembles this)
+-------------------------------------------
+The user only does two things:
+  1. Create their FSAdapter (SFTP / API / Local — same as Section 5)
+  2. Pass it to FSPlugin. Everything else is automatic.
+
+  // User wires adapter once
+  const fs = new FSPlugin({
+    adapter: new SFTPAdapter({ host: "...", ... })
+  });
+
+  // symbol-index-module init() (internal — user never writes this):
+  class SymbolIndexPlugin implements Plugin {
+    name = "symbol-index-module";
+    dependencies = ["fs-module", "editor-module", "storage-module"];
+
+    private factory: SymbolProviderFactory;
+    private disposables: IDisposable[] = [];
+
+    init(ctx: ModuleContext) {
+      // Restore previous index from IndexedDB
+      this.index.restore();
+
+      // Create the provider factory — inject adapter from ctx.fs
+      this.factory = new SymbolProviderFactory(
+        this.index,
+        ctx.fs.adapter,     // <-- SFTP, API, or Local — transparent
+        ctx.eventBus,
+      );
+
+      // Register all 6 providers for each configured language
+      for (const lang of ["typescript", "javascript", "python", "go", "rust"]) {
+        this.disposables.push(...this.factory.registerAll(lang));
+      }
+
+      // React to file lifecycle
+      ctx.eventBus.on("file:read",    ({ path, content }) => this.index.indexFile(path, content));
+      ctx.eventBus.on("file:deleted", ({ path })          => this.index.removeFile(path));
+      ctx.eventBus.on("file:saved",   ({ path })          => this.reindexFile(path, ctx));
+
+      // Index entire workspace on open
+      ctx.eventBus.once("fs:connected", async () => {
+        const files = await ctx.fs.list("/", { recursive: true });
+        await this.index.indexWorkspace(files.map(f => f.path));
+      });
+    }
+
+    private async reindexFile(path: string, ctx: ModuleContext) {
+      const bytes   = await ctx.fs.adapter.read(path);
+      const content = new TextDecoder().decode(bytes);
+      await this.index.indexFile(path, content);
+    }
+
+    destroy() {
+      this.disposables.forEach(d => d.dispose());
+      this.index.persist();
+    }
+  }
+
+
+PEEK DEFINITION
+----------------
+Peek Definition (Alt+F12) is handled by Monaco automatically once the
+DefinitionProvider is registered. Monaco opens an inline peek widget
+inside the current editor — no additional code needed.
+
+To enable "Open File on Definition Match" (when the definition is in
+another file that isn't currently open):
+
+  // Intercept Monaco's openCodeEditor command
+  ctx.commands.register("editor.action.revealDefinition", async () => {
+    const location = await ctx.editor.getDefinitionAtCursor();
+    if (!location) return;
+
+    const isOpen = ctx.tabs.isOpen(location.uri.path);
+    if (!isOpen) {
+      // Fetch file via adapter (SFTP-transparent)
+      const bytes   = await ctx.fs.adapter.read(location.uri.path);
+      const content = new TextDecoder().decode(bytes);
+      // Open it as a new tab
+      ctx.eventBus.emit("file:open", { path: location.uri.path, content });
+    }
+    // Monaco navigates to the range
+    ctx.editor.revealRange(location.uri, location.range);
+  });
+
+
+DEPENDENCY POSITION IN REGISTRATION ORDER
+------------------------------------------
+  storage-module          → IndexedDB for symbol persistence
+  fs-module               → adapter.read() for cross-file fetching
+  settings-module         → language list, index config
+  symbol-index-module     → boots after fs + storage
+  editor-module           → Monaco instance needed for provider registration
+  context-module          → registers all providers via SymbolProviderFactory
+  (all providers active)  → go-to-definition, hover, references, rename live
+
+
+DESIGN PRINCIPLES APPLIED
+--------------------------
+  Adapter pattern   — FSAdapter abstracts SFTP / API / Local behind one interface
+  Factory pattern   — SymbolProviderFactory produces all 6 providers from one call
+  Index pattern     — SymbolIndex is the single source of truth, not repeated queries
+  Plugin isolation  — no provider imports the adapter directly; injected via ctx
+  Event-driven      — file lifecycle events (open, save, delete) drive index updates
+  Web Worker        — parsing runs off the main thread (no UI jank)
+  IndexedDB         — symbol state persists across sessions, only stale entries re-parsed
+  Transparent SFTP  — cross-file definitions fetch via adapter.read(), same as local

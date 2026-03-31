@@ -1,0 +1,1000 @@
+================================================================================
+  3. LAYOUT SHELL — THE VISUAL FRAME
+================================================================================
+
+The shell is not a single component. It is a set of independent, composable
+panels that can be mounted, unmounted, resized, and linked — but are never
+tightly coupled.
+
+Think of it like an Electron app window:
+  - Each region is a slot
+  - Slots are filled by plugin-rendered content
+  - The layout module manages slot geometry (size, visibility, split)
+  - Slots communicate via events, not direct function calls
+
+OVERALL STRUCTURE:
+
+  ┌─────────────────────────────────────────────────────────────┐
+  │  HEADER BAR (anti-gravity, always on top, app-level)        │
+  ├──────────────┬──────────────────────────┬───────────────────┤
+  │              │  TITLE BAR (per-editor)  │                   │
+  │  SIDEBAR     ├──────────────────────────┤  RIGHT WEBVIEW    │
+  │              │                          │  PANEL            │
+  │  ┌─────────┐ │  EDITOR TAB VIEW PANEL   │                   │
+  │  │SIDEBAR  │ │  (Monaco, tabs, gutter)  │  (AI chat,        │
+  │  │VIEW     │ │                          │   git, preview)   │
+  │  │PANEL    │ ├──────────────────────────┤                   │
+  │  └─────────┘ │  WEBVIEW PANEL (bottom)  │                   │
+  │              │  (terminal, problems,    │                   │
+  ├──────────────┴──────────────────────────┴───────────────────┤
+  │  STATUS BAR (always visible, fixed bottom, app-level)       │
+  │  (language | encoding | Ln/Col | spaces | AI | git | etc)   │
+  └─────────────────────────────────────────────────────────────┘
+--------------------------------------------------------------------------------
+  3a. HEADER BAR
+--------------------------------------------------------------------------------
+
+The header bar is INDEPENDENT of everything else. It floats at the top of
+the application like an Electron titlebar. It knows about the user session,
+the app name, and global commands. It does NOT know about open files.
+
+It is anti-gravity: it stays fixed regardless of which panel is scrolled.
+It is the ONE place where the auth state is visibly reflected.
+
+The user builds it like this:
+
+  const header = new HeaderBar({
+    title: "MyIDE",
+    logo: <YourLogoComponent />,
+
+    // left section
+    left: [
+      MenuBarComponent,       // File, Edit, View menus
+      BreadcrumbComponent,    // optional path breadcrumb
+    ],
+
+    // center section
+    center: [
+      SearchBarComponent,     // global search
+    ],
+
+    // right section
+    right: [
+      NotificationBellComponent,
+      AIStatusIndicatorComponent,
+      AccountAvatarComponent,   // comes from auth-module
+    ],
+
+    // link to auth module — header READS auth state, does not own it
+    authBus: eventBus,         // listens for auth:login, auth:logout
+  });
+
+Events the header bar emits:
+  header:menu-open       { menu: "file" | "edit" | "view" | "help" }
+  header:search-open     {}
+  header:command-open    {}
+
+Events the header bar listens for:
+  auth:login             { user: User } — updates avatar, shows name
+  auth:logout            {}            — resets to guest state
+  ai:status              { state: "idle" | "thinking" | "error" }
+  notification:badge     { count: number }
+
+The header bar is a PLUGIN:
+
+  class HeaderBarPlugin implements Plugin {
+    name = "header-bar";
+    dependencies = ["auth-module", "command-module", "ai-module"];
+    init(ctx: ModuleContext) {
+      ctx.eventBus.on("auth:login", this.updateAvatar);
+      ctx.eventBus.on("ai:status", this.updateAIStatus);
+    }
+  }
+
+Key rule: the header bar does NOT import the sidebar, the editor, or the
+file system. It is purely session + global state.
+
+--------------------------------------------------------------------------------
+  3b. TITLE BAR
+--------------------------------------------------------------------------------
+
+The title bar sits above the editor area. It shows:
+  - Active file name (comes from tabs-module via event)
+  - Dirty indicator (unsaved dot)
+  - Language mode selector
+  - Encoding selector
+  - Branch name (comes from git-module via event)
+
+It is per-editor-group (you can have multiple editor groups in a split layout).
+
+Events it listens for:
+  tab:switch             { uri: string, label: string, isDirty: boolean }
+  tab:dirty              { uri: string, dirty: boolean }
+  git:branch-change      { branch: string }
+  editor:language-change { language: string }
+
+Events it emits:
+  titlebar:language-click  {}   — opens language picker
+  titlebar:encoding-click  {}   — opens encoding picker
+  titlebar:breadcrumb-click { segment: string }
+
+--------------------------------------------------------------------------------
+  3c. SIDEBAR
+--------------------------------------------------------------------------------
+
+The sidebar is the left panel container. It holds multiple sidebar view
+panels, each registered by a plugin. The sidebar itself just manages:
+  - Which view panels exist
+  - Which is active
+  - The collapse/expand state
+  - Width resizing
+
+The sidebar is INDEPENDENT of the header bar. But they can be linked:
+  - Header bar emits header:sidebar-toggle
+  - Sidebar listens for it and toggles visibility
+
+Sidebar options (user configures once):
+
+  const sidebar = new SidebarPlugin({
+    defaultWidth: 240,
+    minWidth: 160,
+    position: "left",           // or "right"
+    persistState: true,         // remember collapse state
+  });
+
+Events:
+  sidebar:toggle         {}
+  sidebar:resize         { width: number }
+  sidebar:view-activate  { viewId: string }
+  sidebar:view-register  { viewId: string, label: string, icon: SVGIcon }
+
+--------------------------------------------------------------------------------
+  3d. SIDEBAR VIEW PANEL
+--------------------------------------------------------------------------------
+
+A sidebar view panel is a named slot inside the sidebar. Each plugin can
+register one or more. Examples: File Explorer, Git, Search, Extensions,
+AI Chat (collapsed), Run & Debug.
+
+The user registers a view panel like this:
+
+  ctx.layout.registerSidebarView({
+    id: "file-explorer",
+    label: "Explorer",
+    icon: fileIcon,
+    render: () => <FileExplorerComponent />,
+    order: 1,
+  });
+
+The layout module handles placement. The view panel itself is just a
+render function — it has no knowledge of the sidebar container.
+
+Events a sidebar view panel can emit (goes to bus, not to sidebar directly):
+  sidebar-view:activate  { viewId: string }
+  sidebar-view:refresh   { viewId: string }
+  file:open              { path: string }    — file explorer emits this
+
+--------------------------------------------------------------------------------
+  3e. EDITOR TAB VIEW PANEL
+--------------------------------------------------------------------------------
+
+This is the main editor area. It contains:
+  - The Monaco editor instance
+  - The tab strip (managed by tabs-module)
+  - The gutter (line numbers, breakpoints, git diff decorations)
+  - The minimap
+  - Inline AI ghost text
+
+The user does NOT configure this directly. The editor-module and tabs-module
+assemble it. The user only configures Monaco options:
+
+  const editor = new EditorPlugin({
+    monacoOptions: {
+      fontSize: 14,
+      fontFamily: "JetBrains Mono",
+      tabSize: 2,
+      minimap: { enabled: true },
+      lineNumbers: "on",
+    },
+    defaultLanguage: "typescript",
+  });
+
+Events:
+  editor:ready           { instance: monaco.IEditor }
+  editor:focus           {}
+  editor:blur            {}
+  tab:open               { uri: string, label: string }
+  tab:close              { uri: string }
+  tab:switch             { uri: string }
+  tab:dirty              { uri: string, dirty: boolean }
+  model:create           { uri: string, language: string }
+  model:dispose          { uri: string }
+  cursor:move            { line: number, column: number }
+  selection:change       { start: Position, end: Position }
+
+--------------------------------------------------------------------------------
+  3f. WEBVIEW PANEL (bottom)
+--------------------------------------------------------------------------------
+
+The bottom panel. Holds terminal, problems, output, search results. Each is
+a separate view registered by a plugin.
+
+  ctx.layout.registerBottomView({
+    id: "terminal",
+    label: "Terminal",
+    render: () => <TerminalComponent />,
+  });
+
+Events:
+  bottom-panel:toggle    {}
+  bottom-panel:resize    { height: number }
+  bottom-view:activate   { viewId: string }
+
+--------------------------------------------------------------------------------
+  3g. RIGHT WEBVIEW PANEL
+--------------------------------------------------------------------------------
+
+The right panel — optional, collapsible. Used for AI chat, markdown preview,
+git diff, documentation viewer. The user registers views the same way:
+
+  ctx.layout.registerRightView({
+    id: "ai-chat",
+    label: "AI",
+    render: () => <AIChatComponent />,
+  });
+
+Events:
+  right-panel:toggle     {}
+  right-panel:resize     { width: number }
+  right-view:activate    { viewId: string }
+
+--------------------------------------------------------------------------------
+  3h. STATUS BAR
+--------------------------------------------------------------------------------
+
+Bottom bar spanning the full width of the IDE. Displays contextual
+information: current language, line/column, spaces/tab size, encoding,
+file type, extension status indicators. Each slot is registered by a module
+via ctx.layout.registerStatusbarItem(). Described fully in module #13
+(statusbar-module) in Section 6.
+
+--------------------------------------------------------------------------------
+  3i. CUSTOM WEBVIEW — USER-CREATED PANELS WITH FULL CONTEXT
+--------------------------------------------------------------------------------
+
+Any plugin or user code can create a custom webview panel. The webview
+renders arbitrary HTML (or a React node) inside an isolated iframe. Inside
+that iframe, a script can acquire the engine API and communicate with the
+host IDE — execute commands, read settings, listen for events, call FS
+operations — exactly like VS Code's Webview API.
+
+This is the escape hatch: when no built-in panel fits your use case, you
+build your own.
+
+
+CREATING A WEBVIEW (host side):
+
+  Two ways — raw HTML string or React node:
+
+  // Option A: HTML string
+  const panel = ctx.editor.createWebview({
+    id: "my-custom-panel",
+    title: "My Panel",
+    location: "right",            // "right" | "bottom" | "editor" | "modal"
+    icon: myIcon,
+    retainOnHidden: true,         // keep state when panel hides
+
+    html: `
+      <html>
+        <body>
+          <h1 id="title">Loading...</h1>
+          <button id="run">Run</button>
+          <script>
+            // Inside the iframe, acquire the engine API
+            const api = await acquireEngineApi();
+
+            // Now you have full context:
+            api.onMessage((msg) => {
+              document.getElementById("title").textContent = msg.text;
+            });
+
+            document.getElementById("run").addEventListener("click", () => {
+              api.postMessage({ command: "run-task", args: { file: "main.ts" } });
+            });
+          </script>
+        </body>
+      </html>
+    `,
+  });
+
+  // Option B: React node (rendered by the host, not in iframe)
+  const panel = ctx.editor.createWebview({
+    id: "my-react-panel",
+    title: "Dashboard",
+    location: "right",
+
+    render: (webviewCtx) => (
+      <MyDashboardComponent
+        onRunTask={(file) => webviewCtx.postMessage({ command: "run-task", args: { file } })}
+        theme={webviewCtx.theme}
+      />
+    ),
+  });
+
+
+WEBVIEW LIFECYCLE HOOKS:
+
+  Every webview supports four lifecycle hooks: beforeMount, afterMount,
+  loader, and action. They run on the HOST side (not inside the iframe).
+  Their return values are serialized and injected into the webview so the
+  HTML script or React component can access them immediately.
+
+  interface WebviewLoadingConfig {
+    // Which loading indicator to show while loader/beforeMount is running.
+    // Defaults to "spinner" if not specified.
+    type?: "spinner" | "skeleton" | "progress" | "custom";
+
+    // --- spinner options ---
+    // Built-in SVG spinner centered in the panel.
+    spinner?: {
+      size?:   "sm" | "md" | "lg";           // default "md" (24px / 40px / 64px)
+      color?:  string;                        // CSS color — defaults to theme accent
+      label?:  string;                        // accessible aria-label ("Loading…")
+    };
+
+    // --- skeleton options ---
+    // Repeating shimmer placeholder blocks that mimic the final layout.
+    skeleton?: {
+      rows?:      number;                     // number of skeleton rows (default 4)
+      avatar?:    boolean;                    // show circular avatar placeholder
+      title?:     boolean;                    // show wide title bar (default true)
+      paragraph?: boolean;                    // show multi-line paragraph block (default true)
+      image?:     boolean;                    // show rectangular image placeholder
+      custom?:    string;                     // raw HTML skeleton template
+      animation?: "pulse" | "wave" | "none"; // shimmer style (default "wave")
+    };
+
+    // --- progress options ---
+    // Thin horizontal progress bar at the top of the panel.
+    progress?: {
+      indeterminate?: boolean;                // animated bar (default true)
+      color?:         string;                 // CSS color — defaults to theme accent
+    };
+
+    // --- custom ---
+    // Provide a full HTML string for the loading state.
+    // Overrides spinner/skeleton/progress completely.
+    html?: string;
+
+    // --- action loading ---
+    // What to show while an action is pending (submitAction running).
+    // Defaults to overlay spinner on top of existing content.
+    actionIndicator?: "spinner-overlay" | "disable-only" | "custom";
+    actionHtml?:      string;                 // HTML for custom action indicator
+
+    // --- minimum display time ---
+    // Prevents loading flash for fast responses. Loader indicator stays
+    // visible for at least this many milliseconds (default 0).
+    minDisplayMs?: number;
+  }
+
+  interface WebviewLifecycleHooks {
+    // --- loading ---
+    // Configures the visual loading indicator shown while beforeMount,
+    // loader, or action is executing. Optional — defaults to a centered
+    // SVG spinner with theme-aware colors.
+    loading?: WebviewLoadingConfig;
+
+    // --- beforeMount ---
+    // Runs BEFORE the iframe/component is created.
+    // Use it to fetch initial data, check permissions, prepare state.
+    // Whatever it returns is available inside the webview as `initialData`.
+    // If it throws, the webview is NOT mounted — an error panel is shown instead.
+    beforeMount?: (ctx: ModuleContext) => Promise<unknown> | unknown;
+
+    // --- afterMount ---
+    // Runs AFTER the iframe/component is fully mounted and acquireEngineApi()
+    // has resolved inside the webview. Use for post-mount setup: subscribe to
+    // events, start polling, send initial message to the webview.
+    afterMount?: (ctx: ModuleContext, panel: WebviewPanel) => void;
+
+    // --- loader ---
+    // Data-fetching function. Called on mount AND whenever panel.reload() is
+    // called. While the loader runs, the webview shows the loading indicator
+    // configured by WebviewLoadingConfig (spinner/skeleton/progress/custom).
+    // The loader result is injected into the webview as `loaderData`.
+    // If the loader is running, user actions are BLOCKED — the action hook
+    // will not fire until the loader completes (prevents race conditions).
+    // The loader can also return a `_loading` property to override the
+    // loading config dynamically per request.
+    loader?: (ctx: ModuleContext) => Promise<unknown>;
+
+    // --- action ---
+    // Handles mutations triggered from inside the webview via
+    // api.submitAction(actionData). While the action runs, the webview
+    // shows the action indicator (overlay spinner or disable-only).
+    // The action can return new data — which triggers a loader re-run
+    // automatically. If loader is currently running, the action is QUEUED
+    // until loader completes (loader always wins — read before write).
+    action?: (ctx: ModuleContext, actionData: unknown) => Promise<unknown>;
+  }
+
+
+  HOW beforeMount DATA REACHES THE WEBVIEW:
+
+    Host side:
+      const panel = ctx.editor.createWebview({
+        id: "user-profile",
+        title: "Profile",
+        location: "right",
+        permissions: ["settings.read", "editor.read"],
+
+        // beforeMount fetches data BEFORE the iframe exists
+        beforeMount: async (ctx) => {
+          const user = await ctx.auth.getUser();
+          const settings = await ctx.settings.getAll("editor");
+          const recentFiles = await ctx.storage.get("recent-files");
+          return { user, settings, recentFiles };
+          // ↑ this return value becomes `initialData` inside the webview
+        },
+
+        afterMount: (ctx, panel) => {
+          // Panel is live — subscribe to events, push updates
+          ctx.eventBus.on("auth:login", (user) => {
+            panel.postMessage({ type: "user-update", user });
+          });
+        },
+
+        html: `
+          <html><body>
+            <div id="app">Loading...</div>
+            <script>
+              (async () => {
+                const api = await acquireEngineApi();
+
+                // initialData = whatever beforeMount returned
+                const { user, settings, recentFiles } = api.initialData;
+
+                document.getElementById("app").innerHTML =
+                  '<h1>Hello, ' + user.name + '</h1>' +
+                  '<p>Font: ' + settings["editor.fontFamily"] + '</p>' +
+                  '<p>Recent: ' + recentFiles.length + ' files</p>';
+
+                // Listen for live updates pushed after mount
+                api.onMessage((msg) => {
+                  if (msg.type === "user-update") { /* re-render */ }
+                });
+              })();
+            </script>
+          </body></html>
+        `,
+      });
+
+    React mode — same pattern, data arrives as props:
+      const panel = ctx.editor.createWebview({
+        id: "react-profile",
+        title: "Profile",
+        location: "right",
+
+        beforeMount: async (ctx) => {
+          return { user: await ctx.auth.getUser() };
+        },
+
+        // webviewCtx.initialData = beforeMount return value
+        render: (webviewCtx) => (
+          <ProfileComponent user={webviewCtx.initialData.user} />
+        ),
+      });
+
+
+  LOADER + ACTION PATTERN (data fetching + mutations):
+
+    This is the Remix/React Router-style pattern: loader fetches data,
+    action handles writes, and the two coordinate automatically.
+
+    const panel = ctx.editor.createWebview({
+      id: "deploy-manager",
+      title: "Deploys",
+      location: "right",
+      permissions: ["commands.execute", "fs.read", "notifications"],
+
+      // loader: fetches fresh data — runs on mount + on panel.reload()
+      loader: async (ctx) => {
+        const deploys = await fetch("/api/deploys").then(r => r.json());
+        const branches = await fetch("/api/branches").then(r => r.json());
+        return { deploys, branches };
+        // ↑ available as `api.loaderData` inside the webview
+      },
+
+      // action: handles mutations from the webview
+      action: async (ctx, data) => {
+        // data = whatever the webview passed to api.submitAction()
+        if (data.type === "deploy") {
+          await ctx.commands.execute("terminal.run", {
+            text: `npm run deploy:${data.env}`,
+          });
+          ctx.notifications.show("Deploy started!", "info");
+          // returning triggers loader re-run automatically
+          return { ok: true };
+        }
+        if (data.type === "rollback") {
+          await fetch(`/api/deploys/${data.deployId}/rollback`, { method: "POST" });
+          return { ok: true };
+        }
+      },
+
+      html: `
+        <html><body>
+          <div id="deploys"></div>
+          <button id="deploy-btn">Deploy</button>
+          <script>
+            (async () => {
+              const api = await acquireEngineApi();
+
+              // loaderData = whatever loader returned
+              renderDeploys(api.loaderData.deploys);
+
+              // When loader re-runs (after action, or panel.reload()),
+              // the webview receives updated data automatically:
+              api.onLoaderData((data) => {
+                renderDeploys(data.deploys);
+              });
+
+              // Submit an action — triggers the host action() hook
+              document.getElementById("deploy-btn").onclick = () => {
+                api.submitAction({ type: "deploy", env: "staging" });
+                // While action runs:
+                //   - api.actionPending === true
+                //   - loader is blocked (won't re-run until action completes)
+                //   - webview can show spinner / disable buttons
+              };
+
+              // Listen for action completion
+              api.onActionComplete((result) => {
+                // result = whatever action() returned
+                // loader has already re-run by now — fresh loaderData incoming
+              });
+
+              api.onActionError((error) => {
+                api.showNotification(error.message, "error");
+              });
+            })();
+          </script>
+        </body></html>
+      `,
+    });
+
+
+  LOADING INDICATOR EXAMPLES:
+
+    Example 1 — Skeleton loader for a list view:
+
+      ctx.editor.createWebview({
+        id: "team-list",
+        title: "Team",
+        location: "right",
+
+        loading: {
+          type: "skeleton",
+          skeleton: {
+            rows: 6,
+            avatar: true,
+            title: true,
+            paragraph: false,
+            animation: "wave",
+          },
+        },
+
+        loader: async (ctx) => {
+          return { members: await fetch("/api/team").then(r => r.json()) };
+        },
+        // While loader runs → 6 skeleton rows with avatar placeholders are shown.
+        // When loader resolves → skeleton fades out, html/render takes over.
+      });
+
+
+    Example 2 — SVG spinner with custom label:
+
+      ctx.editor.createWebview({
+        id: "analytics",
+        title: "Analytics",
+        location: "editor",
+
+        loading: {
+          type: "spinner",
+          spinner: { size: "lg", label: "Crunching numbers…" },
+          minDisplayMs: 300,     // prevent flash for fast API
+        },
+
+        loader: async (ctx) => {
+          return await fetch("/api/analytics/dashboard").then(r => r.json());
+        },
+      });
+
+
+    Example 3 — Progress bar:
+
+      ctx.editor.createWebview({
+        id: "build-output",
+        title: "Build",
+        location: "bottom",
+
+        loading: {
+          type: "progress",
+          progress: { indeterminate: true, color: "#22c55e" },
+          actionIndicator: "disable-only",   // during action: disable buttons only
+        },
+
+        loader: async (ctx) => { /* fetch build logs */ },
+        action: async (ctx, data) => { /* trigger rebuild */ },
+      });
+
+
+    Example 4 — Custom HTML loading state:
+
+      ctx.editor.createWebview({
+        id: "preview",
+        title: "Preview",
+        location: "right",
+
+        loading: {
+          type: "custom",
+          html: `
+            <div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column">
+              <svg width="48" height="48" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor"
+                  stroke-width="2" stroke-dasharray="31.4" stroke-linecap="round">
+                  <animateTransform attributeName="transform" type="rotate"
+                    from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"/>
+                </circle>
+              </svg>
+              <p style="margin-top:12px;opacity:0.7">Preparing preview…</p>
+            </div>
+          `,
+        },
+
+        loader: async (ctx) => { /* ... */ },
+      });
+
+
+    Example 5 — Loader returns `_loading` override per request:
+
+      loader: async (ctx) => {
+        const cached = await ctx.storage.get("team-cache");
+        if (cached) {
+          // Fast path — no skeleton needed, return immediately
+          return { members: cached, _loading: { type: "spinner", spinner: { size: "sm" } } };
+        }
+        // Slow path — skeleton will show (from default config)
+        const members = await fetch("/api/team").then(r => r.json());
+        await ctx.storage.set("team-cache", members);
+        return { members };
+      },
+
+
+    Inside the webview — programmatic loading control:
+
+      const api = await acquireEngineApi();
+
+      // Show skeleton while doing webview-internal async work
+      api.showLoading({ type: "skeleton", skeleton: { rows: 3 } });
+      const data = await someLocalAsyncWork();
+      api.hideLoading();
+
+      // Check current loading state
+      if (api.loading) { /* host loader is still running */ }
+
+
+  LOADER / ACTION COORDINATION RULES:
+
+    1. Loader runs FIRST on mount. Webview sees loading indicator until done.
+    2. While loader is running, api.submitAction() is QUEUED — not dropped.
+    3. When action() completes (success or error), loader re-runs automatically.
+    4. While action is running, loader will NOT start — action finishes first.
+    5. Multiple rapid submitAction() calls are batched — only the latest runs.
+    6. panel.reload() from host side forces a fresh loader run.
+    7. If loader throws, webview receives onLoaderError(error).
+    8. If action throws, webview receives onActionError(error) — loader
+       does NOT re-run on error (data stays stale until next success).
+
+
+  ENGINE API — LIFECYCLE EXTENSIONS (added to EngineApi inside webview):
+
+    interface EngineApi {
+      // ... (all existing methods from above) ...
+
+      // --- Lifecycle Data (read-only, set by host hooks) ---
+      readonly initialData: unknown;         // beforeMount return value
+      readonly loaderData:  unknown;         // latest loader return value
+      readonly actionPending: boolean;       // true while action() is running
+      readonly loading: boolean;             // true while loader is running
+      readonly loadingConfig: WebviewLoadingConfig; // resolved loading config
+
+      // --- Loading Indicator Control ---
+      showLoading(config?: Partial<WebviewLoadingConfig>): void;
+      // Programmatically show loading indicator from inside the webview.
+      // Useful for custom async operations that don't go through loader().
+      //   api.showLoading();                      // use default config
+      //   api.showLoading({ type: "skeleton" });   // override to skeleton
+
+      hideLoading(): void;
+      // Hide the loading indicator manually. Normally the host hides it
+      // automatically when loader/beforeMount finishes, but this is useful
+      // for webview-initiated async work.
+
+      // --- Lifecycle Callbacks ---
+      onLoaderData(handler: (data: unknown) => void): void;
+      onLoaderError(handler: (error: { message: string }) => void): void;
+      onActionComplete(handler: (result: unknown) => void): void;
+      onActionError(handler: (error: { message: string }) => void): void;
+
+      // --- Trigger Action from Webview ---
+      submitAction(data: unknown): void;
+
+      // --- Request Loader Re-run ---
+      reload(): void;
+    }
+
+
+THE ENGINE API (inside the iframe script):
+
+  The iframe does NOT have access to window.parent, document of the host,
+  or any global scope. It communicates ONLY through the message bridge.
+
+  The script calls acquireEngineApi() — injected by the host automatically.
+  This returns an EngineApi object:
+
+  interface EngineApi {
+    // --- Messaging ---
+    postMessage(msg: WebviewMessage): void;
+    onMessage(handler: (msg: WebviewMessage) => void): void;
+
+    // --- Commands ---
+    executeCommand(commandId: string, ...args: unknown[]): Promise<unknown>;
+    //   api.executeCommand("file.save");
+    //   api.executeCommand("editor.action.formatDocument");
+    //   api.executeCommand("terminal.run", { text: "npm test" });
+
+    // --- State ---
+    getState(): Promise<Record<string, unknown>>;
+    setState(state: Record<string, unknown>): Promise<void>;
+    //   Persisted per webview ID in storage-module.
+    //   Survives panel hide/show and page reload.
+
+    // --- Theme ---
+    readonly theme: { kind: "dark" | "light" | "hc"; colors: Record<string, string> };
+    onThemeChange(handler: (theme: Theme) => void): void;
+    //   Webview re-themes automatically when the user switches themes.
+
+    // --- Editor Info ---
+    getActiveFile(): Promise<{ uri: string; language: string } | null>;
+    getSelection(): Promise<{ text: string; range: Range } | null>;
+    getOpenFiles(): Promise<{ uri: string; label: string; isDirty: boolean }[]>;
+
+    // --- FS (proxied through security-module permission gate) ---
+    readFile(path: string): Promise<string>;
+    writeFile(path: string, content: string): Promise<void>;
+    listDir(dir: string): Promise<DirEntry[]>;
+
+    // --- Settings ---
+    getSetting(key: string): Promise<unknown>;
+    setSetting(key: string, value: unknown): Promise<void>;
+
+    // --- Notifications ---
+    showNotification(message: string, level?: "info" | "warning" | "error"): void;
+
+    // --- Dispose ---
+    dispose(): void;
+  }
+
+
+MESSAGE BRIDGE (postMessage protocol):
+
+  All communication between host and iframe uses structured messages
+  over window.postMessage. The host serializes/deserializes automatically.
+
+  interface WebviewMessage {
+    type: string;                   // message discriminator
+    [key: string]: unknown;         // payload
+  }
+
+  Host → Webview:
+    panel.postMessage({ type: "data-update", rows: [...] });
+
+  Webview → Host:
+    api.postMessage({ type: "save-request", content: "..." });
+
+  Host listens:
+    panel.onMessage((msg) => {
+      if (msg.type === "save-request") {
+        ctx.fs.write(path, msg.content);
+      }
+    });
+
+  The postMessage channel is the ONLY bridge. No direct function calls
+  cross the iframe boundary. This is enforced by CSP + sandbox attributes.
+
+
+WEBVIEW PANEL OPTIONS (full config):
+
+  interface WebviewPanelOptions {
+    id:             string;                                // unique ID
+    title:          string;                                // tab/panel label
+    location:       "right" | "bottom" | "editor" | "modal";
+    icon?:          SVGIcon;
+    html?:          string;                                // raw HTML (iframe mode)
+    render?:        (ctx: WebviewContext) => ReactNode;    // React mode (no iframe)
+    retainOnHidden: boolean;                               // keep DOM alive when hidden
+    enableScripts:  boolean;                               // default true
+    localResourceRoots?: string[];                         // allowed paths for assets
+    permissions?:   WebviewPermission[];                   // capability declarations
+
+    // --- Loading Indicator ---
+    loading?:      WebviewLoadingConfig;                   // skeleton/spinner/progress/custom
+
+    // --- Lifecycle Hooks (all optional, all run on HOST side) ---
+    beforeMount?:  (ctx: ModuleContext) => Promise<unknown> | unknown;
+    afterMount?:   (ctx: ModuleContext, panel: WebviewPanel) => void;
+    loader?:       (ctx: ModuleContext) => Promise<unknown>;
+    action?:       (ctx: ModuleContext, data: unknown) => Promise<unknown>;
+  }
+
+  type WebviewPermission =
+    | "fs.read"
+    | "fs.write"
+    | "commands.execute"
+    | "settings.read"
+    | "settings.write"
+    | "notifications"
+    | "editor.read"
+    | "terminal.run";
+
+  Permissions are enforced by the security-module. If a webview calls
+  api.writeFile() but didn't declare "fs.write", the call throws a
+  PermissionDeniedError and security:permission-denied is emitted.
+
+
+WEBVIEW LIFECYCLE:
+
+  1.  Plugin calls ctx.editor.createWebview(options)
+  2.  If beforeMount is defined:
+        a. Host calls beforeMount(ctx) — webview NOT created yet
+        b. If it throws → mount is ABORTED, error panel shown, webview:error emitted
+        c. If it succeeds → return value stored as `initialData`
+  3.  If loader is defined:
+        a. Host calls loader(ctx) — webview container shows loading indicator
+        b. Return value stored as `loaderData`
+  4.  layout-module creates the panel container in the requested location
+  5.  If html mode: host creates sandboxed iframe with CSP:
+        sandbox="allow-scripts"
+        Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline';
+  6.  Host injects acquireEngineApi() bootstrap + serialized initialData + loaderData
+  7.  Webview script calls acquireEngineApi(), receives EngineApi proxy
+      with api.initialData and api.loaderData already populated
+  8.  If afterMount is defined:
+        Host calls afterMount(ctx, panel) — webview is live, can postMessage
+  9.  Runtime: webview calls api.submitAction(data)
+        a. Host calls action(ctx, data)
+        b. While running: api.actionPending = true, loader blocked
+        c. On success: loader re-runs automatically, fresh loaderData pushed
+        d. On error: onActionError fires, loader does NOT re-run
+  10. On panel hide (retainOnHidden=true): iframe stays in DOM, just hidden
+  11. On panel hide (retainOnHidden=false): iframe removed, state auto-saved
+  12. On dispose: iframe removed, state cleared, all listeners unsubscribed
+
+
+WEBVIEW EVENTS:
+
+  webview:create         { id, location }
+  webview:show           { id }
+  webview:hide           { id }
+  webview:dispose        { id }
+  webview:message        { id, message: WebviewMessage }     — webview → host
+  webview:post           { id, message: WebviewMessage }     — host → webview
+  webview:state-save     { id }
+  webview:state-restore  { id }
+  webview:error          { id, phase, error }                — beforeMount/loader threw
+  webview:before-mount   { id }
+  webview:after-mount    { id }
+  webview:loader-start   { id }
+  webview:loader-done    { id }
+  webview:action-start   { id, data }
+  webview:action-done    { id, result }
+  webview:action-error   { id, error }
+
+
+EXAMPLE — Full custom panel (deployments dashboard):
+
+  // Host plugin code
+  class DeployPlugin implements Plugin {
+    name = "deploy-dashboard";
+    dependencies = ["fs-module", "terminal-module"];
+
+    init(ctx: ModuleContext) {
+      const panel = ctx.editor.createWebview({
+        id: "deploy-dashboard",
+        title: "Deployments",
+        location: "right",
+        permissions: ["commands.execute", "notifications", "editor.read"],
+
+        html: `
+          <html>
+          <head><style>
+            body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); }
+            button { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
+          </style></head>
+          <body>
+            <h2>Deploy</h2>
+            <select id="env">
+              <option>staging</option>
+              <option>production</option>
+            </select>
+            <button id="deploy">Deploy Now</button>
+            <pre id="log"></pre>
+
+            <script>
+              (async () => {
+                const api = await acquireEngineApi();
+
+                // Theme-aware — CSS vars are injected automatically
+                api.onThemeChange((theme) => {
+                  document.body.className = theme.kind;
+                });
+
+                // Listen for deploy output from host
+                api.onMessage((msg) => {
+                  if (msg.type === "deploy:log") {
+                    document.getElementById("log").textContent += msg.line + "\\n";
+                  }
+                  if (msg.type === "deploy:done") {
+                    api.showNotification("Deploy complete!", "info");
+                  }
+                });
+
+                // Deploy button
+                document.getElementById("deploy").onclick = async () => {
+                  const env = document.getElementById("env").value;
+                  const file = await api.getActiveFile();
+                  api.postMessage({
+                    type: "deploy:start",
+                    env,
+                    branch: file?.uri ?? "unknown",
+                  });
+                };
+              })();
+            </script>
+          </body>
+          </html>
+        `,
+      });
+
+      // Host-side message handler
+      panel.onMessage(async (msg) => {
+        if (msg.type === "deploy:start") {
+          const cmd = `npm run deploy:${msg.env}`;
+          await ctx.commands.execute("terminal.run", { text: cmd });
+          ctx.eventBus.on("terminal:output", ({ data }) => {
+            panel.postMessage({ type: "deploy:log", line: data });
+          });
+        }
+      });
+    }
+  }
+
+
+KEY RULES:
+  - Webviews are SANDBOXED. No access to host DOM, window, or globals.
+  - All cross-boundary calls go through postMessage (EngineApi proxy).
+  - Permissions are declared upfront and enforced by security-module.
+  - Theme CSS variables are injected into the iframe automatically.
+  - State persists via getState/setState (backed by storage-module).
+  - React mode (render function) runs in the host process — no iframe,
+    no postMessage overhead, but also no isolation. Use for trusted UI only.
+
+  TRIGGERING & PANEL API:
+  → Full spec in context/webview-triggers.txt
+  createWebview() returns a WebviewPanel with show()/hide()/toggle()/
+  dispose()/postMessage(). Use registerWebview() for lazy creation.
+  8 trigger patterns: command palette, keybinding, editor context menu,
+  explorer context menu, sidebar icon, status bar click, header button,
+  and event-driven (programmatic). All triggers route through commands.

@@ -1,0 +1,706 @@
+================================================================================
+  WEBVIEW TRIGGERING & PANEL API
+  How webviews get opened, shown, toggled, and managed at runtime
+================================================================================
+
+Linked from: context.txt Section 3i (Custom Webview)
+This file covers:
+  A.  WebviewPanel — the return type of createWebview()
+  B.  Lazy vs Eager creation — registerWebview() vs createWebview()
+  C.  All trigger mechanisms — command, context menu, sidebar, keybinding, etc.
+  D.  Relationship: registerRightView/registerBottomView vs createWebview
+  E.  Complete examples — every trigger pattern
+
+
+================================================================================
+  A. WebviewPanel — RETURN TYPE OF createWebview()
+================================================================================
+
+ctx.editor.createWebview() returns a WebviewPanel object. This is the
+host-side handle to control the webview after creation.
+
+  interface WebviewPanel {
+    // --- Identity ---
+    readonly id:       string;              // same ID passed in options
+    readonly title:    string;              // panel label
+    readonly location: "right" | "bottom" | "editor" | "modal";
+
+    // --- Visibility ---
+    readonly visible:  boolean;             // is the panel currently showing?
+
+    show():    void;
+    // Reveals the panel in its location slot. If it was hidden, brings it
+    // back. If another panel occupies the same slot, this one takes focus.
+    // Emits: webview:show { id }
+
+    hide():    void;
+    // Hides the panel. If retainOnHidden=true, iframe stays in DOM.
+    // If false, iframe is removed and state is auto-saved.
+    // Emits: webview:hide { id }
+
+    toggle():  void;
+    // show() if hidden, hide() if visible. Convenience shorthand.
+
+    focus():   void;
+    // Gives keyboard focus to the panel (useful for modals and editor tabs).
+
+    // --- Messaging ---
+    postMessage(msg: WebviewMessage): void;
+    // Send a message from host → webview iframe.
+
+    onMessage(handler: (msg: WebviewMessage) => void): IDisposable;
+    // Listen for messages from webview → host.
+
+    // --- Lifecycle ---
+    reload():  void;
+    // Forces the loader() to re-run. Webview shows loading indicator.
+    // Emits: webview:loader-start { id }
+
+    dispose(): void;
+    // Destroys the panel permanently. Iframe removed, state cleared,
+    // all listeners unsubscribed. Emits: webview:dispose { id }
+
+    readonly disposed: boolean;
+
+    // --- State ---
+    readonly initialData: unknown;          // from beforeMount()
+    readonly loaderData:  unknown;          // from loader()
+
+    // --- Events ---
+    onDidShow(handler: () => void): IDisposable;
+    onDidHide(handler: () => void): IDisposable;
+    onDidDispose(handler: () => void): IDisposable;
+
+    // --- Metadata ---
+    setTitle(title: string): void;          // update panel label at runtime
+    setBadge(text: string | number): void;  // show badge on panel tab/icon
+    clearBadge(): void;
+  }
+
+
+================================================================================
+  B. LAZY vs EAGER CREATION
+================================================================================
+
+EAGER — createWebview():
+  Called inside init(). The webview is created IMMEDIATELY. The iframe/
+  component is mounted and ready. Use for panels that should always exist
+  (AI chat, terminal output, deployment dashboard).
+
+  init(ctx) {
+    this.panel = ctx.editor.createWebview({ id: "my-panel", ... });
+    // Panel is live now. Visible depends on location and layout state.
+  }
+
+LAZY — registerWebview():
+  Registers a webview FACTORY. The webview is NOT created until something
+  triggers it (a command, a menu click, a keybinding). The factory function
+  is called on first trigger, and the resulting WebviewPanel is cached.
+
+  ctx.editor.registerWebview(descriptor: WebviewDescriptor): IDisposable;
+
+  interface WebviewDescriptor {
+    id:          string;                                // unique ID
+    title:       string;                                // panel label
+    location:    "right" | "bottom" | "editor" | "modal";
+    icon?:       SVGIcon;                               // for sidebar/tab icon
+    command?:    string;                                 // auto-register a command that opens it
+    keybinding?: string;                                 // auto-register a keybinding
+
+    // Factory — called ONCE when the webview is first opened
+    create:      (ctx: ModuleContext) => WebviewPanelOptions;
+  }
+
+  When something triggers the webview (command, menu item, API call):
+    1. If the panel doesn't exist yet → call create(ctx) → createWebview()
+    2. If the panel exists but is hidden → panel.show()
+    3. If the panel exists and is visible → panel.focus()
+
+  This is LAZY SINGLETON — one instance per ID, created on demand.
+
+
+EXAMPLE — Lazy markdown preview:
+
+  ctx.editor.registerWebview({
+    id:       "markdown-preview",
+    title:    "Markdown Preview",
+    location: "right",
+    icon:     markdownIcon,
+    command:  "markdown.openPreview",        // auto-registered command
+    keybinding: "Ctrl+Shift+V",             // auto-registered keybinding
+
+    create: (ctx) => ({
+      id: "markdown-preview",
+      title: "Markdown Preview",
+      location: "right",
+      retainOnHidden: true,
+      permissions: ["editor.read", "fs.read"],
+
+      loader: async (ctx) => {
+        const file = await ctx.editor.getActiveFile();
+        if (!file) return { html: "" };
+        const content = await ctx.fs.read(file.uri);
+        return { html: renderMarkdown(new TextDecoder().decode(content)) };
+      },
+
+      html: `<html>
+        <body>
+          <div id="content"></div>
+          <script>
+            (async () => {
+              const api = await acquireEngineApi();
+              document.getElementById("content").innerHTML = api.loaderData.html;
+              api.onLoaderData((data) => {
+                document.getElementById("content").innerHTML = data.html;
+              });
+            })();
+          </script>
+        </body>
+      </html>`,
+    }),
+  });
+
+  // Now ANY of these will open the preview:
+  //   1. User presses Ctrl+Shift+V
+  //   2. Command palette: "Markdown: Open Preview"
+  //   3. ctx.commands.execute("markdown.openPreview")
+  //   4. A context menu item with command: "markdown.openPreview"
+  //   5. A sidebar icon click that calls the same command
+
+
+================================================================================
+  C. ALL TRIGGER MECHANISMS
+================================================================================
+
+There are 8 ways a webview can be shown. All of them ultimately call either
+createWebview() or panel.show() on a lazy-registered webview. The pattern
+is always: USER ACTION → COMMAND → WEBVIEW.
+
+Commands are the universal trigger — every mechanism goes through one.
+
+──────────────────────────────────────────────────────────────────────
+TRIGGER 1: COMMAND PALETTE
+──────────────────────────────────────────────────────────────────────
+
+  The user opens Ctrl+Shift+P and types the command name.
+
+  // Plugin registers a command that opens/toggles the webview
+  ctx.commands.register("myPlugin.openDashboard", () => {
+    if (!this.panel || this.panel.disposed) {
+      this.panel = ctx.editor.createWebview({ ... });
+    } else {
+      this.panel.toggle();
+    }
+  });
+
+  // OR with registerWebview (lazy) — command is auto-registered:
+  ctx.editor.registerWebview({
+    id: "dashboard",
+    command: "myPlugin.openDashboard",    // ← shows in command palette
+    ...
+  });
+
+
+──────────────────────────────────────────────────────────────────────
+TRIGGER 2: KEYBINDING
+──────────────────────────────────────────────────────────────────────
+
+  A keyboard shortcut fires the same command.
+
+  // Manual registration
+  ctx.keybindings.register({
+    key:     "Ctrl+Shift+D",
+    command: "myPlugin.openDashboard",
+    when:    "editorFocus",
+  });
+
+  // OR auto-registered with registerWebview:
+  ctx.editor.registerWebview({
+    id: "dashboard",
+    command: "myPlugin.openDashboard",
+    keybinding: "Ctrl+Shift+D",          // ← auto-registered
+    ...
+  });
+
+
+──────────────────────────────────────────────────────────────────────
+TRIGGER 3: CONTEXT MENU (right-click in file explorer)
+──────────────────────────────────────────────────────────────────────
+
+  A right-click menu item in the file tree fires a command that opens
+  the webview with context about the clicked file.
+
+  // Register context menu item
+  ctx.contextMenu.register("explorer", {
+    id:      "myPlugin.previewFile",
+    label:   "Preview in Dashboard",
+    icon:    previewIcon,
+    group:   "custom",
+    order:   0,
+    when:    "!isDirectory && extension in ['.md', '.html']",
+    command: "myPlugin.previewFile",
+  });
+
+  // Register the command — opens webview with the target file
+  ctx.commands.register("myPlugin.previewFile", (args, menuCtx) => {
+    const filePath = menuCtx.target.path;
+
+    if (!this.panel || this.panel.disposed) {
+      this.panel = ctx.editor.createWebview({
+        id: "file-preview",
+        title: `Preview: ${menuCtx.target.name}`,
+        location: "right",
+        permissions: ["fs.read"],
+
+        loader: async () => {
+          const content = await ctx.fs.read(filePath);
+          return { content: new TextDecoder().decode(content) };
+        },
+
+        html: `<html><body>
+          <pre id="preview"></pre>
+          <script>
+            (async () => {
+              const api = await acquireEngineApi();
+              document.getElementById("preview").textContent = api.loaderData.content;
+            })();
+          </script>
+        </body></html>`,
+      });
+    } else {
+      // Panel exists — reload with new file and show
+      this.panel.reload();
+      this.panel.show();
+    }
+  });
+
+
+──────────────────────────────────────────────────────────────────────
+TRIGGER 4: CONTEXT MENU (right-click in Monaco editor)
+──────────────────────────────────────────────────────────────────────
+
+  Same pattern but registered in the "editor" zone instead of "explorer".
+
+  ctx.contextMenu.register("editor", {
+    id:      "myPlugin.explainCode",
+    label:   "Explain with AI",
+    icon:    aiIcon,
+    group:   "custom",
+    order:   0,
+    when:    "editor.hasSelection",
+    command: "myPlugin.explainCode",
+  });
+
+  ctx.commands.register("myPlugin.explainCode", async () => {
+    const selection = await ctx.editor.getSelection();
+    if (!selection) return;
+
+    const panel = ctx.editor.createWebview({
+      id: "ai-explain",
+      title: "AI Explanation",
+      location: "right",
+      permissions: ["editor.read"],
+
+      beforeMount: async () => {
+        const response = await ctx.ai.complete({
+          prompt: `Explain this code:\n${selection.text}`,
+        });
+        return { explanation: response.text };
+      },
+
+      loading: { type: "skeleton", skeleton: { rows: 6, paragraph: true } },
+
+      html: `<html><body>
+        <div id="result"></div>
+        <script>
+          (async () => {
+            const api = await acquireEngineApi();
+            document.getElementById("result").innerHTML = api.initialData.explanation;
+          })();
+        </script>
+      </body></html>`,
+    });
+  });
+
+
+──────────────────────────────────────────────────────────────────────
+TRIGGER 5: SIDEBAR ICON (activity bar button)
+──────────────────────────────────────────────────────────────────────
+
+  A plugin registers a sidebar view that, when clicked, opens a webview
+  in the right panel instead of rendering inline in the sidebar.
+
+  // Register a sidebar entry that acts as a launcher
+  ctx.layout.registerSidebarView({
+    id:    "myPlugin.launcher",
+    label: "My Dashboard",
+    icon:  dashboardIcon,
+    order: 10,
+
+    // Instead of a full render function, trigger a command on activate
+    onActivate: () => {
+      ctx.commands.execute("myPlugin.openDashboard");
+    },
+  });
+
+
+──────────────────────────────────────────────────────────────────────
+TRIGGER 6: STATUS BAR ITEM (click on status bar)
+──────────────────────────────────────────────────────────────────────
+
+  Status bar items can have an onClick command.
+
+  ctx.layout.registerStatusbarItem({
+    id:       "myPlugin.status",
+    text:     "$(rocket) Deploy",
+    tooltip:  "Open deploy dashboard",
+    alignment: "right",
+    priority: 100,
+    command:  "myPlugin.openDashboard",     // ← click fires this command
+  });
+
+
+──────────────────────────────────────────────────────────────────────
+TRIGGER 7: HEADER BAR BUTTON
+──────────────────────────────────────────────────────────────────────
+
+  Custom buttons in the header bar. The header-module accepts user-provided
+  components that can fire commands on click.
+
+  const header = new HeaderBar({
+    right: [
+      {
+        icon: analyticsIcon,
+        tooltip: "Analytics Dashboard",
+        onClick: () => ctx.commands.execute("myPlugin.openAnalytics"),
+      },
+      AccountAvatarComponent,
+    ],
+  });
+
+
+──────────────────────────────────────────────────────────────────────
+TRIGGER 8: EVENT-DRIVEN (programmatic)
+──────────────────────────────────────────────────────────────────────
+
+  Any module can open a webview in response to any EventBus event.
+
+  // Open crash report webview when crash-recovery detects an issue
+  ctx.eventBus.on("crash:detected", ({ report }) => {
+    ctx.editor.createWebview({
+      id: "crash-report",
+      title: "Crash Report",
+      location: "modal",               // opens as a modal dialog
+      retainOnHidden: false,
+
+      beforeMount: () => ({ report }),
+
+      html: `<html><body>
+        <h2>Something went wrong</h2>
+        <pre id="details"></pre>
+        <button id="dismiss">Dismiss</button>
+        <script>
+          (async () => {
+            const api = await acquireEngineApi();
+            document.getElementById("details").textContent =
+              JSON.stringify(api.initialData.report, null, 2);
+            document.getElementById("dismiss").onclick = () => api.dispose();
+          })();
+        </script>
+      </body></html>`,
+    });
+  });
+
+  // Open webview when a specific file type is opened
+  ctx.eventBus.on("file:open", ({ path }) => {
+    if (path.endsWith(".canvas")) {
+      ctx.commands.execute("canvas.openEditor", { path });
+    }
+  });
+
+
+================================================================================
+  D. RELATIONSHIP: registerRightView/registerBottomView vs createWebview
+================================================================================
+
+These are TWO DIFFERENT APIs that target the same layout slots:
+
+  API                              │ What it creates    │ Isolation │ When to use
+  ─────────────────────────────────┼────────────────────┼───────────┼─────────────────────
+  ctx.layout.registerRightView()   │ React component    │ None      │ Trusted first-party UI
+  ctx.layout.registerBottomView()  │ React component    │ None      │ Trusted first-party UI
+  ctx.layout.registerSidebarView() │ React component    │ None      │ Trusted first-party UI
+  ctx.editor.createWebview()       │ Sandboxed iframe   │ Full      │ Untrusted / user code
+  ctx.editor.registerWebview()     │ Lazy iframe factory│ Full      │ Untrusted, on-demand
+
+  RULES:
+  1. Built-in modules (git panel, terminal, problems) use registerRightView/
+     registerBottomView — they are trusted, React-rendered, no iframe overhead.
+  2. User plugins and extension-provided panels use createWebview — they are
+     sandboxed, permission-gated, and isolated.
+  3. Both can coexist in the same layout slot. The layout-module manages
+     tab strips in each slot — right panel can have multiple tabs, some
+     React-rendered and some iframe-webviews.
+  4. registerWebview() is the PREFERRED API for plugin authors — lazy,
+     with auto-command and auto-keybinding registration.
+
+  The layout slot tabs look like this:
+
+    ┌─────────────────────────────────────────────────────────────────┐
+    │  RIGHT PANEL                                                    │
+    │  [AI Chat] [Git] [My Dashboard] [Preview]                      │
+    │   ↑ registerRightView  ↑ registerRightView  ↑ createWebview    │
+    │                                               (sandboxed)      │
+    │  ──────────────────────────────────────────────────────────     │
+    │  <actual panel content here>                                    │
+    └─────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+  E. COMPLETE EXAMPLES — FULL PLUGIN WITH LAZY WEBVIEW + ALL TRIGGERS
+================================================================================
+
+EXAMPLE 1 — Analytics dashboard plugin:
+  Opens from: command palette, keybinding, status bar, sidebar icon
+
+  class AnalyticsPlugin implements Plugin {
+    name = "analytics-plugin";
+    dependencies = ["editor-module", "command-module", "layout-module"];
+
+    init(ctx: ModuleContext) {
+      // 1. Register lazy webview — creates the panel on first trigger
+      ctx.editor.registerWebview({
+        id:         "analytics-dashboard",
+        title:      "Analytics",
+        location:   "right",
+        icon:       chartIcon,
+        command:    "analytics.open",            // auto-registered
+        keybinding: "Ctrl+Shift+A",              // auto-registered
+
+        create: (ctx) => ({
+          id: "analytics-dashboard",
+          title: "Analytics",
+          location: "right",
+          retainOnHidden: true,
+          permissions: ["editor.read", "settings.read"],
+
+          loading: {
+            type: "skeleton",
+            skeleton: { rows: 8, title: true, paragraph: true },
+          },
+
+          loader: async (ctx) => {
+            const data = await fetch("/api/analytics").then(r => r.json());
+            return { charts: data };
+          },
+
+          action: async (ctx, data) => {
+            if (data.type === "refresh") {
+              return { charts: await fetch("/api/analytics").then(r => r.json()) };
+            }
+          },
+
+          html: `<html><body>
+            <h2>Analytics</h2>
+            <div id="charts"></div>
+            <button id="refresh">Refresh</button>
+            <script>
+              (async () => {
+                const api = await acquireEngineApi();
+                renderCharts(api.loaderData.charts);
+                api.onLoaderData((data) => renderCharts(data.charts));
+                document.getElementById("refresh").onclick = () => {
+                  api.submitAction({ type: "refresh" });
+                };
+              })();
+            </script>
+          </body></html>`,
+        }),
+      });
+
+      // 2. Sidebar icon — clicking it fires the same command
+      ctx.layout.registerSidebarView({
+        id: "analytics-launcher",
+        label: "Analytics",
+        icon: chartIcon,
+        order: 20,
+        onActivate: () => ctx.commands.execute("analytics.open"),
+      });
+
+      // 3. Status bar item — clicking it fires the same command
+      ctx.layout.registerStatusbarItem({
+        id: "analytics-status",
+        text: "$(graph) Analytics",
+        tooltip: "Open Analytics Dashboard",
+        alignment: "right",
+        priority: 50,
+        command: "analytics.open",
+      });
+
+      // 4. Context menu — right-click in file explorer to analyze
+      ctx.contextMenu.register("explorer", {
+        id:      "analytics.analyzeFile",
+        label:   "Analyze File Usage",
+        icon:    chartIcon,
+        group:   "custom",
+        order:   0,
+        when:    "!isDirectory",
+        command: "analytics.analyzeFile",
+      });
+
+      ctx.commands.register("analytics.analyzeFile", (args, menuCtx) => {
+        // Open analytics dashboard focused on this file
+        ctx.commands.execute("analytics.open");
+        // Then send a message to filter by this file
+        const panel = ctx.editor.getWebview("analytics-dashboard");
+        if (panel) {
+          panel.postMessage({
+            type: "filter",
+            file: menuCtx.target.path,
+          });
+        }
+      });
+    }
+  }
+
+
+EXAMPLE 2 — Image preview that opens on file:open for .png/.jpg:
+
+  class ImagePreviewPlugin implements Plugin {
+    name = "image-preview";
+    dependencies = ["editor-module", "fs-module"];
+
+    init(ctx: ModuleContext) {
+      // Register lazy webview
+      ctx.editor.registerWebview({
+        id:      "image-viewer",
+        title:   "Image Preview",
+        location: "editor",                      // opens as an editor tab
+        command: "image.preview",
+
+        create: (ctx) => ({
+          id: "image-viewer",
+          title: "Image Preview",
+          location: "editor",
+          permissions: ["fs.read", "editor.read"],
+
+          loader: async (ctx) => {
+            const file = await ctx.editor.getActiveFile();
+            if (!file) return { src: "" };
+            const data = await ctx.fs.read(file.uri);
+            const blob = new Blob([data]);
+            return { src: URL.createObjectURL(blob), name: file.uri };
+          },
+
+          html: `<html><body style="display:flex;justify-content:center;align-items:center;height:100vh;margin:0">
+            <img id="img" style="max-width:100%;max-height:100%"/>
+            <script>
+              (async () => {
+                const api = await acquireEngineApi();
+                document.getElementById("img").src = api.loaderData.src;
+                api.onLoaderData((d) => { document.getElementById("img").src = d.src; });
+              })();
+            </script>
+          </body></html>`,
+        }),
+      });
+
+      // Auto-open for image files
+      ctx.eventBus.on("file:open", ({ path }) => {
+        if (/\.(png|jpg|jpeg|gif|webp|svg)$/i.test(path)) {
+          ctx.commands.execute("image.preview");
+        }
+      });
+
+      // Context menu in file explorer
+      ctx.contextMenu.register("explorer", {
+        id:      "image.previewFile",
+        label:   "Preview Image",
+        icon:    imageIcon,
+        group:   "navigation",
+        order:   3,
+        when:    "!isDirectory && extension in ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg']",
+        command: "image.preview",
+      });
+    }
+  }
+
+
+================================================================================
+  EDITOR MODULE API ADDITIONS
+================================================================================
+
+The editor-module gains these new methods (added to EditorModule interface):
+
+  interface EditorModule {
+    // ... existing methods ...
+
+    // Create a webview immediately (eager)
+    createWebview(options: WebviewPanelOptions): WebviewPanel;
+
+    // Register a webview factory (lazy — created on first trigger)
+    registerWebview(descriptor: WebviewDescriptor): IDisposable;
+
+    // Get an existing webview by ID (returns null if not created yet)
+    getWebview(id: string): WebviewPanel | null;
+
+    // Get all active (non-disposed) webview panels
+    getWebviews(): WebviewPanel[];
+
+    // Check if a webview with this ID is registered (eager or lazy)
+    hasWebview(id: string): boolean;
+  }
+
+
+================================================================================
+  SIDEBAR VIEW — onActivate ADDITION
+================================================================================
+
+The registerSidebarView options gain an optional onActivate callback.
+This fires when the user clicks the sidebar icon, BEFORE the view renders.
+It can be used to fire a command that opens a webview, show a notification,
+or run any setup logic.
+
+  ctx.layout.registerSidebarView({
+    id:       string,
+    label:    string,
+    icon:     SVGIcon,
+    render?:  () => ReactNode,              // existing — renders inline
+    order?:   number,
+
+    // NEW — fires when sidebar icon is clicked
+    onActivate?: () => void;
+  });
+
+  If BOTH render and onActivate are provided:
+    - onActivate fires first
+    - Then render is called and the sidebar view content appears
+  If ONLY onActivate is provided (no render):
+    - The sidebar entry acts as a BUTTON — clicking it fires onActivate,
+      no sidebar content is rendered (useful as a launcher)
+
+
+================================================================================
+  STATUS BAR ITEM — command FIELD
+================================================================================
+
+Status bar items already register via ctx.layout.registerStatusbarItem().
+The `command` field (already in the spec but not explicitly documented)
+fires when the user clicks the status bar item:
+
+  ctx.layout.registerStatusbarItem({
+    id:        string,
+    text:      string,                      // supports $(icon-name) syntax
+    tooltip?:  string,
+    alignment: "left" | "right",
+    priority?: number,                      // higher = further left
+    command?:  string,                      // fires on click
+  });
+
+
+================================================================================
+  NEW EVENTS
+================================================================================
+
+  webview:registered     { id, command?, keybinding? }  — registerWebview() called
+  webview:lazy-create    { id }                         — lazy webview created on first trigger
