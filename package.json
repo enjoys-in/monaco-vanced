@@ -84,7 +84,7 @@
     "vitest": "^4.1.2"
   },
   "dependencies": {
-    "dexie": "^4.4.1",
+    "dexie": "^4.4.2",
     "monaco-editor": "^0.55.1",
     "zustand": "^5.0.12"
   }
