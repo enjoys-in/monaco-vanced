@@ -1,4 +1,19 @@
-// ── Language config plugin — registers extra languages with Monaco ──
+// ── Language config plugin — registers extra languages NOT built into Monaco ──
+//
+// Monaco ships with built-in support for: typescript, javascript, html, css,
+// json, markdown, xml, yaml, python, java, c, cpp, csharp, go, rust, ruby,
+// php, sql, shell, powershell, lua, r, swift, kotlin, dart, and more.
+//
+// This plugin registers languages that Monaco does NOT include natively.
+// It is exported as an OPTIONAL plugin — users import only if they need
+// these extra languages. Each language config is also exported individually
+// so users can register a single language without loading all 10.
+//
+// Usage:
+//   import { createLanguageConfigPlugin } from "@enjoys/monaco-vanced/language/language-config";
+//   // OR import individual:
+//   import { createDockerfileLanguagePlugin } from "@enjoys/monaco-vanced/language/language-config";
+
 import type * as monacoNs from "monaco-editor";
 import type { MonacoPlugin, Monaco } from "@core/types";
 
@@ -13,7 +28,7 @@ import { protoLanguageConfig } from "./configs/proto";
 import { shellscriptLanguageConfig } from "./configs/shellscript";
 import { tomlLanguageConfig } from "./configs/toml";
 
-interface LanguageDef {
+export interface LanguageDef {
   id: string;
   extensions: string[];
   aliases: string[];
@@ -23,10 +38,10 @@ interface LanguageDef {
 }
 
 /**
- * Languages that Monaco does not register natively.
+ * Languages that Monaco does NOT register natively.
  * Each includes: language registration + language configuration (brackets, comments, etc.)
  */
-const extraLanguages: LanguageDef[] = [
+export const extraLanguages: LanguageDef[] = [
   {
     id: "dockerfile",
     extensions: [".dockerfile"],
@@ -97,6 +112,42 @@ const extraLanguages: LanguageDef[] = [
   },
 ];
 
+// ── Helpers ──────────────────────────────────────────────────
+
+function registerLanguage(monaco: Monaco, lang: LanguageDef): void {
+  const existing = monaco.languages.getLanguages().find((l) => l.id === lang.id);
+  if (!existing) {
+    monaco.languages.register({
+      id: lang.id,
+      extensions: lang.extensions,
+      aliases: lang.aliases,
+      filenames: lang.filenames,
+      mimetypes: lang.mimetypes,
+    });
+  }
+  monaco.languages.setLanguageConfiguration(lang.id, lang.config);
+}
+
+function createSingleLanguagePlugin(lang: LanguageDef): MonacoPlugin {
+  return {
+    id: `language-config-${lang.id}`,
+    name: `Language Config: ${lang.aliases[0]}`,
+    version: "1.0.0",
+    description: `Registers ${lang.aliases[0]} language with Monaco`,
+    priority: 99,
+    defaultEnabled: true,
+    onBeforeMount(monaco: Monaco) {
+      registerLanguage(monaco, lang);
+    },
+  };
+}
+
+// ── Bundled plugin (all 10 languages) ────────────────────────
+
+/**
+ * Registers all 10 extra languages at once.
+ * Use this when you want full language support out of the box.
+ */
 export function createLanguageConfigPlugin(): MonacoPlugin {
   return {
     id: "language-config",
@@ -108,22 +159,46 @@ export function createLanguageConfigPlugin(): MonacoPlugin {
 
     onBeforeMount(monaco: Monaco) {
       for (const lang of extraLanguages) {
-        // Only register if not already registered
-        const existing = monaco.languages.getLanguages().find((l) => l.id === lang.id);
-        if (!existing) {
-          monaco.languages.register({
-            id: lang.id,
-            extensions: lang.extensions,
-            aliases: lang.aliases,
-            filenames: lang.filenames,
-            mimetypes: lang.mimetypes,
-          });
-        }
-        monaco.languages.setLanguageConfiguration(lang.id, lang.config);
+        registerLanguage(monaco, lang);
       }
     },
   };
 }
+
+// ── Individual language plugins (pick only what you need) ────
+
+export function createDockerfileLanguagePlugin(): MonacoPlugin {
+  return createSingleLanguagePlugin(extraLanguages.find((l) => l.id === "dockerfile")!);
+}
+export function createDotenvLanguagePlugin(): MonacoPlugin {
+  return createSingleLanguagePlugin(extraLanguages.find((l) => l.id === "dotenv")!);
+}
+export function createGraphqlLanguagePlugin(): MonacoPlugin {
+  return createSingleLanguagePlugin(extraLanguages.find((l) => l.id === "graphql")!);
+}
+export function createIgnoreLanguagePlugin(): MonacoPlugin {
+  return createSingleLanguagePlugin(extraLanguages.find((l) => l.id === "ignore")!);
+}
+export function createIniLanguagePlugin(): MonacoPlugin {
+  return createSingleLanguagePlugin(extraLanguages.find((l) => l.id === "ini")!);
+}
+export function createNginxLanguagePlugin(): MonacoPlugin {
+  return createSingleLanguagePlugin(extraLanguages.find((l) => l.id === "nginx")!);
+}
+export function createPrismaLanguagePlugin(): MonacoPlugin {
+  return createSingleLanguagePlugin(extraLanguages.find((l) => l.id === "prisma")!);
+}
+export function createProtobufLanguagePlugin(): MonacoPlugin {
+  return createSingleLanguagePlugin(extraLanguages.find((l) => l.id === "protobuf")!);
+}
+export function createShellscriptLanguagePlugin(): MonacoPlugin {
+  return createSingleLanguagePlugin(extraLanguages.find((l) => l.id === "shellscript")!);
+}
+export function createTomlLanguagePlugin(): MonacoPlugin {
+  return createSingleLanguagePlugin(extraLanguages.find((l) => l.id === "toml")!);
+}
+
+// ── Re-exports ───────────────────────────────────────────────
 
 export {
   dockerfileLanguageConfig,
