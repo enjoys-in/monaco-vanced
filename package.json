@@ -1,0 +1,91 @@
+{
+  "name": "monaco-vanced",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A plugin-based, event-driven IDE built on Monaco Editor",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs",
+      "types": "./dist/index.d.ts"
+    },
+    "./editor/*": {
+      "import": "./dist/plugins/editor/*/index.mjs"
+    },
+    "./language/*": {
+      "import": "./dist/plugins/language/*/index.mjs"
+    },
+    "./filesystem/*": {
+      "import": "./dist/plugins/filesystem/*/index.mjs"
+    },
+    "./layout/*": {
+      "import": "./dist/plugins/layout/*/index.mjs"
+    },
+    "./ai/*": {
+      "import": "./dist/plugins/ai/*/index.mjs"
+    },
+    "./scm/*": {
+      "import": "./dist/plugins/scm/*/index.mjs"
+    },
+    "./devtools/*": {
+      "import": "./dist/plugins/devtools/*/index.mjs"
+    },
+    "./extensions/*": {
+      "import": "./dist/plugins/extensions/*/index.mjs"
+    },
+    "./theming/*": {
+      "import": "./dist/plugins/theming/*/index.mjs"
+    },
+    "./infrastructure/*": {
+      "import": "./dist/plugins/infrastructure/*/index.mjs"
+    },
+    "./platform/*": {
+      "import": "./dist/plugins/platform/*/index.mjs"
+    },
+    "./enterprise/*": {
+      "import": "./dist/plugins/enterprise/*/index.mjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "dev": "vite --config demo/vite.config.ts",
+    "build": "vite build && tsc -p tsconfig.build.json",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/ plugins/ core/",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "monaco",
+    "editor",
+    "ide",
+    "plugin",
+    "vscode"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@tailwindcss/vite": "^4.2.2",
+    "@types/node": "^25.5.0",
+    "eslint": "^10.1.0",
+    "jsdom": "^29.0.1",
+    "tailwindcss": "^4.2.2",
+    "typescript": "^6.0.2",
+    "typescript-eslint": "^8.58.0",
+    "vite": "^8.0.3",
+    "vitest": "^4.1.2"
+  },
+  "dependencies": {
+    "dexie": "^4.4.1",
+    "monaco-editor": "^0.55.1",
+    "zustand": "^5.0.12"
+  }
+}

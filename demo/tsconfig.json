@@ -1,0 +1,16 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@core/*": ["../core/*"],
+      "@plugins/*": ["../plugins/*"],
+      "monaco-vanced": ["../src/index.ts"]
+    }
+  },
+  "include": [
+    "src",
+    "../src",
+    "../core",
+    "../plugins"
+  ]
+}

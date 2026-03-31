@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Monaco Vanced — Demo</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>" />
+  </head>
+  <body class="h-screen w-screen overflow-hidden bg-neutral-900 text-neutral-100">
+    <div id="app" class="flex h-full w-full flex-col">
+      <!-- Header -->
+      <header class="flex h-10 items-center border-b border-neutral-700 bg-neutral-800 px-4">
+        <span class="text-sm font-semibold">Monaco Vanced</span>
+        <span class="ml-2 text-xs text-neutral-500">v0.1.0</span>
+      </header>
+
+      <!-- Main area -->
+      <main class="flex flex-1 overflow-hidden">
+        <!-- Sidebar -->
+        <aside class="flex w-12 flex-col items-center border-r border-neutral-700 bg-neutral-800 py-2">
+          <div class="mb-2 h-6 w-6 rounded bg-neutral-600" title="Explorer"></div>
+          <div class="mb-2 h-6 w-6 rounded bg-neutral-600" title="Search"></div>
+          <div class="mb-2 h-6 w-6 rounded bg-neutral-600" title="Git"></div>
+          <div class="mb-2 h-6 w-6 rounded bg-neutral-600" title="Extensions"></div>
+        </aside>
+
+        <!-- Editor container -->
+        <div id="editor-container" class="flex-1"></div>
+      </main>
+
+      <!-- Status bar -->
+      <footer class="flex h-6 items-center border-t border-neutral-700 bg-blue-700 px-3 text-xs">
+        <span>Ready</span>
+        <span class="ml-auto">UTF-8</span>
+      </footer>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

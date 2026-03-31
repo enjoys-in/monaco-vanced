@@ -1,0 +1,19 @@
+/**
+ * monaco-vanced — Plugin-based IDE built on Monaco Editor
+ *
+ * This is the main entry point for the npm package.
+ * Users import plugins and the core engine from here.
+ */
+
+// ── Core Engine ──────────────────────────────────────────────
+export { PluginEngine } from "@core/plugin-engine";
+export { EventBus } from "@core/event-bus";
+export { PluginContext } from "@core/plugin-context";
+
+// ── Core Types ───────────────────────────────────────────────
+export type {
+  MonacoPlugin,
+  PluginManifest,
+  ModuleContext,
+  IDisposable,
+} from "@core/types";
