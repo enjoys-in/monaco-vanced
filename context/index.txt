@@ -2,10 +2,22 @@
   MONACO PLUGIN-BASED IDE ARCHITECTURE — MASTER INDEX
 ================================================================================
 
+
 VERSION: 3.0 — Full architecture with Extension Host, Interaction System, Preview
 ARCHITECTURE STYLE: Plugin-based, event-driven, fully composable
 CORE IDEA: Every feature is a plugin. Nothing is hardcoded. The Core Engine
 is the only shared runtime. Everything else communicates through events.
+
+================================================================================
+ CRITICAL REMINDER:
+================================================================================
+
+  Follow Required Design Patterns and Solid Principles
+  Process One Section One by one
+  Build And Verify , fix if errors
+  Git add,commit and then Push
+  Procceeed to sequence go step by step 1-2-3.... in series and so on
+  Update the Index.txt file with status
 
 ================================================================================
   FILE MAP — READ IN THIS ORDER
@@ -110,9 +122,3 @@ is the only shared runtime. Everything else communicates through events.
   9. Extended files deep-dive into specific subsystems as needed
   10. PLAN.md tracks implementation progress
 
-
-================================================================================
- CRITICAL REMINDER:
-================================================================================
-
-Follow Required Design Patterns and Solid Principles

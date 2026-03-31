@@ -1,17 +1,33 @@
 export enum LspEvents {
-  ServerStart = "lsp:server-start",
-  ServerReady = "lsp:server-ready",
-  ServerStop = "lsp:server-stop",
-  ServerError = "lsp:server-error",
-  DiagnosticsReceived = "lsp:diagnostics-received",
-  CompletionRequest = "lsp:completion-request",
-  CompletionResponse = "lsp:completion-response",
-  HoverRequest = "lsp:hover-request",
-  HoverResponse = "lsp:hover-response",
-  DefinitionRequest = "lsp:definition-request",
-  DefinitionResponse = "lsp:definition-response",
-  ReferencesRequest = "lsp:references-request",
-  ReferencesResponse = "lsp:references-response",
+  // ── Connection lifecycle ──────────────────────────────
+  Connecting = "lsp:connecting",
+  Connected = "lsp:connected",
+  Disconnected = "lsp:disconnected",
+  Reconnecting = "lsp:reconnecting",
+  Failed = "lsp:failed",
+
+  // ── Requests ──────────────────────────────────────────
+  RequestSent = "lsp:request-sent",
+  ResponseReceived = "lsp:response-received",
+  RequestTimeout = "lsp:request-timeout",
+  RequestError = "lsp:request-error",
+
+  // ── Configuration ─────────────────────────────────────
+  UrlChanged = "lsp:url-changed",
+  ConfigChanged = "lsp:config-changed",
+  ModeChanged = "lsp:mode-changed",
+
+  // ── Diagnostics (server → client, V2 only) ───────────
+  Diagnostics = "lsp:diagnostics",
+
+  // ── Document sync (V2 only) ───────────────────────────
+  DidOpen = "lsp:did-open",
+  DidChange = "lsp:did-change",
+
+  // ── Server messages (V2 only) ─────────────────────────
+  ServerMessage = "lsp:server-message",
+
+  // ── Liveness ping ─────────────────────────────────────
   PingSuccess = "lsp:ping-success",
   PingTimeout = "lsp:ping-timeout",
   PingFailed = "lsp:ping-failed",

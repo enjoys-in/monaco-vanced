@@ -106,7 +106,7 @@ SECTION 3 — SHARED TYPES
 
   type LspConnectionState = "disconnected" | "connecting" | "connected" | "reconnecting" | "failed";
 
-  type LspMode = "custom" | "builtin" | "both";
+  type LspMode = "custom" | "builtin"
 
 ──────────────────────────────────────────────────────────────
 3C — JSON-RPC MESSAGE TYPES
