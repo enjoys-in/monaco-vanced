@@ -1,66 +1,63 @@
-// ── Monarch grammars plugin — registers tokenizers for extra languages ──
+// ── Monarch grammars plugin — fetches tokenizers from @enjoys/context-engine CDN ──
 import type * as monacoNs from "monaco-editor";
 import type { MonacoPlugin, Monaco } from "@core/types";
 
-import { dockerfileTokenizer } from "./grammars/dockerfile";
-import { dotenvTokenizer } from "./grammars/dotenv";
-import { graphqlTokenizer } from "./grammars/graphql";
-import { ignoreTokenizer } from "./grammars/ignore";
-import { iniTokenizer } from "./grammars/ini";
-import { makefileTokenizer } from "./grammars/makefile";
-import { nginxTokenizer } from "./grammars/nginx";
-import { prismaTokenizer } from "./grammars/prisma";
-import { protoTokenizer } from "./grammars/proto";
-import { sshConfigTokenizer } from "./grammars/ssh-config";
-import { tomlTokenizer } from "./grammars/toml";
+const CDN_BASE =
+  "https://cdn.jsdelivr.net/npm/@enjoys/context-engine/data/monarchTokens";
 
-interface GrammarEntry {
-  languageId: string;
-  tokenizer: monacoNs.languages.IMonarchLanguage;
+const languageIds = [
+  "dockerfile",
+  "dotenv",
+  "graphql",
+  "ignore",
+  "ini",
+  "makefile",
+  "nginx",
+  "prisma",
+  "protobuf",
+  "ssh-config",
+  "toml",
+] as const;
+
+export type MonarchLanguageId = (typeof languageIds)[number];
+
+async function fetchTokenizer(
+  langId: string,
+): Promise<monacoNs.languages.IMonarchLanguage> {
+  const url = `${CDN_BASE}/${langId}.json`;
+  const res = await fetch(url, { cache: "no-cache" });
+  if (!res.ok) {
+    throw new Error(`[monarch-grammars] ${langId}: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<monacoNs.languages.IMonarchLanguage>;
 }
-
-const grammars: GrammarEntry[] = [
-  { languageId: "dockerfile", tokenizer: dockerfileTokenizer },
-  { languageId: "dotenv", tokenizer: dotenvTokenizer },
-  { languageId: "graphql", tokenizer: graphqlTokenizer },
-  { languageId: "ignore", tokenizer: ignoreTokenizer },
-  { languageId: "ini", tokenizer: iniTokenizer },
-  { languageId: "makefile", tokenizer: makefileTokenizer },
-  { languageId: "nginx", tokenizer: nginxTokenizer },
-  { languageId: "prisma", tokenizer: prismaTokenizer },
-  { languageId: "protobuf", tokenizer: protoTokenizer },
-  { languageId: "ssh-config", tokenizer: sshConfigTokenizer },
-  { languageId: "toml", tokenizer: tomlTokenizer },
-];
 
 export function createMonarchGrammarsPlugin(): MonacoPlugin {
   return {
     id: "monarch-grammars",
     name: "Monarch Grammars",
     version: "1.0.0",
-    description: "Syntax highlighting for 11 extra languages via Monarch tokenizers",
+    description:
+      "Syntax highlighting for extra languages via CDN Monarch tokenizers (@enjoys/context-engine)",
     dependencies: ["language-config"],
     priority: 98,
     defaultEnabled: true,
 
-    onBeforeMount(monaco: Monaco) {
-      for (const { languageId, tokenizer } of grammars) {
-        monaco.languages.setMonarchTokensProvider(languageId, tokenizer);
+    async onBeforeMount(monaco: Monaco) {
+      const results = await Promise.allSettled(
+        languageIds.map(async (langId) => {
+          const tokenizer = await fetchTokenizer(langId);
+          monaco.languages.setMonarchTokensProvider(langId, tokenizer);
+        }),
+      );
+
+      for (const r of results) {
+        if (r.status === "rejected") {
+          console.warn(r.reason);
+        }
       }
     },
   };
 }
 
-export {
-  dockerfileTokenizer,
-  dotenvTokenizer,
-  graphqlTokenizer,
-  ignoreTokenizer,
-  iniTokenizer,
-  makefileTokenizer,
-  nginxTokenizer,
-  prismaTokenizer,
-  protoTokenizer,
-  sshConfigTokenizer,
-  tomlTokenizer,
-};
+export { languageIds, CDN_BASE, fetchTokenizer };

@@ -1,6 +1,6 @@
 // ── Global type augmentations ────────────────────────────────
 import type * as monacoNs from "monaco-editor";
-import type { PluginEngine } from "@core/plugin-engine";
+import type { PluginEngine } from "core/plugin-engine";
 import type { EventBus } from "@core/event-bus";
 
 declare global {
