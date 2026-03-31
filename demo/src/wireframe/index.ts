@@ -1,8 +1,7 @@
 // ── Wireframe entry — mounts plugin-driven IDE chrome ───────
 
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
-// All wireframe modules import types/events from @enjoys/monaco-vanced
-import type { WireframeAPIs } from "./types";
+import type { WireframeAPIs, VirtualFile } from "./types";
 import { buildShell } from "./shell";
 import { wireActivityBar } from "./activity-bar";
 import { wireSidebar, wireResizeHandle } from "./sidebar";
@@ -11,12 +10,13 @@ import { wireTitleBar, wireStatusBar } from "./bars";
 import { wireNotifications } from "./notifications";
 import { wireContextMenu, wireCommandPalette, wireBottomPanel } from "./overlays";
 
-export type { WireframeAPIs } from "./types";
+export type { WireframeAPIs, VirtualFile } from "./types";
 
 export function mountWireframe(
   root: HTMLElement,
   apis: WireframeAPIs,
   eventBus: EventBus,
+  files: VirtualFile[],
 ): { editorContainer: HTMLElement; destroy: () => void } {
   const dom = buildShell(root);
   const disposers: (() => void)[] = [];
@@ -26,11 +26,11 @@ export function mountWireframe(
   };
 
   wireActivityBar(dom, apis, eventBus, on);
-  wireSidebar(dom, apis, on);
-  wireTabs(dom, eventBus, on);
-  wireTitleBar(dom, apis, on);
+  wireSidebar(dom, apis, eventBus, on, files);
+  wireTabs(dom, eventBus, on, files);
+  wireTitleBar(dom, apis, eventBus, on);
   wireStatusBar(dom, apis, on);
-  wireBottomPanel(dom, apis, on);
+  wireBottomPanel(dom, eventBus, on);
   wireNotifications(dom, apis, on);
   wireContextMenu(dom, apis, on);
   wireCommandPalette(dom, apis, on);
