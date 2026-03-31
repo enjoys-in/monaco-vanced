@@ -11,48 +11,90 @@ type ProviderFactory = (
 ) => monacoNs.languages.CompletionItemProvider
   | monacoNs.languages.HoverProvider
   | monacoNs.languages.DefinitionProvider
+  | monacoNs.languages.DeclarationProvider
+  | monacoNs.languages.TypeDefinitionProvider
+  | monacoNs.languages.ImplementationProvider
   | monacoNs.languages.ReferenceProvider
   | monacoNs.languages.DocumentSymbolProvider
+  | monacoNs.languages.DocumentHighlightProvider
   | monacoNs.languages.SignatureHelpProvider
   | monacoNs.languages.CodeActionProvider
   | monacoNs.languages.CodeLensProvider
+  | monacoNs.languages.LinkProvider
+  | monacoNs.languages.DocumentColorProvider
   | monacoNs.languages.DocumentFormattingEditProvider
+  | monacoNs.languages.DocumentRangeFormattingEditProvider
+  | monacoNs.languages.OnTypeFormattingEditProvider
   | monacoNs.languages.RenameProvider
+  | monacoNs.languages.NewSymbolNamesProvider
   | monacoNs.languages.FoldingRangeProvider
-  | monacoNs.languages.InlayHintsProvider;
+  | monacoNs.languages.SelectionRangeProvider
+  | monacoNs.languages.LinkedEditingRangeProvider
+  | monacoNs.languages.InlayHintsProvider
+  | monacoNs.languages.DocumentSemanticTokensProvider
+  | monacoNs.languages.DocumentRangeSemanticTokensProvider
+  | monacoNs.languages.InlineCompletionsProvider;
 
 /** Strongly-typed provider key → shape discriminator */
 type ProviderKey =
   | "completion"
   | "hover"
   | "definition"
+  | "declaration"
+  | "typeDefinition"
+  | "implementation"
   | "references"
+  | "documentHighlight"
   | "documentSymbol"
   | "signatureHelp"
   | "codeAction"
   | "codeLens"
+  | "links"
+  | "color"
   | "formatting"
+  | "rangeFormatting"
+  | "onTypeFormatting"
   | "rename"
+  | "newSymbolNames"
   | "foldingRange"
-  | "inlayHints";
+  | "selectionRange"
+  | "linkedEditingRange"
+  | "inlayHints"
+  | "semanticTokens"
+  | "rangeSemanticTokens"
+  | "inlineCompletions";
 
 /** Maps provider key to its discriminant property and register function name */
 const PROVIDER_REGISTRY: Record<
   ProviderKey,
   { check: string; register: keyof typeof monacoNs.languages }
 > = {
-  completion:     { check: "provideCompletionItems",          register: "registerCompletionItemProvider" },
-  hover:          { check: "provideHover",                    register: "registerHoverProvider" },
-  definition:     { check: "provideDefinition",               register: "registerDefinitionProvider" },
-  references:     { check: "provideReferences",               register: "registerReferenceProvider" },
-  documentSymbol: { check: "provideDocumentSymbols",          register: "registerDocumentSymbolProvider" },
-  signatureHelp:  { check: "provideSignatureHelp",            register: "registerSignatureHelpProvider" },
-  codeAction:     { check: "provideCodeActions",              register: "registerCodeActionProvider" },
-  codeLens:       { check: "provideCodeLenses",               register: "registerCodeLensProvider" },
-  formatting:     { check: "provideDocumentFormattingEdits",  register: "registerDocumentFormattingEditProvider" },
-  rename:         { check: "provideRenameEdits",              register: "registerRenameProvider" },
-  foldingRange:   { check: "provideFoldingRanges",            register: "registerFoldingRangeProvider" },
-  inlayHints:     { check: "provideInlayHints",               register: "registerInlayHintsProvider" },
+  completion:          { check: "provideCompletionItems",               register: "registerCompletionItemProvider" },
+  hover:               { check: "provideHover",                         register: "registerHoverProvider" },
+  definition:          { check: "provideDefinition",                    register: "registerDefinitionProvider" },
+  declaration:         { check: "provideDeclaration",                   register: "registerDeclarationProvider" },
+  typeDefinition:      { check: "provideTypeDefinition",                register: "registerTypeDefinitionProvider" },
+  implementation:      { check: "provideImplementation",                register: "registerImplementationProvider" },
+  references:          { check: "provideReferences",                    register: "registerReferenceProvider" },
+  documentHighlight:   { check: "provideDocumentHighlights",            register: "registerDocumentHighlightProvider" },
+  documentSymbol:      { check: "provideDocumentSymbols",               register: "registerDocumentSymbolProvider" },
+  signatureHelp:       { check: "provideSignatureHelp",                 register: "registerSignatureHelpProvider" },
+  codeAction:          { check: "provideCodeActions",                   register: "registerCodeActionProvider" },
+  codeLens:            { check: "provideCodeLenses",                    register: "registerCodeLensProvider" },
+  links:               { check: "provideLinks",                         register: "registerLinkProvider" },
+  color:               { check: "provideDocumentColors",                register: "registerColorProvider" },
+  formatting:          { check: "provideDocumentFormattingEdits",       register: "registerDocumentFormattingEditProvider" },
+  rangeFormatting:     { check: "provideDocumentRangeFormattingEdits",  register: "registerDocumentRangeFormattingEditProvider" },
+  onTypeFormatting:    { check: "provideOnTypeFormattingEdits",         register: "registerOnTypeFormattingEditProvider" },
+  rename:              { check: "provideRenameEdits",                   register: "registerRenameProvider" },
+  newSymbolNames:      { check: "provideNewSymbolNames",                register: "registerNewSymbolNameProvider" },
+  foldingRange:        { check: "provideFoldingRanges",                 register: "registerFoldingRangeProvider" },
+  selectionRange:      { check: "provideSelectionRanges",               register: "registerSelectionRangeProvider" },
+  linkedEditingRange:  { check: "provideLinkedEditingRanges",           register: "registerLinkedEditingRangeProvider" },
+  inlayHints:          { check: "provideInlayHints",                    register: "registerInlayHintsProvider" },
+  semanticTokens:      { check: "provideDocumentSemanticTokens",        register: "registerDocumentSemanticTokensProvider" },
+  rangeSemanticTokens: { check: "provideDocumentRangeSemanticTokens",   register: "registerDocumentRangeSemanticTokensProvider" },
+  inlineCompletions:   { check: "provideInlineCompletions",             register: "registerInlineCompletionsProvider" },
 };
 
 /**

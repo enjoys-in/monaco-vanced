@@ -34,6 +34,7 @@ import {
   toMonacoSemanticTokens,
   getSemanticTokensLegend,
   toMonacoDocumentHighlights,
+  toMonacoInlineCompletions,
 } from "./converters";
 
 function has(caps: Record<string, unknown>, key: string): boolean {
@@ -626,6 +627,68 @@ export function registerLSPProviders(
             },
           );
           return result ? toMonacoSemanticTokens(result) : null;
+        },
+      }),
+    );
+  }
+
+  // ── 25. InlineCompletionsProvider ─────────────────────────
+  if (has(serverCaps, "inlineCompletionProvider")) {
+    disposables.push(
+      monaco.languages.registerInlineCompletionsProvider(languageId, {
+        async provideInlineCompletions(model, position, context) {
+          const result = await client.request<unknown>(
+            LSP_METHODS.inlineCompletion,
+            {
+              textDocument: { uri: model.uri.toString() },
+              position: fromMonacoPosition(position),
+              context: {
+                triggerKind: context.triggerKind,
+                selectedSuggestionInfo: context.selectedSuggestionInfo
+                  ? {
+                      range: fromMonacoRange(context.selectedSuggestionInfo.range),
+                      text: context.selectedSuggestionInfo.text,
+                    }
+                  : undefined,
+              },
+            },
+          );
+          return toMonacoInlineCompletions(
+            monaco,
+            result as Parameters<typeof toMonacoInlineCompletions>[1],
+          );
+        },
+        disposeInlineCompletions() {},
+      }),
+    );
+  }
+
+  // ── 26. NewSymbolNamesProvider ────────────────────────────
+  if (has(serverCaps, "renameProvider")) {
+    disposables.push(
+      monaco.languages.registerNewSymbolNameProvider(languageId, {
+        async provideNewSymbolNames(model, range, triggerKind) {
+          void triggerKind;
+          try {
+            const position = { lineNumber: range.startLineNumber, column: range.startColumn };
+            const result = await client.request<{
+              range?: unknown;
+              placeholder?: string;
+            } | null>(LSP_METHODS.prepareRename, {
+              textDocument: { uri: model.uri.toString() },
+              position: fromMonacoPosition(position as monacoNs.Position),
+            });
+
+            if (result?.placeholder) {
+              return [{ newSymbolName: result.placeholder }];
+            }
+          } catch { /* best-effort */ }
+
+          const word = model.getWordAtPosition({
+            lineNumber: range.startLineNumber,
+            column: range.startColumn,
+          });
+          return word ? [{ newSymbolName: word.word }] : [];
         },
       }),
     );

@@ -691,3 +691,34 @@ export function toMonacoDocumentHighlights(
     kind: h.kind as monacoNs.languages.DocumentHighlightKind | undefined,
   }));
 }
+
+// ── 7S — Inline Completions ──────────────────────────────────
+
+interface LspInlineCompletionItem {
+  insertText: string;
+  filterText?: string;
+  range?: LspRange;
+  command?: LspCommand;
+}
+
+interface LspInlineCompletionList {
+  items: LspInlineCompletionItem[];
+}
+
+export function toMonacoInlineCompletions(
+  _monaco: typeof monacoNs,
+  result: LspInlineCompletionList | LspInlineCompletionItem[] | null,
+): monacoNs.languages.InlineCompletions {
+  if (!result) return { items: [] };
+
+  const items = Array.isArray(result) ? result : result.items;
+
+  return {
+    items: items.map((item) => ({
+      insertText: item.insertText,
+      filterText: item.filterText,
+      range: item.range ? toMonacoRange(item.range) : undefined,
+      command: item.command ? toMonacoCommand(item.command) : undefined,
+    })),
+  };
+}
