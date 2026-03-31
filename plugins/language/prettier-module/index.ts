@@ -3,7 +3,7 @@ import type { MonacoPlugin, PluginContext, IDisposable } from "@core/types";
 import type { PrettierPluginOptions, PrettierConfig } from "./types";
 import { LANGUAGE_PARSER_MAP } from "./types";
 import { resolveConfig, parsePrettierRc } from "./config-loader";
-import { formatWithPrettier, isLanguageSupported } from "./formatter";
+import { formatWithPrettier, isLanguageSupported, preloadParserForLanguage } from "./formatter";
 import { EditorEvents, FileEvents } from "@core/events";
 
 export function createPrettierPlugin(
@@ -60,6 +60,25 @@ export function createPrettierPlugin(
         );
         disposables.push(disposable);
       }
+
+      // ── Preload parser plugin when language is detected ────
+      const preloadForModel = (langId: string) => {
+        if (isLanguageSupported(langId)) {
+          preloadParserForLanguage(langId, options.prettierUrl, options.parserUrls).catch(() => {});
+        }
+      };
+
+      // Preload for current model immediately
+      const currentLang = editor.getModel()?.getLanguageId();
+      if (currentLang) preloadForModel(currentLang);
+
+      // Preload when language changes (file switch, language detection, etc.)
+      disposables.push(
+        ctx.on(EditorEvents.LanguageChange, (payload) => {
+          const { languageId } = payload as { languageId: string };
+          preloadForModel(languageId);
+        }),
+      );
 
       // ── Format on save ─────────────────────────────────────
       if (options.formatOnSave !== false) {
@@ -148,4 +167,4 @@ export function createPrettierPlugin(
 
 export type { PrettierConfig, PrettierPluginOptions } from "./types";
 export { LANGUAGE_PARSER_MAP, DEFAULT_CDN_BASE } from "./types";
-export { isLanguageSupported } from "./formatter";
+export { isLanguageSupported, preloadParserForLanguage, clearCache } from "./formatter";

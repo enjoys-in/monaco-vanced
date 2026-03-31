@@ -1,10 +1,49 @@
-// ── Prettier formatter — loads standalone Prettier in browser ──
+// ── Prettier formatter — lazy-loads standalone Prettier & parser plugins ──
 import type { PrettierConfig } from "./types";
 import { LANGUAGE_PARSER_MAP, DEFAULT_CDN_BASE } from "./types";
 
+// ── Module cache — Prettier core + each parser plugin loaded once ────
+
+let prettierCore: Record<string, unknown> | null = null;
+const parserCache = new Map<string, Record<string, unknown>>();
+
 /**
- * Dynamically imports standalone Prettier from CDN and formats code.
- * Prettier standalone works in the browser without Node.js.
+ * Lazy-load the standalone Prettier core from CDN.
+ * Cached after first load — subsequent calls return instantly.
+ */
+async function loadPrettierCore(baseUrl: string): Promise<Record<string, unknown>> {
+  if (prettierCore) return prettierCore;
+  prettierCore = await importModule(`${baseUrl}.mjs`);
+  if (!prettierCore?.format) {
+    prettierCore = null;
+    throw new Error("[prettier-module] Failed to load Prettier standalone");
+  }
+  return prettierCore;
+}
+
+/**
+ * Lazy-load a parser plugin from CDN.
+ * Each parser (babel, typescript, html, etc.) is loaded once on first use
+ * and cached for all subsequent format calls.
+ */
+async function loadParserPlugin(
+  parser: string,
+  baseUrl: string,
+  parserUrls?: Record<string, string>,
+): Promise<Record<string, unknown>> {
+  const cached = parserCache.get(parser);
+  if (cached) return cached;
+
+  const url = parserUrls?.[parser] ?? resolveParserUrl(baseUrl, parser);
+  const mod = await importModule(url);
+  parserCache.set(parser, mod);
+  return mod;
+}
+
+/**
+ * Format code using standalone Prettier.
+ * Both Prettier core and parser plugins are lazy-loaded on first call
+ * per parser type. After initial load, formatting is near-instant.
  *
  * @param code - The source code to format
  * @param languageId - Monaco language ID (used to resolve parser)
@@ -26,31 +65,45 @@ export async function formatWithPrettier(
 
   const baseUrl = prettierUrl ?? DEFAULT_CDN_BASE;
 
-  // Resolve parser plugin URL
-  const parserPluginUrl = parserUrls?.[parser] ?? resolveParserUrl(baseUrl, parser);
-
-  // Dynamic import of Prettier standalone + parser plugin
+  // Lazy-load both in parallel (each uses its own cache)
   const [prettier, parserPlugin] = await Promise.all([
-    importModule(`${baseUrl}.mjs`),
-    importModule(parserPluginUrl),
+    loadPrettierCore(baseUrl),
+    loadParserPlugin(parser, baseUrl, parserUrls),
   ]);
-
-  if (!prettier?.format) {
-    throw new Error("[prettier-module] Failed to load Prettier standalone");
-  }
 
   const formatFn = prettier.format as (
     code: string,
     options: Record<string, unknown>,
   ) => Promise<string>;
 
-  const formatted = await formatFn(code, {
+  return formatFn(code, {
     ...config,
     parser,
     plugins: [parserPlugin],
   });
+}
 
-  return formatted;
+/**
+ * Pre-load a parser plugin for a specific language.
+ * Call this when a file is opened to warm the cache before the user
+ * triggers format. Returns silently if load fails.
+ */
+export async function preloadParserForLanguage(
+  languageId: string,
+  prettierUrl?: string,
+  parserUrls?: Record<string, string>,
+): Promise<void> {
+  const parser = LANGUAGE_PARSER_MAP[languageId];
+  if (!parser) return;
+  const baseUrl = prettierUrl ?? DEFAULT_CDN_BASE;
+  try {
+    await Promise.all([
+      loadPrettierCore(baseUrl),
+      loadParserPlugin(parser, baseUrl, parserUrls),
+    ]);
+  } catch {
+    // Silently fail — will retry on actual format
+  }
 }
 
 /**
@@ -60,10 +113,17 @@ export function isLanguageSupported(languageId: string): boolean {
   return languageId in LANGUAGE_PARSER_MAP;
 }
 
+/**
+ * Clear the module cache. Useful for testing or forced reload.
+ */
+export function clearCache(): void {
+  prettierCore = null;
+  parserCache.clear();
+}
+
 // ── Internals ────────────────────────────────────────────────
 
 function resolveParserUrl(baseUrl: string, parser: string): string {
-  // Map parser names to CDN plugin file names
   const parserFileMap: Record<string, string> = {
     babel: "plugins/babel.mjs",
     typescript: "plugins/typescript.mjs",
@@ -76,14 +136,10 @@ function resolveParserUrl(baseUrl: string, parser: string): string {
   };
 
   const file = parserFileMap[parser] ?? `plugins/${parser}.mjs`;
-  // baseUrl is like https://cdn.jsdelivr.net/npm/prettier@3/standalone
-  // Plugin path: https://cdn.jsdelivr.net/npm/prettier@3/plugins/babel.mjs
   const base = baseUrl.replace(/\/standalone$/, "");
   return `${base}/${file}`;
 }
 
-/** Dynamic import wrapper with cache-busting */
 async function importModule(url: string): Promise<Record<string, unknown>> {
-  // Use dynamic import for ESM modules from CDN
   return import(/* @vite-ignore */ url);
 }

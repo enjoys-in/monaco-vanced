@@ -109,3 +109,10 @@ is the only shared runtime. Everything else communicates through events.
   8. Read custom-dialog.txt for interaction system + file preview
   9. Extended files deep-dive into specific subsystems as needed
   10. PLAN.md tracks implementation progress
+
+
+================================================================================
+ CRITICAL REMINDER:
+================================================================================
+
+Follow Required Design Patterns and Solid Principles

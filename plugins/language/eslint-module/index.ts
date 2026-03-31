@@ -1,9 +1,9 @@
-// ── ESLint plugin — browser-based linting with diagnostics integration ──
+// ── ESLint plugin — browser-based linting via Web Worker ──
 import type { MonacoPlugin, PluginContext, IDisposable } from "@core/types";
-import type { ESLintPluginOptions, ESLintConfig, LintMessage } from "./types";
+import type { ESLintPluginOptions, ESLintConfig, LintMessage, LintResult } from "./types";
+import type { LintRequest, LintResponse } from "./lint-worker";
 import { DEFAULT_LANGUAGES } from "./types";
 import { resolveConfig, parseEslintRc } from "./config-loader";
-import { runLint } from "./runner";
 import { applyFixes } from "./auto-fix";
 import { DiagnosticEvents, FileEvents } from "@core/events";
 
@@ -15,13 +15,53 @@ export function createESLintPlugin(
   const debounceMs = options.debounceMs ?? 500;
   const disposables: IDisposable[] = [];
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let worker: Worker | null = null;
+  let requestId = 0;
+  const pendingRequests = new Map<number, (result: LintResult) => void>();
+
+  function getWorker(): Worker {
+    if (!worker) {
+      worker = new Worker(
+        new URL("./lint-worker.ts", import.meta.url),
+        { type: "module" },
+      );
+      worker.addEventListener("message", (event: MessageEvent<LintResponse>) => {
+        const { type, id, result } = event.data;
+        if (type !== "result") return;
+        const resolve = pendingRequests.get(id);
+        if (resolve) {
+          pendingRequests.delete(id);
+          resolve(result);
+        }
+      });
+    }
+    return worker;
+  }
+
+  function lintAsync(
+    filePath: string,
+    content: string,
+    cfg: ESLintConfig,
+  ): Promise<LintResult> {
+    return new Promise((resolve) => {
+      const id = ++requestId;
+      pendingRequests.set(id, resolve);
+      getWorker().postMessage({
+        type: "lint",
+        id,
+        filePath,
+        content,
+        config: cfg,
+      } satisfies LintRequest);
+    });
+  }
 
   return {
     id: "eslint-module",
     name: "ESLint",
     version: "1.0.0",
     description:
-      "Browser-based ESLint linting with diagnostics integration and auto-fix on save",
+      "Browser-based ESLint linting via Web Worker with diagnostics integration and auto-fix on save",
     dependencies: ["editor-module", "diagnostics-module"],
     priority: 45,
     defaultEnabled: true,
@@ -29,8 +69,8 @@ export function createESLintPlugin(
     onMount(ctx: PluginContext) {
       const { editor } = ctx;
 
-      /** Run lint and publish diagnostics for a model */
-      function lintModel(model: import("monaco-editor").editor.ITextModel) {
+      /** Run lint in worker and publish diagnostics for a model */
+      async function lintModel(model: import("monaco-editor").editor.ITextModel) {
         const langId = model.getLanguageId();
         if (!languages.has(langId)) return;
 
@@ -38,7 +78,7 @@ export function createESLintPlugin(
         const uri = model.uri.toString();
         const filePath = model.uri.path;
 
-        const result = runLint(filePath, content, config);
+        const result = await lintAsync(filePath, content, config);
 
         // Convert lint messages to diagnostics and publish
         ctx.emit(DiagnosticEvents.Publish, {
@@ -82,14 +122,14 @@ export function createESLintPlugin(
       // ── Auto-fix on save ───────────────────────────────────
       if (options.fixOnSave) {
         disposables.push(
-          ctx.on(FileEvents.Save, () => {
+          ctx.on(FileEvents.Save, async () => {
             const model = editor.getModel();
             if (!model) return;
             const langId = model.getLanguageId();
             if (!languages.has(langId)) return;
 
             const content = model.getValue();
-            const result = runLint(model.uri.path, content, config);
+            const result = await lintAsync(model.uri.path, content, config);
 
             if (result.messages.some((m) => m.fix)) {
               const fixed = applyFixes(content, result.messages);
@@ -134,6 +174,11 @@ export function createESLintPlugin(
 
     onDispose() {
       if (debounceTimer) clearTimeout(debounceTimer);
+      if (worker) {
+        worker.terminate();
+        worker = null;
+      }
+      pendingRequests.clear();
       for (const d of disposables) d.dispose();
       disposables.length = 0;
     },
