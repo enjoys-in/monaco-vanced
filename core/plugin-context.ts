@@ -3,12 +3,28 @@
 // Auto-tracks all IDisposable registrations for bulk cleanup.
 
 import type * as monacoNs from "monaco-editor";
-import type { IDisposable, PluginContext as IPluginContext, PluginSettingsAccessor, Monaco, MonacoEditor } from "./types";
+import type {
+  IDisposable,
+  PluginContext as IPluginContext,
+  PluginSettingsAccessor,
+  PluginFsAccessor,
+  PluginStorageAccessor,
+  PluginAiAccessor,
+  PluginAuthAccessor,
+  PluginIndexerAccessor,
+  PluginCommandsAccessor,
+  PluginLayoutAccessor,
+  PluginContextMenuAccessor,
+  PluginNotificationsAccessor,
+  PluginEventBusAccessor,
+  Monaco,
+  MonacoEditor,
+} from "./types";
 import type { EventBus } from "./event-bus";
 import { DisposableStore } from "./disposable-store";
 import { NotifyEvents } from "./events";
 
-// ── Stub settings accessor (used before settings-module boots) ──
+// ── Stub accessors (used before the respective module boots) ──
 
 const NO_SETTINGS: PluginSettingsAccessor = {
   get() { return undefined as any; },
@@ -19,31 +35,134 @@ const NO_SETTINGS: PluginSettingsAccessor = {
   register() {},
 };
 
+const notReady = (modName: string) => {
+  throw new Error(`[PluginContext] ${modName} is not yet available. Ensure the module has booted.`);
+};
+
+const NO_FS: PluginFsAccessor = {
+  read() { return notReady("fs") as any; },
+  write() { return notReady("fs") as any; },
+  delete() { return notReady("fs") as any; },
+  rename() { return notReady("fs") as any; },
+  list() { return notReady("fs") as any; },
+  exists() { return notReady("fs") as any; },
+  stat() { return notReady("fs") as any; },
+  mkdir() { return notReady("fs") as any; },
+};
+
+const NO_STORAGE: PluginStorageAccessor = {
+  get() { return notReady("storage") as any; },
+  set() { return notReady("storage") as any; },
+  delete() { return notReady("storage") as any; },
+  clear() { return notReady("storage") as any; },
+};
+
+const NO_AI: PluginAiAccessor = {
+  complete() { return notReady("ai") as any; },
+  chat() { return notReady("ai") as any; },
+  stream() { return notReady("ai") as any; },
+};
+
+const NO_AUTH: PluginAuthAccessor = {
+  login() { return notReady("auth") as any; },
+  logout() { return notReady("auth") as any; },
+  getUser() { return null; },
+  getToken() { return null; },
+  isAuthenticated() { return false; },
+};
+
+const NO_INDEXER: PluginIndexerAccessor = {
+  indexFile() { return notReady("indexer") as any; },
+  indexWorkspace() { return notReady("indexer") as any; },
+  search() { return notReady("indexer") as any; },
+  getSymbols() { return notReady("indexer") as any; },
+};
+
+const NO_COMMANDS: PluginCommandsAccessor = {
+  execute() { notReady("commands"); },
+  register() { return notReady("commands") as any; },
+  getAll() { return []; },
+};
+
+const NO_LAYOUT: PluginLayoutAccessor = {
+  registerLeftView() { return notReady("layout") as any; },
+  registerRightView() { return notReady("layout") as any; },
+  registerBottomPanel() { return notReady("layout") as any; },
+  toggleSidebar() { notReady("layout"); },
+  togglePanel() { notReady("layout"); },
+};
+
+const NO_CONTEXT_MENU: PluginContextMenuAccessor = {
+  register() { return notReady("contextMenu") as any; },
+  show() { notReady("contextMenu"); },
+};
+
+const NO_NOTIFICATIONS: PluginNotificationsAccessor = {
+  show() {},
+  dismiss() {},
+};
+
 export class PluginContext implements IPluginContext {
   private store = new DisposableStore();
   private decorationIds: string[] = [];
   private filePath: string | undefined;
+
+  // ── Lazy-injected module accessors ──────────────────────
   private _settings: PluginSettingsAccessor = NO_SETTINGS;
+  private _fs: PluginFsAccessor = NO_FS;
+  private _storage: PluginStorageAccessor = NO_STORAGE;
+  private _ai: PluginAiAccessor = NO_AI;
+  private _auth: PluginAuthAccessor = NO_AUTH;
+  private _indexer: PluginIndexerAccessor = NO_INDEXER;
+  private _commands: PluginCommandsAccessor = NO_COMMANDS;
+  private _layout: PluginLayoutAccessor = NO_LAYOUT;
+  private _contextMenu: PluginContextMenuAccessor = NO_CONTEXT_MENU;
+  private _notifications: PluginNotificationsAccessor = NO_NOTIFICATIONS;
 
   constructor(
     public readonly pluginId: string,
     public readonly monaco: Monaco,
     public readonly editor: MonacoEditor,
-    private readonly eventBus: EventBus,
+    private readonly _eventBus: EventBus,
     filePath?: string,
   ) {
     this.filePath = filePath;
   }
 
-  /** Settings accessor — wired by the engine after settings-module boots. */
-  get settings(): PluginSettingsAccessor {
-    return this._settings;
+  // ── Module accessor getters ─────────────────────────────
+
+  get settings(): PluginSettingsAccessor { return this._settings; }
+  get fs(): PluginFsAccessor { return this._fs; }
+  get storage(): PluginStorageAccessor { return this._storage; }
+  get ai(): PluginAiAccessor { return this._ai; }
+  get auth(): PluginAuthAccessor { return this._auth; }
+  get indexer(): PluginIndexerAccessor { return this._indexer; }
+  get commands(): PluginCommandsAccessor { return this._commands; }
+  get layout(): PluginLayoutAccessor { return this._layout; }
+  get contextMenu(): PluginContextMenuAccessor { return this._contextMenu; }
+  get notifications(): PluginNotificationsAccessor { return this._notifications; }
+
+  /** EventBus — spec-compliant ctx.eventBus.emit/on/once pattern. */
+  get eventBus(): PluginEventBusAccessor {
+    return {
+      emit: (event: string, data?: unknown) => this._eventBus.emit(event, data),
+      on: (event: string, handler: (data?: unknown) => void) => this.on(event, handler),
+      once: (event: string, handler: (data?: unknown) => void) => this.once(event, handler),
+    };
   }
 
-  /** @internal Called by PluginEngine to wire the settings API. */
-  setSettings(accessor: PluginSettingsAccessor): void {
-    this._settings = accessor;
-  }
+  // ── @internal — called by PluginEngine to wire module APIs ──
+
+  setSettings(accessor: PluginSettingsAccessor): void { this._settings = accessor; }
+  setFs(accessor: PluginFsAccessor): void { this._fs = accessor; }
+  setStorage(accessor: PluginStorageAccessor): void { this._storage = accessor; }
+  setAi(accessor: PluginAiAccessor): void { this._ai = accessor; }
+  setAuth(accessor: PluginAuthAccessor): void { this._auth = accessor; }
+  setIndexer(accessor: PluginIndexerAccessor): void { this._indexer = accessor; }
+  setCommands(accessor: PluginCommandsAccessor): void { this._commands = accessor; }
+  setLayout(accessor: PluginLayoutAccessor): void { this._layout = accessor; }
+  setContextMenu(accessor: PluginContextMenuAccessor): void { this._contextMenu = accessor; }
+  setNotifications(accessor: PluginNotificationsAccessor): void { this._notifications = accessor; }
 
   // ── Content / state ──────────────────────────────────────
 
@@ -99,7 +218,7 @@ export class PluginContext implements IPluginContext {
   // ── Notifications ────────────────────────────────────────
 
   notify(message: string, type: "info" | "success" | "warning" | "error" = "info"): void {
-    this.eventBus.emit(NotifyEvents.Show, { message, level: type, source: this.pluginId });
+    this._eventBus.emit(NotifyEvents.Show, { message, level: type, source: this.pluginId });
   }
 
   // ── Keybindings + actions ────────────────────────────────
@@ -234,11 +353,17 @@ export class PluginContext implements IPluginContext {
   // ── Event bus ────────────────────────────────────────────
 
   emit(event: string, data?: unknown): void {
-    this.eventBus.emit(event, data);
+    this._eventBus.emit(event, data);
   }
 
   on(event: string, handler: (data?: unknown) => void): IDisposable {
-    const d = this.eventBus.on(event, handler);
+    const d = this._eventBus.on(event, handler);
+    this.store.add(d);
+    return d;
+  }
+
+  once(event: string, handler: (data?: unknown) => void): IDisposable {
+    const d = this._eventBus.once(event, handler);
     this.store.add(d);
     return d;
   }

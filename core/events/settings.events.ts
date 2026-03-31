@@ -6,5 +6,6 @@ export enum SettingsEvents {
   SchemaRegister = "settings:schema-register",
   UIOpen = "settings:ui-open",
   JSONOpen = "settings:json-open",
+  ApiReady = "settings:api-ready",
 }
 

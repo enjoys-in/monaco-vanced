@@ -79,6 +79,89 @@ export interface PluginSettingsAccessor {
   register(schema: { namespace: string; schema: Record<string, { type: string; default: unknown; description?: string }> }): void;
 }
 
+// ── Module accessor stubs (lazy-injected via "<module>:api-ready" events) ──
+// Each module exposes its API via the EventBus. The PluginContext holds these
+// as lazy properties — undefined until the module boots (same pattern as settings).
+
+/** Filesystem module API surface. Injected via "fs:api-ready". */
+export interface PluginFsAccessor {
+  read(path: string): Promise<string>;
+  write(path: string, content: string): Promise<void>;
+  delete(path: string): Promise<void>;
+  rename(oldPath: string, newPath: string): Promise<void>;
+  list(path: string): Promise<string[]>;
+  exists(path: string): Promise<boolean>;
+  stat(path: string): Promise<{ size: number; mtime: number; isDirectory: boolean }>;
+  mkdir(path: string): Promise<void>;
+}
+
+/** Storage module API surface. Injected via "storage:api-ready". */
+export interface PluginStorageAccessor {
+  get<T = unknown>(key: string): Promise<T | undefined>;
+  set<T = unknown>(key: string, value: T): Promise<void>;
+  delete(key: string): Promise<void>;
+  clear(): Promise<void>;
+}
+
+/** AI module API surface. Injected via "ai:api-ready". */
+export interface PluginAiAccessor {
+  complete(prompt: string, opts?: Record<string, unknown>): Promise<string>;
+  chat(messages: Array<{ role: string; content: string }>, opts?: Record<string, unknown>): Promise<string>;
+  stream(prompt: string, opts?: Record<string, unknown>): AsyncIterable<string>;
+}
+
+/** Auth module API surface. Injected via "auth:api-ready". */
+export interface PluginAuthAccessor {
+  login(provider: string): Promise<void>;
+  logout(): Promise<void>;
+  getUser(): { id: string; name: string; email?: string; avatar?: string } | null;
+  getToken(provider: string): string | null;
+  isAuthenticated(): boolean;
+}
+
+/** Indexer module API surface. Injected via "indexer:api-ready". */
+export interface PluginIndexerAccessor {
+  indexFile(path: string, content: string): Promise<void>;
+  indexWorkspace(): Promise<void>;
+  search(query: string): Promise<Array<{ path: string; line: number; text: string }>>;
+  getSymbols(path: string): Promise<Array<{ name: string; kind: string; range: unknown }>>;
+}
+
+/** Commands module API surface. Injected via "commands:api-ready". */
+export interface PluginCommandsAccessor {
+  execute(commandId: string, ...args: unknown[]): void;
+  register(commandId: string, handler: (...args: unknown[]) => void, label?: string): IDisposable;
+  getAll(): Array<{ id: string; label?: string }>;
+}
+
+/** Layout module API surface. Injected via "layout:api-ready". */
+export interface PluginLayoutAccessor {
+  registerLeftView(view: { id: string; title: string; icon?: string; render: (container: HTMLElement) => void }): IDisposable;
+  registerRightView(view: { id: string; title: string; render: (container: HTMLElement) => void }): IDisposable;
+  registerBottomPanel(panel: { id: string; title: string; render: (container: HTMLElement) => void }): IDisposable;
+  toggleSidebar(): void;
+  togglePanel(): void;
+}
+
+/** Context menu module API surface. Injected via "contextMenu:api-ready". */
+export interface PluginContextMenuAccessor {
+  register(item: { label: string; command: string; group?: string; when?: string }): IDisposable;
+  show(x: number, y: number, items: Array<{ label: string; handler: () => void }>): void;
+}
+
+/** Notification module API surface. Injected via "notifications:api-ready". */
+export interface PluginNotificationsAccessor {
+  show(message: string, type?: "info" | "success" | "warning" | "error"): void;
+  dismiss(id: string): void;
+}
+
+/** EventBus accessor — exposed directly on PluginContext for spec compliance. */
+export interface PluginEventBusAccessor {
+  emit(event: string, data?: unknown): void;
+  on(event: string, handler: (data?: unknown) => void): IDisposable;
+  once(event: string, handler: (data?: unknown) => void): IDisposable;
+}
+
 // ── Plugin context ──────────────────────────────────────────
 
 export interface PluginContext {
@@ -89,11 +172,30 @@ export interface PluginContext {
   /** Plugin ID that owns this context */
   readonly pluginId: string;
 
-  /**
-   * Settings accessor — available after settings-module boots.
-   * Modules use ctx.settings.get("editor.fontSize") etc.
-   */
+  // ── Module accessors (lazy-injected via "<module>:api-ready" events) ──
+
+  /** Settings accessor — available after settings-module boots. */
   readonly settings: PluginSettingsAccessor;
+  /** Filesystem module — available after fs-module boots. */
+  readonly fs: PluginFsAccessor;
+  /** Storage module — available after storage-module boots. */
+  readonly storage: PluginStorageAccessor;
+  /** AI module — available after ai-module boots. */
+  readonly ai: PluginAiAccessor;
+  /** Auth module — available after auth-module boots. */
+  readonly auth: PluginAuthAccessor;
+  /** Indexer module — available after indexer-module boots. */
+  readonly indexer: PluginIndexerAccessor;
+  /** Commands module — available after command-module boots. */
+  readonly commands: PluginCommandsAccessor;
+  /** Layout module — available after layout-module boots. */
+  readonly layout: PluginLayoutAccessor;
+  /** Context menu module — available after context-menu-module boots. */
+  readonly contextMenu: PluginContextMenuAccessor;
+  /** Notifications module — available after notification-module boots. */
+  readonly notifications: PluginNotificationsAccessor;
+  /** EventBus — direct access matching spec's ctx.eventBus pattern. */
+  readonly eventBus: PluginEventBusAccessor;
 
   // ── Content / state ────────────────────────────────────
 
@@ -158,6 +260,7 @@ export interface PluginContext {
 
   emit(event: string, data?: unknown): void;
   on(event: string, handler: (data?: unknown) => void): IDisposable;
+  once(event: string, handler: (data?: unknown) => void): IDisposable;
 }
 
 // ── Boot configuration ──────────────────────────────────────
@@ -177,24 +280,24 @@ export interface BootConfig {
   onAnyFailed?: (failures: Array<{ pluginId: string; error: unknown }>) => void;
 }
 
-// ── Operation hooks (universal callback pattern) ─────────
+// ── Operation hooks (universal callback pattern — spec-compliant) ─────────
 
-export interface OperationResult<T = unknown> {
-  operation: string;
+export interface OperationResult<TOp extends string = string> {
   module: string;
-  data: T;
-  timestamp: number;
+  op: TOp;
+  duration: number;
+  payload: unknown;
 }
 
-export interface OperationError<T = unknown> {
-  operation: string;
+export interface OperationError<TOp extends string = string> {
   module: string;
-  error: unknown;
-  context?: T;
-  timestamp: number;
+  op: TOp;
+  message: string;
+  cause?: Error;
+  duration: number;
 }
 
-export interface OperationHooks<T = unknown> {
-  onSuccess?(result: OperationResult<T>): void;
-  onError?(error: OperationError<T>): void;
+export interface OperationHooks<TOp extends string = string> {
+  onSuccess?(result: OperationResult<TOp>): void | Promise<void>;
+  onError?(error: OperationError<TOp>): void | Promise<void>;
 }

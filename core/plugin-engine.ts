@@ -165,8 +165,8 @@ export class PluginEngine {
       }
     }
 
-    // Phase 5: Wire settings accessor into all contexts
-    this.wireSettingsAccessor();
+    // Phase 5: Wire module accessors into all contexts
+    this.wireModuleAccessors();
 
     // Phase 6: Wire runtime event routing
     this.wireRuntimeEvents(monaco, editor);
@@ -225,20 +225,32 @@ export class PluginEngine {
     return false;
   }
 
-  // ── Wire settings accessor into all contexts ──────────────
+  // ── Wire module accessors into all contexts ────────────────
+  // Each module signals its API via a well-known "<module>:api-ready" event.
+  // The engine listens and injects into every PluginContext — same pattern as settings.
 
-  private wireSettingsAccessor(): void {
-    // The settings-module's API is injected into every PluginContext
-    // so that plugins can use ctx.settings.get/set/watch/register.
-    // Look for the settings plugin by its well-known event pattern.
-    // The settings plugin signals its API via the "settings:api-ready" event.
-    this.eventBus.on("settings:api-ready", (data?: unknown) => {
-      const accessor = data as import("./types").PluginSettingsAccessor | undefined;
-      if (!accessor) return;
-      for (const ctx of this.contexts.values()) {
-        ctx.setSettings(accessor);
-      }
-    });
+  private wireModuleAccessors(): void {
+    const wireMap: Array<{ event: string; setter: keyof PluginContext }> = [
+      { event: "settings:api-ready", setter: "setSettings" as any },
+      { event: "fs:api-ready", setter: "setFs" as any },
+      { event: "storage:api-ready", setter: "setStorage" as any },
+      { event: "ai:api-ready", setter: "setAi" as any },
+      { event: "auth:api-ready", setter: "setAuth" as any },
+      { event: "indexer:api-ready", setter: "setIndexer" as any },
+      { event: "commands:api-ready", setter: "setCommands" as any },
+      { event: "layout:api-ready", setter: "setLayout" as any },
+      { event: "contextMenu:api-ready", setter: "setContextMenu" as any },
+      { event: "notifications:api-ready", setter: "setNotifications" as any },
+    ];
+
+    for (const { event, setter } of wireMap) {
+      this.eventBus.on(event, (data?: unknown) => {
+        if (!data) return;
+        for (const ctx of this.contexts.values()) {
+          (ctx as any)[setter](data);
+        }
+      });
+    }
   }
 
   // ── Runtime event routing ─────────────────────────────────
@@ -275,6 +287,22 @@ export class PluginEngine {
           }
         }
       }, 300);
+    });
+
+    // Config change — settings module emits settings:change, we route to onConfigChange
+    this.eventBus.on("settings:change", (data?: unknown) => {
+      const d = data as { key?: string; value?: unknown } | undefined;
+      if (!d?.key) return;
+      const config = { [d.key]: d.value };
+      for (const id of this.bootOrder) {
+        const { plugin } = this.plugins.get(id)!;
+        const ctx = this.contexts.get(id);
+        if (plugin.onConfigChange && ctx) {
+          this.errorBoundary.guardSync(id, "onConfigChange", () =>
+            plugin.onConfigChange!(config, ctx),
+          );
+        }
+      }
     });
   }
 

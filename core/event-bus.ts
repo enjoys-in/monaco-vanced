@@ -104,4 +104,9 @@ export class EventBus {
     this.listeners.clear();
     this.wildcardListeners.clear();
   }
+
+  /** Alias for clear() — spec compliance. */
+  dispose(): void {
+    this.clear();
+  }
 }
