@@ -1,5 +1,5 @@
 {
-  "name": "monaco-vanced",
+  "name": "@enjoys/monaco-vanced",
   "version": "0.1.0",
   "type": "module",
   "description": "A plugin-based, event-driven IDE built on Monaco Editor",

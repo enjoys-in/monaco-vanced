@@ -1,0 +1,1297 @@
+================================================================================
+  LSP BRIDGE MODULE — Dual-Mode Language Server Client (V1 Custom + V2 Built-in)
+================================================================================
+
+PROJECT: Monaco-Vanced LSP Bridge
+MODULE: plugins/language/lsp-bridge-module/
+
+GOAL:
+Provide TWO LSP client implementations that connect Monaco to any
+LSP-compatible language server over WebSocket:
+
+  Version 1 (Custom)  — Direct WebSocket + manual JSON-RPC 2.0 framing.
+                         Lightweight, full control over retry/reconnect.
+  Version 2 (Built-in) — Full LSP lifecycle using vscode-ws-jsonrpc for
+                         transport and the standard LSP initialize handshake.
+                         Registers 24 Monaco providers via LSP↔Monaco converters.
+                         Handles textDocument/didOpen, didChange, diagnostics.
+
+Both clients are registered. User chooses which to use via settings.
+Each mode establishes its own WebSocket, manages its own lifecycle, and can
+be switched at runtime without reloading.
+
+This module does NOT own language data, CDN fetching, or provider data —
+those belong to context-engine. This module manages WebSocket transport,
+LSP protocol, provider registration, and exposes clients for other modules.
+
+DEFAULT SERVER:
+  URL:      Configurable via settings (default from env LSP_URL)
+  Default:  https://monaco-lsp-hub.onrender.com/
+  Protocol: WebSocket + JSON-RPC 2.0
+
+REFERENCE:
+  Architecture patterns adapted from terminus-web/lib/lsp/ (own project).
+  Adapted to MonacoPlugin architecture with ctx.provide() pattern.
+
+
+================================================================================
+SECTION 1 — ENVIRONMENT VARIABLES
+================================================================================
+
+  This module uses one env variable:
+
+  LSP_URL = https://monaco-lsp-hub.onrender.com/
+    → Used by: lsp-bridge-module (this module)
+    → WebSocket connection target (base URL — language path appended at runtime)
+
+  Read from environment at build time via Vite's define/envPrefix.
+  Overridable in user settings at runtime.
+
+  NOTE: CONTEXT_CDN_BASE_URL is owned by context-engine module, not this one.
+
+
+================================================================================
+SECTION 2 — DUAL MODE ARCHITECTURE
+================================================================================
+
+  The module supports two client versions. Both can run simultaneously or
+  the user can choose one. Selection is via settings: lsp.mode
+
+  ┌────────────────────┬───────────────────────────────────────────────────┐
+  │ Aspect             │ V1 (Custom)           │ V2 (Built-in)            │
+  ├────────────────────┼───────────────────────┼──────────────────────────┤
+  │ Transport          │ Raw WebSocket         │ vscode-ws-jsonrpc        │
+  │ Framing            │ Manual JSON.stringify  │ MessageReader/Writer     │
+  │ Handshake          │ None — fire requests  │ Full initialize/         │
+  │                    │ directly              │ initialized handshake    │
+  │ Provider reg       │ Generic bridge        │ 24 typed Monaco          │
+  │                    │ (ProviderFactory)     │ providers via converters │
+  │ didOpen/didChange  │ Not managed           │ Automatic — tracks open  │
+  │                    │ (consumer handles)    │ models + content changes │
+  │ Diagnostics        │ Via notification sub  │ Automatic markers bridge │
+  │ Server caps        │ Not tracked           │ Parsed from initialize   │
+  │                    │                       │ response, guards features│
+  │ Reconnect          │ Same retry logic      │ Same retry logic         │
+  │ Best for           │ Lightweight, custom   │ Full LSP experience      │
+  │                    │ protocol extensions   │ with all 24 providers    │
+  └────────────────────┴───────────────────────┴──────────────────────────┘
+
+
+================================================================================
+SECTION 3 — SHARED TYPES
+================================================================================
+
+  Lives in: plugins/language/lsp-bridge-module/types.ts
+
+──────────────────────────────────────────────────────────────
+3A — CONNECTION CONFIG
+──────────────────────────────────────────────────────────────
+
+  interface LspConnectionConfig {
+    url: string;                  // from settings or env LSP_URL
+    retryIntervalMs: number;      // default: 15000 (15 seconds)
+    maxRetries: number;           // default: 10
+    timeoutMs: number;            // default: 10000 (10 seconds per attempt)
+  }
+
+  DEFAULT CONFIG:
+    url:              import.meta.env.LSP_URL ?? "https://monaco-lsp-hub.onrender.com/"
+    retryIntervalMs:  15_000
+    maxRetries:       10
+    timeoutMs:        10_000
+
+──────────────────────────────────────────────────────────────
+3B — CONNECTION STATE
+──────────────────────────────────────────────────────────────
+
+  type LspConnectionState = "disconnected" | "connecting" | "connected" | "reconnecting" | "failed";
+
+  type LspMode = "custom" | "builtin" | "both";
+
+──────────────────────────────────────────────────────────────
+3C — JSON-RPC MESSAGE TYPES
+──────────────────────────────────────────────────────────────
+
+  // Request: client → server (expects response)
+  interface JsonRpcRequest {
+    jsonrpc: "2.0";
+    id: number;
+    method: string;
+    params?: unknown;
+  }
+
+  // Response: server → client
+  interface JsonRpcResponse {
+    jsonrpc: "2.0";
+    id: number;
+    result?: unknown;
+    error?: { code: number; message: string; data?: unknown };
+  }
+
+  // Notification: either direction (no response)
+  interface JsonRpcNotification {
+    jsonrpc: "2.0";
+    method: string;
+    params?: unknown;
+  }
+
+──────────────────────────────────────────────────────────────
+3D — LSP CONNECTION OPTIONS (Shared by V1 and V2)
+──────────────────────────────────────────────────────────────
+
+  interface LspConnectionOptions {
+    languageId: string;           // Monaco language ID
+    wsUrl: string;                // Full WebSocket URL (built from base + language path)
+    documentUri?: string;         // For textDocument/didOpen (V2 builds this automatically)
+    rootUri?: string;             // Workspace root URI
+    autoReconnect?: boolean;      // default: true
+    maxReconnectAttempts?: number; // default: 10  (alias for maxRetries)
+    reconnectDelay?: number;      // default: 15000 (alias for retryIntervalMs)
+  }
+
+──────────────────────────────────────────────────────────────
+3E — LSP CONNECTION RESULT
+──────────────────────────────────────────────────────────────
+
+  interface LspConnection {
+    client: LspClient;            // V1: JsonRpcClient, V2: BuiltinLspClient
+    providers: LspProviderRegistration | null;
+    dispose(): void;
+    isConnected(): boolean;
+  }
+
+  interface LspProviderRegistration {
+    disposables: IDisposable[];
+    dispose(): void;
+  }
+
+──────────────────────────────────────────────────────────────
+3F — KNOWN LSP LANGUAGES
+──────────────────────────────────────────────────────────────
+
+  Lives in: plugins/language/lsp-bridge-module/languages.ts
+
+  Record of 70+ languages with known LSP server support.
+  Used to check if a language can connect to LSP before attempting WebSocket.
+
+  const LSP_LANGUAGES: Record<string, { name: string; wsPath: string }> = {
+    // JavaScript / TypeScript family
+    typescript:      { name: "TypeScript Language Server", wsPath: "typescript" },
+    javascript:      { name: "TypeScript Language Server", wsPath: "typescript" },
+    typescriptreact: { name: "TypeScript Language Server", wsPath: "typescript" },
+    javascriptreact: { name: "TypeScript Language Server", wsPath: "typescript" },
+    // Systems
+    go:              { name: "gopls",           wsPath: "go" },
+    rust:            { name: "rust-analyzer",   wsPath: "rust" },
+    c:               { name: "clangd",          wsPath: "c" },
+    cpp:             { name: "clangd",          wsPath: "cpp" },
+    // JVM
+    java:            { name: "Eclipse JDT.LS",  wsPath: "java" },
+    kotlin:          { name: "kotlin-language-server", wsPath: "kotlin" },
+    scala:           { name: "Metals",          wsPath: "scala" },
+    // .NET
+    csharp:          { name: "OmniSharp",       wsPath: "csharp" },
+    fsharp:          { name: "FsAutoComplete",  wsPath: "fsharp" },
+    // Scripting
+    python:          { name: "Pylsp",           wsPath: "python" },
+    ruby:            { name: "Solargraph",      wsPath: "ruby" },
+    php:             { name: "phpactor",        wsPath: "php" },
+    lua:             { name: "lua-language-server", wsPath: "lua" },
+    // Shell
+    shellscript:     { name: "bash-language-server", wsPath: "shellscript" },
+    bash:            { name: "bash-language-server", wsPath: "shellscript" },
+    // Web
+    html:            { name: "vscode-html-languageservice", wsPath: "html" },
+    css:             { name: "vscode-css-languageservice",  wsPath: "css" },
+    scss:            { name: "vscode-css-languageservice",  wsPath: "scss" },
+    json:            { name: "vscode-json-languageservice", wsPath: "json" },
+    yaml:            { name: "yaml-language-server", wsPath: "yaml" },
+    vue:             { name: "Volar",           wsPath: "vue" },
+    svelte:          { name: "svelte-language-server", wsPath: "svelte" },
+    // Infrastructure
+    dockerfile:      { name: "dockerfile-language-server", wsPath: "dockerfile" },
+    terraform:       { name: "terraform-ls",    wsPath: "terraform" },
+    // Database
+    sql:             { name: "sql-language-server", wsPath: "sql" },
+    graphql:         { name: "graphql-language-service", wsPath: "graphql" },
+    prisma:          { name: "prisma-language-server", wsPath: "prisma" },
+    // Functional
+    haskell:         { name: "haskell-language-server", wsPath: "haskell" },
+    ocaml:           { name: "ocamllsp",        wsPath: "ocaml" },
+    // Modern
+    swift:           { name: "sourcekit-lsp",   wsPath: "swift" },
+    zig:             { name: "zls",             wsPath: "zig" },
+    // Docs
+    markdown:        { name: "marksman",        wsPath: "markdown" },
+    latex:           { name: "texlab",          wsPath: "latex" },
+    // ... 30+ more (see terminus-web reference for full list
+    //     dart, elixir, erlang, julia, r, perl, nim, v, clojure,
+    //     groovy, vb, powershell, bat, toml, xml, bicep, ansible,
+    //     nix, solidity, wgsl, glsl, cmake, makefile, proto3, etc.)
+  };
+
+  function hasLSPSupport(languageId: string): boolean
+    → Returns true if languageId exists in LSP_LANGUAGES
+
+  function buildLSPWebSocketUrl(baseUrl: string, languageId: string): string | null
+    → Looks up LSP_LANGUAGES[languageId].wsPath
+    → Converts http(s) to ws(s): baseUrl.replace(/^http/, "ws")
+    → Returns `${wsBase}/lsp/${wsPath}` or null if unsupported
+    → Example: "https://monaco-lsp-hub.onrender.com" + "typescript"
+              → "wss://monaco-lsp-hub.onrender.com/lsp/typescript"
+
+
+================================================================================
+SECTION 4 — CONNECTION MANAGEMENT (SHARED)
+================================================================================
+
+  Lives in: plugins/language/lsp-bridge-module/connection.ts
+
+  Base connection logic shared by both V1 and V2. Each version creates its
+  own WebSocket but uses the same retry/lifecycle state machine.
+
+──────────────────────────────────────────────────────────────
+4A — CONNECTION LIFECYCLE
+──────────────────────────────────────────────────────────────
+
+  class LspConnectionManager {
+
+    private state: LspConnectionState = "disconnected";
+    private retryCount: number = 0;
+    private retryTimer: ReturnType<typeof setTimeout> | null = null;
+    private hasConnectedOnce: boolean = false;
+
+    constructor(
+      private eventBus: EventBus,
+      private config: LspConnectionConfig,
+    ) {}
+
+    // ── State machine ─────────────────────────────────────
+
+    transition(newState: LspConnectionState): void
+      → Updates state
+      → Emits corresponding LspEvent
+      → Updates status bar text
+
+    getState(): LspConnectionState
+    isConnected(): boolean
+
+    // ── Retry logic ───────────────────────────────────────
+
+    scheduleRetry(connectFn: () => Promise<void>): void
+      → retryCount++
+      → If retryCount >= maxRetries → transition("failed"), fire failure notification
+      → Else → wait retryIntervalMs, call connectFn()
+
+    resetRetries(): void
+      → retryCount = 0
+
+    cancelRetry(): void
+      → Clear retryTimer
+
+    // ── First-connect tracking ────────────────────────────
+
+    markFirstConnect(): boolean
+      → If !hasConnectedOnce → set true, return true (fire notification)
+      → Else return false (skip notification)
+  }
+
+──────────────────────────────────────────────────────────────
+4B — RETRY BEHAVIOR
+──────────────────────────────────────────────────────────────
+
+  ┌──────────┬──────────────────────────────────────────────────┐
+  │ Attempt  │ Timing                                           │
+  ├──────────┼──────────────────────────────────────────────────┤
+  │ 1        │ Immediate (on first connect or manual retry)     │
+  │ 2–10     │ Every 15 seconds after previous failure          │
+  │ After 10 │ STOP. Show error notification. Wait for manual.  │
+  └──────────┴──────────────────────────────────────────────────┘
+
+
+================================================================================
+SECTION 5 — VERSION 1: CUSTOM JSON-RPC CLIENT
+================================================================================
+
+  Lives in: plugins/language/lsp-bridge-module/v1-custom-client.ts
+
+  Direct WebSocket + manual JSON-RPC 2.0 framing. No LSP initialize
+  handshake — sends RPC requests immediately on connect. Lightweight,
+  suitable for custom protocol extensions beyond standard LSP.
+
+──────────────────────────────────────────────────────────────
+5A — CUSTOM CLIENT CLASS
+──────────────────────────────────────────────────────────────
+
+  class CustomLspClient {
+
+    private ws: WebSocket | null = null;
+    private manager: LspConnectionManager;
+    private pendingRequests: Map<number, PendingRequest>;
+    private notificationHandlers: Map<string, Set<(params: unknown) => void>>;
+    private nextRequestId: number = 1;
+
+    constructor(
+      private eventBus: EventBus,
+      private config: LspConnectionConfig,
+    ) {
+      this.manager = new LspConnectionManager(eventBus, config);
+    }
+
+    // ── Connect ───────────────────────────────────────────
+
+    async connect(): Promise<void>
+      → manager.transition("connecting")
+      → Opens new WebSocket(config.url) directly
+      → On open:
+          manager.transition("connected")
+          manager.markFirstConnect() → notification if first time
+      → On message:
+          Parse JSON → route to pending request or notification handler
+      → On error/close:
+          manager.scheduleRetry(() => this.connect())
+
+    // ── Disconnect ────────────────────────────────────────
+
+    disconnect(): void
+      → manager.cancelRetry()
+      → Close WebSocket
+      → Reject all pending requests with DisconnectedError
+      → manager.transition("disconnected")
+
+    // ── RPC Methods ───────────────────────────────────────
+
+    async request<T>(method: string, params?: unknown): Promise<T>
+      → Generates auto-increment request id
+      → Sends { jsonrpc: "2.0", id, method, params }
+      → Returns promise that resolves on matching response id
+      → Emits LspEvent.RequestSent
+      → On response: emits LspEvent.ResponseReceived
+      → Timeout: config.timeoutMs → rejects with TimeoutError, emits LspEvent.RequestTimeout
+      → If disconnected: rejects immediately
+
+    notify(method: string, params?: unknown): void
+      → Sends { jsonrpc: "2.0", method, params } (no id, no response)
+
+    onNotification(method: string, handler: (params: unknown) => void): IDisposable
+      → Registers handler for server-sent notifications
+      → Returns disposable to unregister
+
+    // ── State ─────────────────────────────────────────────
+
+    getState(): LspConnectionState → delegates to manager
+    isConnected(): boolean → delegates to manager
+    retry(): void → manager.resetRetries() + connect()
+  }
+
+──────────────────────────────────────────────────────────────
+5B — RPC METHOD MAP (29+ METHODS)
+──────────────────────────────────────────────────────────────
+
+  These methods follow standard LSP text document methods.
+  The context-engine LSP server supports these 29+ methods:
+
+  ┌──────────────────────────────────────┬──────────────────────────────────┐
+  │ JSON-RPC Method                      │ Provider Type                    │
+  ├──────────────────────────────────────┼──────────────────────────────────┤
+  │ textDocument/completion              │ completion                       │
+  │ textDocument/hover                   │ hover                            │
+  │ textDocument/definition              │ definition                       │
+  │ textDocument/declaration             │ declaration                      │
+  │ textDocument/typeDefinition          │ typeDefinition                   │
+  │ textDocument/implementation          │ implementation                   │
+  │ textDocument/references              │ references                       │
+  │ textDocument/documentHighlight       │ documentHighlight                │
+  │ textDocument/documentSymbol          │ documentSymbol                   │
+  │ textDocument/codeAction              │ codeActions                      │
+  │ textDocument/codeLens                │ codeLens                         │
+  │ textDocument/documentLink            │ links                            │
+  │ textDocument/signatureHelp           │ signatureHelp                    │
+  │ textDocument/foldingRange            │ foldingRange                     │
+  │ textDocument/inlayHint               │ inlayHints                      │
+  │ textDocument/documentColor           │ color                            │
+  │ textDocument/rename                  │ rename                           │
+  │ textDocument/prepareRename           │ rename (prepare)                 │
+  │ textDocument/selectionRange          │ selectionRange                   │
+  │ textDocument/linkedEditingRange      │ linkedEditingRange               │
+  │ textDocument/formatting              │ formatting                       │
+  │ textDocument/rangeFormatting         │ documentRangeFormatting          │
+  │ textDocument/onTypeFormatting        │ onTypeFormatting                 │
+  │ textDocument/semanticTokens/full     │ semanticTokens                   │
+  │ textDocument/semanticTokens/range    │ rangeSemanticTokens              │
+  │ textDocument/inlineCompletion        │ inlineCompletions                │
+  │ textDocument/monarchTokens           │ monarchTokens                    │
+  │ textDocument/newSymbolNames          │ newSymbolNames                   │
+  │ textDocument/multiDocumentHighlight  │ multiDocumentHighlight           │
+  │ custom/commands                      │ commands                         │
+  └──────────────────────────────────────┴──────────────────────────────────┘
+
+──────────────────────────────────────────────────────────────
+5C — PROVIDER BRIDGE (V1)
+──────────────────────────────────────────────────────────────
+
+  Lives in: plugins/language/lsp-bridge-module/provider-bridge.ts
+
+  The V1 provider bridge translates Monaco provider requests into JSON-RPC
+  calls. Uses generic ProviderFactory pattern — consumers define how to
+  map Monaco → RPC and RPC → Monaco.
+
+  class LspProviderBridge {
+
+    constructor(
+      private rpcClient: CustomLspClient,
+      private monaco: typeof import("monaco-editor"),
+    ) {}
+
+    registerProvider(languageId: string, method: string, providerFactory: ProviderFactory): IDisposable
+      → Registers a single Monaco provider that proxies to an RPC method
+      → Returns IDisposable for cleanup
+
+    registerAllProviders(languageId: string, methods: string[]): IDisposable[]
+      → Batch-registers providers for given RPC method list
+
+    // Usage by context-engine:
+    //   bridge.registerProvider("python", "textDocument/completion", (rpcClient) => ({
+    //     provideCompletionItems(model, position) {
+    //       const params = { textDocument: { uri: model.uri }, position };
+    //       return rpcClient.request("textDocument/completion", params);
+    //     }
+    //   }));
+  }
+
+  FALLBACK:
+  - V1 only provides the RPC transport layer
+  - If WebSocket disconnected or timeout → rejects the promise
+  - Fallback to CDN/IndexedDB is handled by the CONSUMER (context-engine)
+
+
+================================================================================
+SECTION 6 — VERSION 2: BUILT-IN MONACO LSP CLIENT
+================================================================================
+
+  Lives in: plugins/language/lsp-bridge-module/v2-builtin-client.ts
+
+  Full LSP lifecycle. Opens WebSocket, performs initialize/initialized
+  handshake, parses server capabilities, registers 24 typed Monaco
+  providers, tracks open documents, bridges diagnostics to markers.
+
+  Uses converters.ts (LSP ↔ Monaco type conversions).
+
+──────────────────────────────────────────────────────────────
+6A — BUILTIN CLIENT CLASS
+──────────────────────────────────────────────────────────────
+
+  class BuiltinLspClient {
+
+    private ws: WebSocket | null = null;
+    private manager: LspConnectionManager;
+    private pendingRequests: Map<number, PendingRequest>;
+    private nextRequestId: number = 1;
+    private serverCapabilities: Record<string, any> = {};
+    private providerRegistration: LspProviderRegistration | null = null;
+    private documentVersions: Map<string, number> = new Map();
+
+    constructor(
+      private eventBus: EventBus,
+      private config: LspConnectionConfig,
+      private monaco: typeof import("monaco-editor"),
+      private editor: monacoNs.editor.ICodeEditor | null,
+    ) {
+      this.manager = new LspConnectionManager(eventBus, config);
+    }
+
+    // ── Connect ───────────────────────────────────────────
+
+    async connect(languageId: string): Promise<LspConnection>
+      → manager.transition("connecting")
+      → Builds wsUrl via buildLSPWebSocketUrl(config.url, languageId)
+      → If null → throw "Unsupported language: ${languageId}"
+      → Opens new WebSocket(wsUrl)
+      → On open:
+          await performInitializeHandshake(languageId)
+          manager.transition("connected")
+          markFirstConnect → notification if first
+          registerAllProviders(languageId)
+          sendDidOpen(languageId) for current model
+          subscribe to model content changes → sendDidChange
+      → On message:
+          Parse JSON → route to pending request or notification
+          Handle "textDocument/publishDiagnostics" → set Monaco markers
+          Handle "window/showMessage" → forward to notification service
+          Handle "window/logMessage" → console log (errors/warnings → notification)
+      → On error/close:
+          dispose providers
+          manager.scheduleRetry(() => this.connect(languageId))
+      → Returns LspConnection { client, providers, dispose, isConnected }
+
+──────────────────────────────────────────────────────────────
+6B — LSP INITIALIZE HANDSHAKE
+──────────────────────────────────────────────────────────────
+
+  private async performInitializeHandshake(languageId: string): Promise<void>
+
+    1. Send "initialize" request:
+       {
+         jsonrpc: "2.0",
+         id: 1,
+         method: "initialize",
+         params: {
+           processId: null,
+           rootUri: config.rootUri ?? "file:///workspace",
+           capabilities: {
+             textDocument: {
+               completion: { completionItem: { snippetSupport: true } },
+               hover: { contentFormat: ["markdown", "plaintext"] },
+               signatureHelp: { signatureInformation: { parameterInformation: { labelOffsetSupport: true } } },
+               synchronization: { didSave: true, willSave: false },
+               codeAction: { codeActionLiteralSupport: { codeActionKind: { valueSet: [] } } },
+               semanticTokens: { requests: { full: true, range: true }, tokenTypes: [...], tokenModifiers: [...] },
+               inlayHint: { resolveSupport: { properties: ["tooltip", "textEdits", "label.tooltip", "label.location", "label.command"] } },
+             },
+             workspace: {
+               workspaceFolders: true,
+               didChangeConfiguration: { dynamicRegistration: false },
+             },
+           },
+           initializationOptions: {},
+         },
+       }
+
+    2. Receive "initialize" response:
+       → Parse result.capabilities → store as this.serverCapabilities
+       → Used to guard which providers to register
+         (e.g. only register completionProvider if capabilities.completionProvider exists)
+
+    3. Send "initialized" notification:
+       { jsonrpc: "2.0", method: "initialized", params: {} }
+
+──────────────────────────────────────────────────────────────
+6C — DOCUMENT SYNCHRONIZATION
+──────────────────────────────────────────────────────────────
+
+  private sendDidOpen(languageId: string): void
+    → Gets current editor model
+    → Sends notification: "textDocument/didOpen" with:
+      { textDocument: { uri: model.uri, languageId, version: 1, text: model.getValue() } }
+    → Records version in documentVersions map
+
+  private setupDidChange(): IDisposable
+    → Subscribes to model.onDidChangeContent
+    → On each change:
+        version++ in documentVersions
+        Sends notification: "textDocument/didChange" with:
+        { textDocument: { uri, version }, contentChanges: [{ text: model.getValue() }] }
+    → Full document sync (not incremental) for simplicity
+
+──────────────────────────────────────────────────────────────
+6D — DIAGNOSTICS BRIDGE
+──────────────────────────────────────────────────────────────
+
+  Listens for server notification: "textDocument/publishDiagnostics"
+
+  On receive:
+    → params: { uri: string, diagnostics: Diagnostic[] }
+    → Convert diagnostics via toMonacoMarkers(monaco, diagnostics)
+    → Apply: monaco.editor.setModelMarkers(model, `lsp-${languageId}`, markers)
+
+  Only applies if the model URI matches the diagnostics URI.
+
+──────────────────────────────────────────────────────────────
+6E — SERVER MESSAGE HANDLING
+──────────────────────────────────────────────────────────────
+
+  Listens for server notifications:
+    "window/showMessage"  → forward to notificationService as toast
+    "window/logMessage"   → console log, only surface errors/warnings as notifications
+
+  LSPMessageType mapping:
+    1 (Error)   → "error"
+    2 (Warning) → "warning"
+    3 (Info)    → "info"
+    4 (Log)     → "log"
+    5 (Debug)   → "debug"
+
+
+================================================================================
+SECTION 7 — LSP ↔ MONACO CONVERTERS
+================================================================================
+
+  Lives in: plugins/language/lsp-bridge-module/converters.ts
+
+  Bidirectional converters between LSP protocol types and Monaco editor
+  types. Used exclusively by V2 (Built-in) client for provider registration.
+
+  Adapter pattern — translates between two incompatible interfaces
+  (LSP ↔ Monaco) without coupling either side.
+
+──────────────────────────────────────────────────────────────
+7A — POSITION / RANGE / LOCATION
+──────────────────────────────────────────────────────────────
+
+  toMonacoPosition(pos: lsp.Position): IPosition
+    → { lineNumber: pos.line + 1, column: pos.character + 1 }
+
+  fromMonacoPosition(pos: IPosition): lsp.Position
+    → Position.create(pos.lineNumber - 1, pos.column - 1)
+
+  toMonacoRange(range: lsp.Range): IRange
+    → 0-based → 1-based conversion for all four coordinates
+
+  fromMonacoRange(range: IRange): lsp.Range
+    → 1-based → 0-based conversion for all four coordinates
+
+──────────────────────────────────────────────────────────────
+7B — COMPLETION
+──────────────────────────────────────────────────────────────
+
+  Lazy-init map: LSP_TO_MONACO_COMPLETION_KIND (25 entries)
+    lsp.CompletionItemKind.Text       → monaco.languages.CompletionItemKind.Text
+    lsp.CompletionItemKind.Method     → ...Method
+    lsp.CompletionItemKind.Function   → ...Function
+    ... (all 25 LSP completion kinds mapped 1:1)
+
+  toMonacoCompletionItem(monaco, item: lsp.CompletionItem, range): CompletionItem
+    → Maps: label, kind, detail, documentation (string or markdown),
+      insertText, insertTextRules (snippet detection), range, sortText,
+      filterText, preselect, tags
+
+──────────────────────────────────────────────────────────────
+7C — HOVER
+──────────────────────────────────────────────────────────────
+
+  toMonacoHover(hover: lsp.Hover): monacoNs.languages.Hover
+    → Handles: string, string[], MarkedString, MarkupContent
+    → Wraps code blocks with language fences for MarkedString objects
+    → Returns { contents: IMarkdownString[], range? }
+
+──────────────────────────────────────────────────────────────
+7D — DIAGNOSTICS
+──────────────────────────────────────────────────────────────
+
+  toMonacoSeverity(monaco, severity): MarkerSeverity
+    → Error→Error, Warning→Warning, Information→Info, Hint→Hint
+
+  toMonacoMarkers(monaco, diagnostics): IMarkerData[]
+    → Maps each diagnostic: severity, message, source, code, range coordinates
+
+──────────────────────────────────────────────────────────────
+7E — SIGNATURE HELP
+──────────────────────────────────────────────────────────────
+
+  toMonacoSignatureHelp(sh: lsp.SignatureHelp): SignatureHelpResult
+    → Maps signatures with label, documentation, parameters
+    → Includes activeSignature, activeParameter
+    → Returns { value: {...}, dispose: () => {} }
+
+──────────────────────────────────────────────────────────────
+7F — DEFINITION / REFERENCES
+──────────────────────────────────────────────────────────────
+
+  toMonacoDefinition(result): Definition | null
+    → Handles: Location, Location[], LocationLink[]
+    → Converts URIs via monacoUri() helper
+    → Maps targetRange, originSelectionRange, targetSelectionRange
+
+──────────────────────────────────────────────────────────────
+7G — DOCUMENT SYMBOLS
+──────────────────────────────────────────────────────────────
+
+  LSP_TO_MONACO_SYMBOL_KIND map (26 entries, File=0 through TypeParameter=25)
+
+  toMonacoDocumentSymbols(symbols: lsp.DocumentSymbol[]): DocumentSymbol[]
+    → Recursive: maps children, name, detail, kind, tags, range, selectionRange
+    → Filters out entries with null range/selectionRange
+
+──────────────────────────────────────────────────────────────
+7H — CODE ACTIONS
+──────────────────────────────────────────────────────────────
+
+  toMonacoCommand(cmd: lsp.Command): monacoNs.languages.Command
+    → Strips VS Code codicon $(icon-name) syntax from title
+
+  toMonacoWorkspaceEdit(edit: lsp.WorkspaceEdit): WorkspaceEdit
+    → Handles: edit.changes (uri → TextEdit[]) + edit.documentChanges
+
+  toMonacoCodeActions(monaco, actions): CodeActionList
+    → Distinguishes Command vs CodeAction
+    → Maps: title, kind, isPreferred, disabled, edit, command, diagnostics
+
+──────────────────────────────────────────────────────────────
+7I — CODE LENS
+──────────────────────────────────────────────────────────────
+
+  toMonacoCodeLens(lens: lsp.CodeLens): monacoNs.languages.CodeLens
+    → Maps: range, command (optional)
+
+──────────────────────────────────────────────────────────────
+7J — TEXT EDITS / FORMATTING
+──────────────────────────────────────────────────────────────
+
+  toMonacoTextEdit(edit: lsp.TextEdit): monacoNs.languages.TextEdit
+    → Maps: range, text (newText)
+
+  toMonacoTextEdits(edits: lsp.TextEdit[] | null): TextEdit[]
+    → Null-safe array map
+
+──────────────────────────────────────────────────────────────
+7K — DOCUMENT LINKS
+──────────────────────────────────────────────────────────────
+
+  toMonacoDocumentLink(link): ILink
+    → Maps: range, url (target), tooltip
+
+──────────────────────────────────────────────────────────────
+7L — DOCUMENT COLORS
+──────────────────────────────────────────────────────────────
+
+  toMonacoColorInformation(info): IColorInformation → { range, color }
+  toMonacoColorPresentation(pres): IColorPresentation → { label, textEdit, additionalTextEdits }
+  fromMonacoColor(color): lsp.Color → { red, green, blue, alpha }
+
+──────────────────────────────────────────────────────────────
+7M — FOLDING RANGES
+──────────────────────────────────────────────────────────────
+
+  LSP_FOLDING_KIND_MAP: "comment"→Comment, "imports"→Imports, "region"→Region
+
+  toMonacoFoldingRanges(monaco, ranges): FoldingRange[]
+    → LSP 0-based → Monaco 1-based (start+1, end+1), maps kind
+
+──────────────────────────────────────────────────────────────
+7N — SELECTION RANGES
+──────────────────────────────────────────────────────────────
+
+  flattenSelectionRange(sr: lsp.SelectionRange): SelectionRange[]
+    → Walks parent chain → flat array from innermost to outermost
+
+──────────────────────────────────────────────────────────────
+7O — LINKED EDITING RANGES
+──────────────────────────────────────────────────────────────
+
+  toMonacoLinkedEditingRanges(result): LinkedEditingRanges
+    → Maps: ranges, wordPattern (compiled to RegExp)
+
+──────────────────────────────────────────────────────────────
+7P — INLAY HINTS
+──────────────────────────────────────────────────────────────
+
+  toMonacoInlayHint(hint: lsp.InlayHint): monacoNs.languages.InlayHint
+    → Handles string label or InlayHintLabelPart[] (with tooltip, location, command)
+    → Maps: position, kind, tooltip, textEdits, paddingLeft, paddingRight
+
+──────────────────────────────────────────────────────────────
+7Q — SEMANTIC TOKENS
+──────────────────────────────────────────────────────────────
+
+  toMonacoSemanticTokens(tokens): SemanticTokens
+    → { resultId, data: new Uint32Array(tokens.data) }
+
+  getSemanticTokensLegend(serverCaps): SemanticTokensLegend | null
+    → Extracts from server capabilities: tokenTypes[], tokenModifiers[]
+
+──────────────────────────────────────────────────────────────
+7R — DOCUMENT HIGHLIGHTS
+──────────────────────────────────────────────────────────────
+
+  toMonacoDocumentHighlights(highlights): DocumentHighlight[]
+    → Maps: range, kind
+
+──────────────────────────────────────────────────────────────
+7S — MONACO URI HELPER
+──────────────────────────────────────────────────────────────
+
+  Internal: setMonacoRef(monaco) → stores reference for URI parsing
+  Internal: monacoUri(uriStr: string) → monaco.Uri.parse(uriStr)
+
+
+================================================================================
+SECTION 8 — V2 PROVIDER REGISTRATION (24 PROVIDERS)
+================================================================================
+
+  Lives in: plugins/language/lsp-bridge-module/v2-providers.ts
+
+  Function: registerLSPProviders(monaco, languageId, client, documentUri): LspProviderRegistration
+
+  Registers 24 Monaco language providers. Each provider:
+    1. Converts Monaco position/range → LSP format (via converters)
+    2. Calls client.request(method, params)
+    3. Converts LSP response → Monaco format (via converters)
+    4. Returns to Monaco
+
+  All providers are guarded by server capabilities — only registered if the
+  server advertises support in the initialize response.
+
+  ┌────┬───────────────────────────────────────────────────────────────┐
+  │ #  │ Provider                           │ LSP Method               │
+  ├────┼───────────────────────────────────────────────────────────────┤
+  │  1 │ CompletionItemProvider             │ textDocument/completion   │
+  │    │ + resolveCompletionItem            │ completionItem/resolve    │
+  │    │ triggerChars: [".", "/", "@", "<",  │                          │
+  │    │  '"', "'", "`", " "]               │                          │
+  ├────┼───────────────────────────────────────────────────────────────┤
+  │  2 │ HoverProvider                      │ textDocument/hover        │
+  ├────┼───────────────────────────────────────────────────────────────┤
+  │  3 │ SignatureHelpProvider              │ textDocument/signatureHelp│
+  │    │ trigger: ["(", ","]                │                          │
+  │    │ retrigger: [","]                   │                          │
+  ├────┼───────────────────────────────────────────────────────────────┤
+  │  4 │ DefinitionProvider                 │ textDocument/definition   │
+  ├────┼───────────────────────────────────────────────────────────────┤
+  │  5 │ DeclarationProvider                │ textDocument/declaration  │
+  ├────┼───────────────────────────────────────────────────────────────┤
+  │  6 │ TypeDefinitionProvider             │ textDocument/typeDefinition│
+  ├────┼───────────────────────────────────────────────────────────────┤
+  │  7 │ ImplementationProvider             │ textDocument/implementation│
+  ├────┼───────────────────────────────────────────────────────────────┤
+  │  8 │ ReferenceProvider                  │ textDocument/references   │
+  ├────┼───────────────────────────────────────────────────────────────┤
+  │  9 │ DocumentHighlightProvider          │ textDocument/             │
+  │    │                                    │ documentHighlight         │
+  ├────┼───────────────────────────────────────────────────────────────┤
+  │ 10 │ DocumentSymbolProvider             │ textDocument/             │
+  │    │                                    │ documentSymbol            │
+  │    │ Handles both DocumentSymbol[] and  │                          │
+  │    │ SymbolInformation[] responses      │                          │
+  ├────┼───────────────────────────────────────────────────────────────┤
+  │ 11 │ CodeActionProvider                 │ textDocument/codeAction   │
+  │    │ Builds CodeActionContext from       │                          │
+  │    │ Monaco markers + only filter       │                          │
+  ├────┼───────────────────────────────────────────────────────────────┤
+  │ 12 │ CodeLensProvider                   │ textDocument/codeLens     │
+  │    │ + resolveCodeLens                  │ codeLens/resolve          │
+  ├────┼───────────────────────────────────────────────────────────────┤
+  │ 13 │ DocumentLinkProvider               │ textDocument/documentLink │
+  │    │ + resolveLink                      │ documentLink/resolve      │
+  ├────┼───────────────────────────────────────────────────────────────┤
+  │ 14 │ ColorProvider                      │ textDocument/documentColor│
+  │    │ + provideColorPresentations        │ textDocument/             │
+  │    │                                    │ colorPresentation         │
+  ├────┼───────────────────────────────────────────────────────────────┤
+  │ 15 │ DocumentFormattingEditProvider     │ textDocument/formatting   │
+  │    │ Sends tabSize + insertSpaces       │                          │
+  ├────┼───────────────────────────────────────────────────────────────┤
+  │ 16 │ DocumentRangeFormattingEditProvider│ textDocument/             │
+  │    │                                    │ rangeFormatting           │
+  ├────┼───────────────────────────────────────────────────────────────┤
+  │ 17 │ OnTypeFormattingEditProvider       │ textDocument/             │
+  │    │ triggerChars: [";", "}", "\n"]     │ onTypeFormatting          │
+  ├────┼───────────────────────────────────────────────────────────────┤
+  │ 18 │ RenameProvider                     │ textDocument/rename       │
+  │    │ + resolveRenameLocation            │ textDocument/prepareRename│
+  ├────┼───────────────────────────────────────────────────────────────┤
+  │ 19 │ FoldingRangeProvider               │ textDocument/foldingRange │
+  ├────┼───────────────────────────────────────────────────────────────┤
+  │ 20 │ SelectionRangeProvider             │ textDocument/             │
+  │    │                                    │ selectionRange            │
+  ├────┼───────────────────────────────────────────────────────────────┤
+  │ 21 │ LinkedEditingRangeProvider         │ textDocument/             │
+  │    │                                    │ linkedEditingRange        │
+  ├────┼───────────────────────────────────────────────────────────────┤
+  │ 22 │ InlayHintsProvider                 │ textDocument/inlayHint   │
+  │    │ + resolveInlayHint                 │ inlayHint/resolve         │
+  ├────┼───────────────────────────────────────────────────────────────┤
+  │ 23 │ DocumentSemanticTokensProvider     │ textDocument/             │
+  │    │ (full) + getLegend from server caps │ semanticTokens/full      │
+  ├────┼───────────────────────────────────────────────────────────────┤
+  │ 24 │ DocumentRangeSemanticTokensProvider│ textDocument/             │
+  │    │ (range) — same legend              │ semanticTokens/range     │
+  └────┴───────────────────────────────────────────────────────────────┘
+
+  NOTE: Semantic tokens providers (#23, #24) only registered if server
+  capabilities include semanticTokensProvider with a valid legend.
+
+  NOTE: Diagnostics are NOT a provider — they come as server push
+  notifications and are bridged in the client (Section 6D).
+
+
+================================================================================
+SECTION 9 — LSP EVENTS
+================================================================================
+
+  Lives in: core/events/lsp.events.ts
+
+  export const enum LspEvent {
+    // ── Connection lifecycle ────────────────────────────
+    Connecting       = "lsp:connecting",
+    Connected        = "lsp:connected",
+    Disconnected     = "lsp:disconnected",
+    Reconnecting     = "lsp:reconnecting",
+    Failed           = "lsp:failed",
+
+    // ── Requests ────────────────────────────────────────
+    RequestSent      = "lsp:request-sent",
+    ResponseReceived = "lsp:response-received",
+    RequestTimeout   = "lsp:request-timeout",
+    RequestError     = "lsp:request-error",
+
+    // ── Configuration ───────────────────────────────────
+    UrlChanged       = "lsp:url-changed",
+    ConfigChanged    = "lsp:config-changed",
+    ModeChanged      = "lsp:mode-changed",
+
+    // ── Diagnostics (server → client, V2 only) ─────────
+    Diagnostics      = "lsp:diagnostics",
+
+    // ── Document sync (V2 only) ─────────────────────────
+    DidOpen          = "lsp:did-open",
+    DidChange        = "lsp:did-change",
+
+    // ── Server messages (V2 only) ───────────────────────
+    ServerMessage    = "lsp:server-message",
+  }
+
+
+================================================================================
+SECTION 10 — SETTINGS INTEGRATION
+================================================================================
+
+  Lives in: plugins/language/lsp-bridge-module/index.ts (init)
+
+  The LSP module registers settings in the settings-module:
+
+  {
+    "lsp.mode": {
+      "type": "string",
+      "enum": ["custom", "builtin", "both"],
+      "default": "builtin",
+      "description": "LSP client mode: 'custom' (V1 manual JSON-RPC), 'builtin' (V2 full LSP lifecycle), or 'both'"
+    },
+    "lsp.url": {
+      "type": "string",
+      "default": "${LSP_URL}",
+      "description": "Base URL for the LSP server (language path appended automatically)"
+    },
+    "lsp.autoConnect": {
+      "type": "boolean",
+      "default": true,
+      "description": "Automatically connect to LSP server on startup"
+    },
+    "lsp.retryInterval": {
+      "type": "number",
+      "default": 15000,
+      "description": "Retry interval in milliseconds (min: 5000)"
+    },
+    "lsp.maxRetries": {
+      "type": "number",
+      "default": 10,
+      "description": "Maximum retry attempts before giving up (min: 1, max: 50)"
+    },
+    "lsp.timeout": {
+      "type": "number",
+      "default": 10000,
+      "description": "Request timeout in milliseconds"
+    },
+    "lsp.enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable LSP WebSocket connection"
+    }
+  }
+
+  LIVE SETTINGS UPDATE:
+  - Changing lsp.mode → dispose current client(s) → create + connect new one(s)
+    → Emits LspEvent.ModeChanged
+    → Notification: "LSP mode changed to ${mode}"
+  - Changing lsp.url → disconnect current → reconnect with new URL
+    → Notification: "LSP URL changed — reconnecting..."
+  - Changing lsp.autoConnect to false → disconnect (if connected)
+  - Changing retry/timeout → applies to NEXT connection attempt
+  - Changing lsp.enabled to false → disconnect + dispose all clients
+
+
+================================================================================
+SECTION 11 — STATUS BAR INTEGRATION
+================================================================================
+
+  The LSP module registers a status bar item to show connection state.
+
+  Location: Status bar, right side (priority: 100)
+
+  States and display (shows current mode in label when connected):
+
+  ┌──────────────────┬──────────────────────────────────────────────────────┐
+  │ State            │ Status Bar Display                                   │
+  ├──────────────────┼──────────────────────────────────────────────────────┤
+  │ disconnected     │ $(circle-slash) LSP: Disconnected                    │
+  │ connecting       │ $(sync~spin) LSP: Connecting...                      │
+  │ connected        │ $(check) LSP: Connected (V2)                         │
+  │ connected (both) │ $(check) LSP: Connected (V1+V2)                     │
+  │ reconnecting     │ $(sync~spin) LSP: Reconnecting (3/10)...             │
+  │ failed           │ $(error) LSP: Disconnected                           │
+  └──────────────────┴──────────────────────────────────────────────────────┘
+
+  Click behavior:
+  - If disconnected/failed → manual retry (connect)
+  - If connected → show quick pick:
+      "Disconnect"
+      "Switch Mode → Custom (V1)"
+      "Switch Mode → Built-in (V2)"
+      "Switch Mode → Both (V1+V2)"
+      "Configure LSP URL..."
+      "Show LSP Logs"
+  - If connecting/reconnecting → show quick pick:
+      "Cancel and Disconnect"
+      "Configure LSP URL..."
+
+  Tooltip: Shows full URL + mode + retry count + last error (if any)
+
+
+================================================================================
+SECTION 12 — NOTIFICATION INTEGRATION
+================================================================================
+
+  The LSP module fires notifications for key lifecycle events.
+
+──────────────────────────────────────────────────────────────
+12A — FIRST CONNECTION NOTIFICATION
+──────────────────────────────────────────────────────────────
+
+  On the VERY FIRST successful connection per session:
+
+    notificationService.success("Language server connected", {
+      category: "lsp",
+      source: "Language Server",
+      icon: "$(check)",
+    });
+
+  Subsequent reconnections do NOT trigger a notification
+  (to avoid spam during flaky networks). Only the status bar updates.
+
+──────────────────────────────────────────────────────────────
+12B — FINAL FAILURE NOTIFICATION
+──────────────────────────────────────────────────────────────
+
+  After exhausting all 10 retries:
+
+    notificationService.error("Language server connection failed after 10 attempts", {
+      category: "lsp",
+      source: "Language Server",
+      actions: [
+        { id: "retry", label: "Retry" },
+        { id: "settings", label: "Settings" },
+      ],
+    });
+
+  Action handlers:
+  - "Retry" → lspConnection.retry() (resets retry count)
+  - "Settings" → open settings focused on "lsp.url"
+
+──────────────────────────────────────────────────────────────
+12C — URL / MODE CHANGE NOTIFICATION
+──────────────────────────────────────────────────────────────
+
+  When user changes lsp.url in settings:
+    notificationService.info("LSP URL changed — reconnecting...", {
+      category: "lsp",
+      source: "Language Server",
+    });
+
+  When user changes lsp.mode in settings:
+    notificationService.info(`LSP mode changed to ${mode}`, {
+      category: "lsp",
+      source: "Language Server",
+    });
+
+
+================================================================================
+SECTION 13 — MODULE INIT / PLUGIN CONTRACT
+================================================================================
+
+  Lives in: plugins/language/lsp-bridge-module/index.ts
+
+  export const LspBridgePlugin: MonacoPlugin = {
+    id: "lsp-bridge",
+    name: "LSP Bridge",
+    version: "2.0.0",
+
+    async init(ctx: ModuleContext) {
+      const config = ctx.settings.get("lsp");
+
+      if (!config.enabled) return;
+
+      // ── Create clients based on mode ──────────────────
+
+      let customClient: CustomLspClient | null = null;
+      let builtinClient: BuiltinLspClient | null = null;
+
+      const mode: LspMode = config.mode ?? "builtin";
+
+      if (mode === "custom" || mode === "both") {
+        customClient = new CustomLspClient(ctx.eventBus, config);
+      }
+      if (mode === "builtin" || mode === "both") {
+        builtinClient = new BuiltinLspClient(ctx.eventBus, config, ctx.monaco, ctx.editor);
+      }
+
+      // ── Expose for other modules ──────────────────────
+
+      ctx.provide("lsp.mode", mode);
+      ctx.provide("lsp.customClient", customClient);
+      ctx.provide("lsp.builtinClient", builtinClient);
+      ctx.provide("lsp.hasLSPSupport", hasLSPSupport);
+      ctx.provide("lsp.buildUrl", (langId: string) => buildLSPWebSocketUrl(config.url, langId));
+
+      // For V1: also expose the legacy interface names
+      if (customClient) {
+        ctx.provide("lsp.rpcClient", customClient);
+        ctx.provide("lsp.connection", customClient);
+        ctx.provide("lsp.bridge", new LspProviderBridge(customClient, ctx.monaco));
+      }
+
+      // ── Register status bar ───────────────────────────
+
+      ctx.statusBar.register({
+        id: "lsp-status",
+        alignment: "right",
+        priority: 100,
+        text: "$(circle-slash) LSP: Disconnected",
+        tooltip: `LSP: ${config.url} (${mode})`,
+        onClick: () => handleStatusBarClick(customClient, builtinClient, mode, ctx),
+      });
+
+      // ── Listen for settings changes ───────────────────
+
+      ctx.settings.onChange("lsp.url", (newUrl) => {
+        customClient?.disconnect();
+        builtinClient?.disconnect();
+        config.url = newUrl;
+        // Reconnect happens via autoConnect logic
+        if (config.autoConnect) {
+          customClient?.connect();
+          // builtinClient reconnects per-language via connectForLanguage()
+        }
+        ctx.notifications.info("LSP URL changed — reconnecting...", {
+          category: "lsp",
+          source: "Language Server",
+        });
+      });
+
+      ctx.settings.onChange("lsp.mode", (newMode: LspMode) => {
+        // Dispose old clients
+        customClient?.disconnect();
+        builtinClient?.disconnect();
+        customClient = null;
+        builtinClient = null;
+
+        // Create new clients
+        if (newMode === "custom" || newMode === "both") {
+          customClient = new CustomLspClient(ctx.eventBus, config);
+        }
+        if (newMode === "builtin" || newMode === "both") {
+          builtinClient = new BuiltinLspClient(ctx.eventBus, config, ctx.monaco, ctx.editor);
+        }
+
+        // Update provides
+        ctx.provide("lsp.mode", newMode);
+        ctx.provide("lsp.customClient", customClient);
+        ctx.provide("lsp.builtinClient", builtinClient);
+
+        ctx.eventBus.emit(LspEvent.ModeChanged, { mode: newMode });
+        ctx.notifications.info(`LSP mode changed to ${newMode}`, {
+          category: "lsp",
+          source: "Language Server",
+        });
+
+        // Auto-connect new clients
+        if (config.autoConnect) {
+          customClient?.connect();
+        }
+      });
+
+      // ── Auto-connect on startup ───────────────────────
+
+      if (config.autoConnect) {
+        customClient?.connect();
+        // V2 builtin client connects per-language when editor opens a file
+        // → see connectForLanguage() triggered by editor.onDidChangeModel
+      }
+
+      // ── V2: Auto-connect on language change ───────────
+
+      if (builtinClient) {
+        const connectForLanguage = (model: monacoNs.editor.ITextModel) => {
+          const langId = model.getLanguageId();
+          if (hasLSPSupport(langId)) {
+            builtinClient!.connect(langId);
+          }
+        };
+
+        // Connect for current model
+        const currentModel = ctx.editor?.getModel();
+        if (currentModel) connectForLanguage(currentModel);
+
+        // Connect when model changes
+        ctx.editor?.onDidChangeModel((e) => {
+          if (e.newModelUrl) {
+            const model = ctx.monaco.editor.getModel(e.newModelUrl);
+            if (model) connectForLanguage(model);
+          }
+        });
+      }
+
+      // ── Cleanup ───────────────────────────────────────
+
+      ctx.onDestroy(() => {
+        customClient?.disconnect();
+        builtinClient?.disconnect();
+      });
+    },
+
+    async destroy() {
+      // Connection cleanup handled by onDestroy
+    },
+  };
+
+
+================================================================================
+SECTION 14 — FILE MAP
+================================================================================
+
+  ┌────────────────────────────────────────────────────────────────┬────────────┐
+  │ File                                                           │ Section    │
+  ├────────────────────────────────────────────────────────────────┼────────────┤
+  │ plugins/language/lsp-bridge-module/index.ts                    │ S13 Plugin │
+  │ plugins/language/lsp-bridge-module/types.ts                    │ S3 Types   │
+  │ plugins/language/lsp-bridge-module/languages.ts                │ S3F Langs  │
+  │ plugins/language/lsp-bridge-module/connection.ts               │ S4 Connect │
+  │ plugins/language/lsp-bridge-module/v1-custom-client.ts         │ S5 V1      │
+  │ plugins/language/lsp-bridge-module/provider-bridge.ts          │ S5C Bridge │
+  │ plugins/language/lsp-bridge-module/protocol.ts                 │ S5B RPC    │
+  │ plugins/language/lsp-bridge-module/v2-builtin-client.ts        │ S6 V2      │
+  │ plugins/language/lsp-bridge-module/v2-providers.ts             │ S8 Provs   │
+  │ plugins/language/lsp-bridge-module/converters.ts               │ S7 Convert │
+  │                                                                │            │
+  │ core/events/lsp.events.ts                                      │ S9 Events  │
+  └────────────────────────────────────────────────────────────────┴────────────┘
+
+  NEW FILES vs previous spec:
+    + languages.ts        — LSP_LANGUAGES map, hasLSPSupport(), buildLSPWebSocketUrl()
+    + v1-custom-client.ts — Version 1 custom WebSocket client
+    + v2-builtin-client.ts — Version 2 full LSP lifecycle client
+    + v2-providers.ts     — 24 Monaco provider registrations for V2
+
+  RENAMED:
+    connection.ts remains — now contains shared LspConnectionManager (not full client)
+    protocol.ts remains — now documents V1 JSON-RPC method map
+
+  NOTE: Context-engine interfaces (manifest.ts, lsp.ts, 29 provider types)
+  live in plugins/enterprise/context-engine/interfaces/ — see custom-context-enginge.txt
+
+
+================================================================================
+SECTION 15 — WHAT TO AVOID
+================================================================================
+
+  - ❌ Don't reconnect infinitely (max 10 retries, then stop)
+  - ❌ Don't spam notifications on every reconnect (only first connect + final failure)
+  - ❌ Don't block editor startup waiting for LSP (it's async, editor works without it)
+  - ❌ Don't hardcode the LSP URL (always from settings or env)
+  - ❌ Don't retry faster than 5 seconds (server rate limiting)
+  - ❌ Don't cache WebSocket instance on reconnect (create new one each time)
+  - ❌ Don't forget to clean up pending requests on disconnect
+  - ❌ Don't own provider data or CDN logic (that's context-engine's responsibility)
+  - ❌ Don't register V2 providers without checking server capabilities first
+  - ❌ Don't run V1 and V2 on the same WebSocket (each gets its own connection)
+  - ❌ Don't send didOpen/didChange in V1 mode (that's V2's responsibility)
+  - ❌ Don't mix converter imports in V1 code (converters are V2-only)
+  - ❌ Don't forget to dispose providers when switching modes or disconnecting
