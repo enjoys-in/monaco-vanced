@@ -17,7 +17,7 @@
 import type * as monacoNs from "monaco-editor";
 import type { MonacoPlugin, Monaco } from "@core/types";
 
-import { dockerfileLanguageConfig } from "./configs/dockerfile";
+import { dockerfileLanguageConfig } from "./configs/dockerfile-config";
 import { dotenvLanguageConfig } from "./configs/dotenv";
 import { graphqlLanguageConfig } from "./configs/graphql";
 import { ignoreLanguageConfig } from "./configs/ignore";

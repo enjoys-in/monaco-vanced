@@ -1,6 +1,6 @@
 import "./style.css";
 import * as monaco from "monaco-editor";
-import { createMonacoIDE } from "@enjoys/monaco-vanced/";
+import { createMonacoIDE } from "@enjoys/monaco-vanced";
 import type { MonacoVancedInstance } from "@enjoys/monaco-vanced";
 
 // ── Default editor options (overridable via settings.json / Settings UI) ──

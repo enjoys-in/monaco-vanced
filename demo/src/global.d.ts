@@ -1,7 +1,6 @@
 // ── Global type augmentations ────────────────────────────────
 import type * as monacoNs from "monaco-editor";
-import type { PluginEngine } from "core/plugin-engine";
-import type { EventBus } from "@core/event-bus";
+import { PluginEngine, EventBus } from "@enjoys/monaco-vanced";
 
 declare global {
   interface Window {
@@ -10,8 +9,8 @@ declare global {
     /** Active editor instance */
     editor: monacoNs.editor.IStandaloneCodeEditor;
     /** Plugin engine (register/boot/destroy plugins) */
-    engine: PluginEngine;
+    engine: InstanceType<typeof PluginEngine>;
     /** Shared event bus (emit/on cross-plugin events) */
-    eventBus: EventBus;
+    eventBus: InstanceType<typeof EventBus>;
   }
 }
