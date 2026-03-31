@@ -1,6 +1,8 @@
 export enum IndexSymbolEvents {
-  IndexStart = "index-symbol:index-start",
-  IndexComplete = "index-symbol:index-complete",
-  SymbolFound = "index-symbol:symbol-found",
+  FileStart = "index-symbol:file-start",
+  FileDone = "index-symbol:file-done",
+  FileRemove = "index-symbol:file-remove",
+  WorkspaceDone = "index-symbol:workspace-done",
+  Ready = "index-symbol:ready",
   Error = "index-symbol:error",
 }

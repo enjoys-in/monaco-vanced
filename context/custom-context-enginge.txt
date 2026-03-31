@@ -1,7 +1,12 @@
 # Context Engine — Architecture & Usage Guide
 
-> **Package**: `@enjoys/context-engine`  
-> **CDN**: `https://cdn.jsdelivr.net/npm/@enjoys/context-engine`  
+CRITICAL NOTE:
+  - Below given implementation is from other project, use it for refrence and context only.
+  - Design the engine module according to the current Plan or Project instructions , dont mix up them.
+  - READ URL from Config.User Will Prerpare Required things
+
+> **Package**: `@enjoys/context-engine`
+> **CDN**: `https://cdn.jsdelivr.net/npm/@enjoys/context-engine`
 > **Storage**: IndexedDB via Dexie (two databases)
 
 ---
@@ -335,15 +340,15 @@ EditorTerminalWithGhost.tsx / Terminal.tsx
 |---|---|
 | `MonacoEditor.tsx` | Registers providers on mount; re-registers on model/extension changes |
 | `ContextEnginePanel.tsx` | Sidebar UI for install/uninstall with immediate provider updates |
-| `EditorTerminalWithGhost.tsx` | Reads command data for terminal ghost suggestions | 
-| `store/rightSidebarTabStore.ts` | Version detection, update banners, dismiss state |
+| `EditorTerminalWithGhost.tsx` | Reads command data for terminal ghost suggestions |
+| `store/leftSidebarTabStore.ts` | Version detection, update banners, dismiss state |
 
 ---
 
 ## Version Management
 
 ```
-App start → rightSidebarTabStore
+App start → leftSidebarTabStore
   ├─→ fetchContextEngineVersion()        → latest from CDN
   ├─→ getStoredContextEngineVersion()    → last installed (localStorage)
   └─→ isNewerVersion(remote, local)      → show update badge in sidebar
