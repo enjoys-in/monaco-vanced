@@ -131,7 +131,7 @@ export interface PendingRequest {
 // ── Plugin options ────────────────────────────────────────────
 
 export interface LspBridgePluginOptions {
-  /** LSP client mode (default: "builtin") */
+  /** LSP client mode (default: "native") */
   mode?: LspMode;
   /** LSP server base URL */
   url?: string;
@@ -161,4 +161,61 @@ export enum LspMessageType {
   Info = 3,
   Log = 4,
   Debug = 5,
+}
+
+// ── Connector API (exposed to consumer) ───────────────────────
+
+/**
+ * The full LSP connector API returned by `createLspConnectorPlugin()`.
+ * Gives the consumer raw access to the active client, event bus,
+ * editor context, and connection lifecycle — they handle everything.
+ */
+export interface LspConnectorApi {
+  /** The active LSP client — send requests, notifications, check state */
+  readonly client: LspClient | null;
+  /** Current connection config (mutable for URL/timeout changes) */
+  readonly config: LspConnectionConfig;
+  /** Current LSP mode */
+  readonly mode: LspMode;
+
+  // ── Lifecycle ──────────────────────────────────────────
+
+  /** Connect (or reconnect) for a given language */
+  connect(languageId?: string): Promise<void>;
+  /** Disconnect the active client */
+  disconnect(): void;
+  /** Switch LSP mode at runtime — disposes current client, creates new one */
+  switchMode(newMode: LspMode): void;
+  /** Change server URL and optionally reconnect */
+  changeUrl(url: string, reconnect?: boolean): void;
+
+  // ── RPC shorthand (delegates to active client) ─────────
+
+  /** Send a JSON-RPC request and await the response */
+  request<T = unknown>(method: string, params?: unknown): Promise<T>;
+  /** Send a JSON-RPC notification (fire-and-forget) */
+  notify(method: string, params?: unknown): void;
+
+  // ── Event bus (cross-plugin + LSP events) ──────────────
+
+  /** Emit an event on the shared event bus */
+  emit(event: string, data?: unknown): void;
+  /** Subscribe to an event — returns disposable */
+  on(event: string, handler: (data?: unknown) => void): IDisposable;
+
+  // ── State ──────────────────────────────────────────────
+
+  /** Current connection state */
+  getState(): LspConnectionState;
+  /** Whether the client is connected */
+  isConnected(): boolean;
+  /** Current language ID the client is connected for */
+  getCurrentLanguageId(): string | null;
+  /** Check if a language has LSP support */
+  hasLanguageSupport(languageId: string): boolean;
+
+  // ── Cleanup ────────────────────────────────────────────
+
+  /** Dispose everything — client, providers, listeners */
+  dispose(): void;
 }

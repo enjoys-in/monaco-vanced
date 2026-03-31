@@ -7,7 +7,7 @@
 //   V3 (Native): monaco.lsp.WebSocketTransport + MonacoLspClient (auto providers).
 
 import type { MonacoPlugin, PluginContext, IDisposable } from "@core/types";
-import type { LspBridgePluginOptions, LspConnectionConfig, LspMode } from "./types";
+import type { LspBridgePluginOptions, LspConnectionConfig, LspMode, LspConnectorApi } from "./types";
 import { DEFAULT_LSP_CONFIG } from "./types";
 import { CustomLspClient } from "./clients/v1-custom";
 import { BuiltinLspClient } from "./clients/v2-builtin";
@@ -35,7 +35,7 @@ export function createLspBridgePlugin(
     pingIntervalMs: options.pingIntervalMs ?? DEFAULT_LSP_CONFIG.pingIntervalMs,
   };
 
-  let mode = (options.mode ?? "builtin") as LspMode;
+  let mode = (options.mode ?? "native") as LspMode;
 
   return {
     id: "lsp-bridge-module",
@@ -238,6 +238,207 @@ export function createLspBridgePlugin(
   };
 }
 
+// ── Connector Plugin — full raw API for consumers ─────────────
+
+/**
+ * Creates an LSP connector plugin that exposes the full LSP API to the consumer.
+ * Unlike `createLspBridgePlugin` (which is opinionated), the connector gives you
+ * raw access to the client, event bus, and editor — you handle everything yourself.
+ *
+ * @example
+ * ```ts
+ * const { plugin, api } = createLspConnectorPlugin({ url: "wss://my-lsp.dev" });
+ * engine.register(plugin);
+ *
+ * // Later — use the api directly
+ * await api.connect("typescript");
+ * const result = await api.request("textDocument/completion", params);
+ * api.on(LspEvents.Diagnostics, (d) => console.log(d));
+ * api.notify("textDocument/didSave", { textDocument: { uri } });
+ * ```
+ */
+export function createLspConnectorPlugin(
+  options: LspBridgePluginOptions = {},
+): { plugin: MonacoPlugin; api: LspConnectorApi } {
+  const disposables: IDisposable[] = [];
+  let activeClient: CustomLspClient | BuiltinLspClient | NativeLspClient | null = null;
+  let bridge: LspProviderBridge | null = null;
+  let ctx: PluginContext | null = null;
+
+  const config: LspConnectionConfig = {
+    url: options.url ?? DEFAULT_LSP_CONFIG.url,
+    retryIntervalMs: options.retryIntervalMs ?? DEFAULT_LSP_CONFIG.retryIntervalMs,
+    maxRetries: options.maxRetries ?? DEFAULT_LSP_CONFIG.maxRetries,
+    timeoutMs: options.timeoutMs ?? DEFAULT_LSP_CONFIG.timeoutMs,
+    rootUri: options.rootUri ?? DEFAULT_LSP_CONFIG.rootUri,
+    pingEnabled: options.pingEnabled ?? DEFAULT_LSP_CONFIG.pingEnabled,
+    pingIntervalMs: options.pingIntervalMs ?? DEFAULT_LSP_CONFIG.pingIntervalMs,
+  };
+
+  let mode: LspMode = options.mode ?? "native";
+
+  function createClient(): void {
+    if (!ctx) return;
+    const { monaco, editor } = ctx;
+    const eventBus = { emit: ctx.emit.bind(ctx), on: ctx.on.bind(ctx) } as import("@core/event-bus").EventBus;
+
+    activeClient?.dispose();
+    bridge?.dispose();
+    activeClient = null;
+    bridge = null;
+
+    switch (mode) {
+      case "custom": {
+        const client = new CustomLspClient(eventBus, config);
+        bridge = new LspProviderBridge(client, monaco);
+        activeClient = client;
+        break;
+      }
+      case "builtin":
+        activeClient = new BuiltinLspClient(eventBus, config, monaco, editor);
+        break;
+      case "native":
+        activeClient = new NativeLspClient(eventBus, config, monaco, editor);
+        break;
+    }
+  }
+
+  // ── Build the API object (stable reference, delegates to live state) ──
+
+  const api: LspConnectorApi = {
+    get client() { return activeClient; },
+    get config() { return config; },
+    get mode() { return mode; },
+
+    async connect(languageId?: string) {
+      if (!activeClient) throw new Error("[lsp-connector] No client — plugin not mounted yet");
+      const langId = languageId ?? ctx?.editor.getModel()?.getLanguageId() ?? "typescript";
+      if (!hasLSPSupport(langId)) throw new Error(`[lsp-connector] Unsupported language: ${langId}`);
+      await activeClient.connect(langId);
+    },
+
+    disconnect() {
+      activeClient?.disconnect();
+    },
+
+    switchMode(newMode: LspMode) {
+      mode = newMode;
+      createClient();
+    },
+
+    changeUrl(url: string, reconnect = true) {
+      config.url = url;
+      if (reconnect && activeClient) {
+        activeClient.disconnect();
+        const langId = api.getCurrentLanguageId() ?? ctx?.editor.getModel()?.getLanguageId();
+        if (langId) activeClient.connect(langId).catch(() => {});
+      }
+    },
+
+    request<T = unknown>(method: string, params?: unknown): Promise<T> {
+      if (!activeClient) return Promise.reject(new Error("[lsp-connector] No client"));
+      return activeClient.request<T>(method, params);
+    },
+
+    notify(method: string, params?: unknown) {
+      activeClient?.notify(method, params);
+    },
+
+    emit(event: string, data?: unknown) {
+      ctx?.emit(event, data);
+    },
+
+    on(event: string, handler: (data?: unknown) => void): IDisposable {
+      if (!ctx) return { dispose: () => {} };
+      const d = ctx.on(event, handler);
+      disposables.push(d);
+      return d;
+    },
+
+    getState() {
+      return activeClient?.getState() ?? "disconnected";
+    },
+
+    isConnected() {
+      return activeClient?.isConnected() ?? false;
+    },
+
+    getCurrentLanguageId() {
+      if (activeClient && "getCurrentLanguageId" in activeClient) {
+        return (activeClient as BuiltinLspClient | NativeLspClient).getCurrentLanguageId();
+      }
+      return null;
+    },
+
+    hasLanguageSupport: hasLSPSupport,
+
+    dispose() {
+      activeClient?.dispose();
+      bridge?.dispose();
+      activeClient = null;
+      bridge = null;
+      for (const d of disposables) d.dispose();
+      disposables.length = 0;
+    },
+  };
+
+  // ── The plugin shell — minimal, just wires up lifecycle ───
+
+  const plugin: MonacoPlugin = {
+    id: "lsp-connector",
+    name: "LSP Connector",
+    version: "3.0.0",
+    description:
+      "Raw LSP connector — exposes full client API, event bus, and editor context for custom LSP workflows",
+    dependencies: ["editor-module"],
+    priority: 50,
+    defaultEnabled: options.enabled ?? true,
+
+    onMount(pluginCtx: PluginContext) {
+      ctx = pluginCtx;
+      createClient();
+
+      // Auto-connect if enabled
+      if (options.autoConnect !== false && activeClient) {
+        const currentModel = pluginCtx.editor.getModel();
+        const langId = currentModel?.getLanguageId() ?? "typescript";
+        if (hasLSPSupport(langId)) {
+          activeClient.connect(langId).catch((err) => {
+            console.warn("[lsp-connector] Auto-connect failed:", err);
+          });
+        }
+      }
+
+      // Re-connect on model/language change
+      const modelDisposable = pluginCtx.editor.onDidChangeModel((e) => {
+        if (e.newModelUrl && activeClient && options.autoConnect !== false) {
+          const model = pluginCtx.monaco.editor.getModel(e.newModelUrl);
+          if (model && hasLSPSupport(model.getLanguageId())) {
+            activeClient.connect(model.getLanguageId()).catch(() => {});
+          }
+        }
+      });
+      disposables.push(modelDisposable);
+
+      disposables.push(
+        pluginCtx.on(EditorEvents.LanguageChange, (payload) => {
+          const { languageId } = payload as { languageId: string };
+          if (activeClient && options.autoConnect !== false && hasLSPSupport(languageId)) {
+            activeClient.connect(languageId).catch(() => {});
+          }
+        }),
+      );
+    },
+
+    onDispose() {
+      api.dispose();
+      ctx = null;
+    },
+  };
+
+  return { plugin, api };
+}
+
 // ── Exports ───────────────────────────────────────────────────
 
 export type {
@@ -248,6 +449,7 @@ export type {
   LspProviderRegistration,
   LspClient,
   LspBridgePluginOptions,
+  LspConnectorApi,
   JsonRpcRequest,
   JsonRpcResponse,
   JsonRpcNotification,
