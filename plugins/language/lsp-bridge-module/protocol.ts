@@ -1,9 +1,9 @@
-// ── LSP Bridge Module — V1 JSON-RPC 2.0 Method Map ────────────
+// ── LSP Bridge Module — JSON-RPC 2.0 Method Map ───────────────
 // See context/lsp-bridge-module.txt Section 5B
 
 /**
- * Standard LSP text document methods (29+ methods).
- * Used by V1 custom client for manual JSON-RPC framing.
+ * Standard LSP methods — text document, window, workspace, lifecycle.
+ * Used by V1 custom client for manual JSON-RPC framing and V2/V3 routing.
  */
 export const LSP_METHODS = {
   // ── Completion ──────────────────────────────────────────
@@ -62,11 +62,46 @@ export const LSP_METHODS = {
   didChange: "textDocument/didChange",
   didClose: "textDocument/didClose",
   didSave: "textDocument/didSave",
+  willSave: "textDocument/willSave",
+  willSaveWaitUntil: "textDocument/willSaveWaitUntil",
 
   // ── Server → Client notifications ──────────────────────
   publishDiagnostics: "textDocument/publishDiagnostics",
+
+  // ── Window methods (server → client) ────────────────────
   showMessage: "window/showMessage",
+  showMessageRequest: "window/showMessageRequest",
   logMessage: "window/logMessage",
+  showDocument: "window/showDocument",
+  workDoneProgressCreate: "window/workDoneProgress/create",
+  workDoneProgressCancel: "window/workDoneProgress/cancel",
+
+  // ── Window telemetry ────────────────────────────────────
+  telemetryEvent: "telemetry/event",
+
+  // ── Client → Server requests ────────────────────────────
+  registerCapability: "client/registerCapability",
+  unregisterCapability: "client/unregisterCapability",
+
+  // ── Workspace methods ───────────────────────────────────
+  workspaceSymbol: "workspace/symbol",
+  workspaceSymbolResolve: "workspace/symbolResolve",
+  executeCommand: "workspace/executeCommand",
+  applyEdit: "workspace/applyEdit",
+  configuration: "workspace/configuration",
+  workspaceFolders: "workspace/workspaceFolders",
+  didChangeConfiguration: "workspace/didChangeConfiguration",
+  didChangeWatchedFiles: "workspace/didChangeWatchedFiles",
+  didCreateFiles: "workspace/didCreateFiles",
+  didRenameFiles: "workspace/didRenameFiles",
+  didDeleteFiles: "workspace/didDeleteFiles",
+  willCreateFiles: "workspace/willCreateFiles",
+  willRenameFiles: "workspace/willRenameFiles",
+  willDeleteFiles: "workspace/willDeleteFiles",
+
+  // ── Progress / partial results ──────────────────────────
+  progress: "$/progress",
+  cancelRequest: "$/cancelRequest",
 
   // ── Lifecycle ───────────────────────────────────────────
   initialize: "initialize",

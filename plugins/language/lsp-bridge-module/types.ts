@@ -23,7 +23,7 @@ export interface LspConnectionConfig {
 }
 
 export const DEFAULT_LSP_CONFIG: LspConnectionConfig = {
-  url: "https://monaco-lsp-hub.onrender.com/",
+  url: "https://monaco-lsp-hub.onrender.com",
   retryIntervalMs: 15_000,
   maxRetries: 10,
   timeoutMs: 10_000,
@@ -41,7 +41,7 @@ export type LspConnectionState =
   | "reconnecting"
   | "failed";
 
-export type LspMode = "custom" | "builtin";
+export type LspMode = "custom" | "builtin" | "native";
 
 // ── 3C — JSON-RPC message types ───────────────────────────────
 

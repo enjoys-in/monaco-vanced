@@ -353,16 +353,33 @@ const LSP_TO_MONACO_SYMBOL_KIND: Record<number, monacoNs.languages.SymbolKind> =
 function initSymbolKindMap(monaco: typeof monacoNs): void {
   if (LSP_TO_MONACO_SYMBOL_KIND[1]) return;
   const SK = monaco.languages.SymbolKind;
-  for (let i = 1; i <= 26; i++) {
-    LSP_TO_MONACO_SYMBOL_KIND[i] = (i - 1) as monacoNs.languages.SymbolKind;
-  }
-  // Ensure key mappings are correct
-  LSP_TO_MONACO_SYMBOL_KIND[1] = SK.File;
-  LSP_TO_MONACO_SYMBOL_KIND[2] = SK.Module;
-  LSP_TO_MONACO_SYMBOL_KIND[5] = SK.Class;
-  LSP_TO_MONACO_SYMBOL_KIND[6] = SK.Method;
+  // LSP SymbolKind (1-26) → Monaco SymbolKind (complete mapping)
+  LSP_TO_MONACO_SYMBOL_KIND[1]  = SK.File;
+  LSP_TO_MONACO_SYMBOL_KIND[2]  = SK.Module;
+  LSP_TO_MONACO_SYMBOL_KIND[3]  = SK.Namespace;
+  LSP_TO_MONACO_SYMBOL_KIND[4]  = SK.Package;
+  LSP_TO_MONACO_SYMBOL_KIND[5]  = SK.Class;
+  LSP_TO_MONACO_SYMBOL_KIND[6]  = SK.Method;
+  LSP_TO_MONACO_SYMBOL_KIND[7]  = SK.Property;
+  LSP_TO_MONACO_SYMBOL_KIND[8]  = SK.Field;
+  LSP_TO_MONACO_SYMBOL_KIND[9]  = SK.Constructor;
+  LSP_TO_MONACO_SYMBOL_KIND[10] = SK.Enum;
+  LSP_TO_MONACO_SYMBOL_KIND[11] = SK.Interface;
   LSP_TO_MONACO_SYMBOL_KIND[12] = SK.Function;
   LSP_TO_MONACO_SYMBOL_KIND[13] = SK.Variable;
+  LSP_TO_MONACO_SYMBOL_KIND[14] = SK.Constant;
+  LSP_TO_MONACO_SYMBOL_KIND[15] = SK.String;
+  LSP_TO_MONACO_SYMBOL_KIND[16] = SK.Number;
+  LSP_TO_MONACO_SYMBOL_KIND[17] = SK.Boolean;
+  LSP_TO_MONACO_SYMBOL_KIND[18] = SK.Array;
+  LSP_TO_MONACO_SYMBOL_KIND[19] = SK.Object;
+  LSP_TO_MONACO_SYMBOL_KIND[20] = SK.Key;
+  LSP_TO_MONACO_SYMBOL_KIND[21] = SK.Null;
+  LSP_TO_MONACO_SYMBOL_KIND[22] = SK.EnumMember;
+  LSP_TO_MONACO_SYMBOL_KIND[23] = SK.Struct;
+  LSP_TO_MONACO_SYMBOL_KIND[24] = SK.Event;
+  LSP_TO_MONACO_SYMBOL_KIND[25] = SK.Operator;
+  LSP_TO_MONACO_SYMBOL_KIND[26] = SK.TypeParameter;
 }
 
 export function toMonacoDocumentSymbols(

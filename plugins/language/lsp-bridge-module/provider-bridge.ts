@@ -21,10 +21,44 @@ type ProviderFactory = (
   | monacoNs.languages.FoldingRangeProvider
   | monacoNs.languages.InlayHintsProvider;
 
+/** Strongly-typed provider key → shape discriminator */
+type ProviderKey =
+  | "completion"
+  | "hover"
+  | "definition"
+  | "references"
+  | "documentSymbol"
+  | "signatureHelp"
+  | "codeAction"
+  | "codeLens"
+  | "formatting"
+  | "rename"
+  | "foldingRange"
+  | "inlayHints";
+
+/** Maps provider key to its discriminant property and register function name */
+const PROVIDER_REGISTRY: Record<
+  ProviderKey,
+  { check: string; register: keyof typeof monacoNs.languages }
+> = {
+  completion:     { check: "provideCompletionItems",          register: "registerCompletionItemProvider" },
+  hover:          { check: "provideHover",                    register: "registerHoverProvider" },
+  definition:     { check: "provideDefinition",               register: "registerDefinitionProvider" },
+  references:     { check: "provideReferences",               register: "registerReferenceProvider" },
+  documentSymbol: { check: "provideDocumentSymbols",          register: "registerDocumentSymbolProvider" },
+  signatureHelp:  { check: "provideSignatureHelp",            register: "registerSignatureHelpProvider" },
+  codeAction:     { check: "provideCodeActions",              register: "registerCodeActionProvider" },
+  codeLens:       { check: "provideCodeLenses",               register: "registerCodeLensProvider" },
+  formatting:     { check: "provideDocumentFormattingEdits",  register: "registerDocumentFormattingEditProvider" },
+  rename:         { check: "provideRenameEdits",              register: "registerRenameProvider" },
+  foldingRange:   { check: "provideFoldingRanges",            register: "registerFoldingRangeProvider" },
+  inlayHints:     { check: "provideInlayHints",               register: "registerInlayHintsProvider" },
+};
+
 /**
  * The V1 provider bridge translates Monaco provider requests into JSON-RPC
- * calls. Uses generic ProviderFactory pattern — consumers define how to
- * map Monaco → RPC and RPC → Monaco.
+ * calls. Uses strongly-typed PROVIDER_REGISTRY — consumers define how to
+ * map Monaco → RPC and RPC → Monaco via ProviderFactory.
  */
 export class LspProviderBridge {
   private disposables: IDisposable[] = [];
@@ -36,6 +70,7 @@ export class LspProviderBridge {
 
   /**
    * Register a single Monaco provider that proxies to an RPC method.
+   * Auto-detects provider type via shape checking against PROVIDER_REGISTRY.
    */
   registerProvider(
     languageId: string,
@@ -44,73 +79,36 @@ export class LspProviderBridge {
   ): IDisposable {
     const provider = providerFactory(this.rpcClient, this.monaco);
 
-    // Determine which register method to use based on the provider's shape
-    let disposable: IDisposable;
-
-    if ("provideCompletionItems" in provider) {
-      disposable = this.monaco.languages.registerCompletionItemProvider(
-        languageId,
-        provider as monacoNs.languages.CompletionItemProvider,
-      );
-    } else if ("provideHover" in provider) {
-      disposable = this.monaco.languages.registerHoverProvider(
-        languageId,
-        provider as monacoNs.languages.HoverProvider,
-      );
-    } else if ("provideDefinition" in provider) {
-      disposable = this.monaco.languages.registerDefinitionProvider(
-        languageId,
-        provider as monacoNs.languages.DefinitionProvider,
-      );
-    } else if ("provideReferences" in provider) {
-      disposable = this.monaco.languages.registerReferenceProvider(
-        languageId,
-        provider as monacoNs.languages.ReferenceProvider,
-      );
-    } else if ("provideDocumentSymbols" in provider) {
-      disposable = this.monaco.languages.registerDocumentSymbolProvider(
-        languageId,
-        provider as monacoNs.languages.DocumentSymbolProvider,
-      );
-    } else if ("provideSignatureHelp" in provider) {
-      disposable = this.monaco.languages.registerSignatureHelpProvider(
-        languageId,
-        provider as monacoNs.languages.SignatureHelpProvider,
-      );
-    } else if ("provideCodeActions" in provider) {
-      disposable = this.monaco.languages.registerCodeActionProvider(
-        languageId,
-        provider as monacoNs.languages.CodeActionProvider,
-      );
-    } else if ("provideCodeLenses" in provider) {
-      disposable = this.monaco.languages.registerCodeLensProvider(
-        languageId,
-        provider as monacoNs.languages.CodeLensProvider,
-      );
-    } else if ("provideDocumentFormattingEdits" in provider) {
-      disposable = this.monaco.languages.registerDocumentFormattingEditProvider(
-        languageId,
-        provider as monacoNs.languages.DocumentFormattingEditProvider,
-      );
-    } else if ("provideRenameEdits" in provider) {
-      disposable = this.monaco.languages.registerRenameProvider(
-        languageId,
-        provider as monacoNs.languages.RenameProvider,
-      );
-    } else if ("provideFoldingRanges" in provider) {
-      disposable = this.monaco.languages.registerFoldingRangeProvider(
-        languageId,
-        provider as monacoNs.languages.FoldingRangeProvider,
-      );
-    } else if ("provideInlayHints" in provider) {
-      disposable = this.monaco.languages.registerInlayHintsProvider(
-        languageId,
-        provider as monacoNs.languages.InlayHintsProvider,
-      );
-    } else {
-      return { dispose: () => {} };
+    for (const entry of Object.values(PROVIDER_REGISTRY)) {
+      if (entry.check in provider) {
+        const registerFn = this.monaco.languages[entry.register] as (
+          languageId: string,
+          provider: never,
+        ) => IDisposable;
+        const disposable = registerFn(languageId, provider as never);
+        this.disposables.push(disposable);
+        return disposable;
+      }
     }
 
+    return { dispose: () => {} };
+  }
+
+  /**
+   * Register a provider by explicit key — no shape detection needed.
+   */
+  registerByKey(
+    languageId: string,
+    key: ProviderKey,
+    providerFactory: ProviderFactory,
+  ): IDisposable {
+    const provider = providerFactory(this.rpcClient, this.monaco);
+    const entry = PROVIDER_REGISTRY[key];
+    const registerFn = this.monaco.languages[entry.register] as (
+      languageId: string,
+      provider: never,
+    ) => IDisposable;
+    const disposable = registerFn(languageId, provider as never);
     this.disposables.push(disposable);
     return disposable;
   }
