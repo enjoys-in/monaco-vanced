@@ -1,11 +1,12 @@
 // ── Preview plugin — registers providers, opens/closes previews ──
-import type { MonacoPlugin, PluginContext, IDisposable } from "../../../core/types";
+import type { MonacoPlugin, PluginContext, IDisposable } from "@core/types";
 import type {
   PreviewProvider,
   PreviewFile,
   PreviewPanel,
   PreviewOptions,
 } from "./types";
+import { PreviewEvents, FileEvents } from "@core/events";
 
 // Built-in providers
 import { markdownProvider } from "./providers/markdown";
@@ -59,11 +60,11 @@ export function createPreviewPlugin(): MonacoPlugin {
        */
       const registerProvider = (provider: PreviewProvider): IDisposable => {
         providers.set(provider.id, provider);
-        ctx.emit("preview:provider-added", { id: provider.id });
+        ctx.emit(PreviewEvents.ProviderAdded, { id: provider.id });
         return {
           dispose() {
             providers.delete(provider.id);
-            ctx.emit("preview:provider-removed", { id: provider.id });
+            ctx.emit(PreviewEvents.ProviderRemoved, { id: provider.id });
           },
         };
       };
@@ -92,7 +93,7 @@ export function createPreviewPlugin(): MonacoPlugin {
         options?: PreviewOptions,
       ): Promise<PreviewPanel | undefined> => {
         if (file.size > MAX_PREVIEW_SIZE) {
-          ctx.emit("preview:error", {
+          ctx.emit(PreviewEvents.Error, {
             uri: file.uri,
             error: `File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max: 50MB`,
           });
@@ -117,7 +118,7 @@ export function createPreviewPlugin(): MonacoPlugin {
           previewType: provider.id,
           refresh() {
             provider.render(file).then((newHtml) => {
-              ctx.emit("preview:refresh", { uri: file.uri, html: newHtml });
+              ctx.emit(PreviewEvents.Refresh, { uri: file.uri, html: newHtml });
             });
           },
           updateContent(content: Uint8Array | string) {
@@ -128,12 +129,12 @@ export function createPreviewPlugin(): MonacoPlugin {
             activePreviews.delete(file.uri);
             // Revoke object URLs to prevent memory leaks
             if (file.objectUrl) URL.revokeObjectURL(file.objectUrl);
-            ctx.emit("preview:close", { uri: file.uri });
+            ctx.emit(PreviewEvents.Close, { uri: file.uri });
           },
         };
 
         activePreviews.set(file.uri, panel);
-        ctx.emit("preview:open", {
+        ctx.emit(PreviewEvents.Open, {
           uri: file.uri,
           previewType: provider.id,
           html,
@@ -149,28 +150,28 @@ export function createPreviewPlugin(): MonacoPlugin {
       };
 
       // Wire event-driven API
-      ctx.on("preview:open-request", (payload) => {
+      ctx.on(PreviewEvents.OpenRequest, (payload) => {
         const file = payload as PreviewFile;
         openPreview(file);
       });
 
-      ctx.on("preview:close-request", (payload) => {
+      ctx.on(PreviewEvents.CloseRequest, (payload) => {
         const { uri } = payload as { uri: string };
         closePreview(uri);
       });
 
-      ctx.on("preview:register-provider", (payload) => {
+      ctx.on(PreviewEvents.RegisterProvider, (payload) => {
         const provider = payload as PreviewProvider;
         registerProvider(provider);
       });
 
-      ctx.on("preview:can-preview", (payload) => {
+      ctx.on(PreviewEvents.CanPreview, (payload) => {
         const { uri } = payload as { uri: string };
-        ctx.emit("preview:can-preview-result", { uri, result: canPreview(uri) });
+        ctx.emit(PreviewEvents.CanPreviewResult, { uri, result: canPreview(uri) });
       });
 
       // Listen for live updates on previewable files
-      ctx.on("file:written", (payload) => {
+      ctx.on(FileEvents.Written, (payload) => {
         const { path } = payload as { path: string };
         const activePanel = activePreviews.get(path);
         if (activePanel) {

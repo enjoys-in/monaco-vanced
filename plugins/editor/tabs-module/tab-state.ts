@@ -1,6 +1,7 @@
 // ── Tab state manager — tracks open tabs, active tab, dirty state, ordering ──
-import type { PluginContext } from "../../../core/types";
+import type { PluginContext } from "@core/types";
 import type { TabEntry } from "./types";
+import { TabEvents } from "@core/events";
 
 export class TabState {
   private tabs = new Map<string, TabEntry>();
@@ -29,8 +30,8 @@ export class TabState {
     this.order.push(uri);
     this.activeUri = uri;
 
-    this.ctx.emit("tab:open", { uri, label: tab.label });
-    this.ctx.emit("tab:switch", { uri });
+    this.ctx.emit(TabEvents.Open, { uri, label: tab.label });
+    this.ctx.emit(TabEvents.Switch, { uri });
     return tab;
   }
 
@@ -39,13 +40,13 @@ export class TabState {
     if (!this.tabs.has(uri)) return;
     this.tabs.delete(uri);
     this.order = this.order.filter((u) => u !== uri);
-    this.ctx.emit("tab:close", { uri });
+    this.ctx.emit(TabEvents.Close, { uri });
 
     // Switch to the previous tab if this was active
     if (this.activeUri === uri) {
       this.activeUri = this.order.length > 0 ? this.order[this.order.length - 1] : null;
       if (this.activeUri) {
-        this.ctx.emit("tab:switch", { uri: this.activeUri });
+        this.ctx.emit(TabEvents.Switch, { uri: this.activeUri });
       }
     }
   }
@@ -54,7 +55,7 @@ export class TabState {
   activate(uri: string): void {
     if (!this.tabs.has(uri) || this.activeUri === uri) return;
     this.activeUri = uri;
-    this.ctx.emit("tab:switch", { uri });
+    this.ctx.emit(TabEvents.Switch, { uri });
   }
 
   /** Set dirty state for a tab */
@@ -62,7 +63,7 @@ export class TabState {
     const tab = this.tabs.get(uri);
     if (!tab || tab.dirty === dirty) return;
     tab.dirty = dirty;
-    this.ctx.emit("tab:dirty", { uri, dirty });
+    this.ctx.emit(TabEvents.Dirty, { uri, dirty });
   }
 
   /** Pin/unpin a tab */
@@ -76,14 +77,14 @@ export class TabState {
       const firstUnpinned = this.order.findIndex((u) => !this.tabs.get(u)?.pinned);
       this.order.splice(firstUnpinned === -1 ? this.order.length : firstUnpinned, 0, uri);
     }
-    this.ctx.emit("tab:pin", { uri });
-    this.ctx.emit("tab:reorder", { order: [...this.order] });
+    this.ctx.emit(TabEvents.Pin, { uri });
+    this.ctx.emit(TabEvents.Reorder, { order: [...this.order] });
   }
 
   /** Reorder tabs */
   reorder(newOrder: string[]): void {
     this.order = newOrder.filter((u) => this.tabs.has(u));
-    this.ctx.emit("tab:reorder", { order: [...this.order] });
+    this.ctx.emit(TabEvents.Reorder, { order: [...this.order] });
   }
 
   getTab(uri: string): TabEntry | undefined {

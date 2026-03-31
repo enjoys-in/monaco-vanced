@@ -1,6 +1,6 @@
-import "./src/style.css";
+import "./style.css";
 import * as monaco from "monaco-editor";
-import { PluginEngine, EventBus } from "monaco-vanced";
+import { PluginEngine, EventBus } from "@enjoys/monaco-vanced";
 
 // ── Bootstrap ─────────────────────────────────────────────────
 

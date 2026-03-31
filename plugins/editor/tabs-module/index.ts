@@ -1,6 +1,7 @@
 // ── Tabs plugin — tab strip, open/close, dirty state, ordering ──
-import type { MonacoPlugin, PluginContext } from "../../../core/types";
+import type { MonacoPlugin, PluginContext } from "@core/types";
 import { TabState } from "./tab-state";
+import { ModelEvents, TabEvents, FileEvents } from "@core/events";
 
 export function createTabsPlugin(): MonacoPlugin {
   let tabState: TabState;
@@ -18,25 +19,25 @@ export function createTabsPlugin(): MonacoPlugin {
       tabState = new TabState(ctx);
 
       // model:create → open tab
-      ctx.on("model:create", (payload) => {
+      ctx.on(ModelEvents.Create, (payload) => {
         const { uri } = payload as { uri: string; language: string };
         tabState.open(uri);
       });
 
       // tab:dirty from model-manager content changes
-      ctx.on("tab:dirty", (payload) => {
+      ctx.on(TabEvents.Dirty, (payload) => {
         const { uri, dirty } = payload as { uri: string; dirty: boolean };
         tabState.setDirty(uri, dirty);
       });
 
       // file:written → mark clean
-      ctx.on("file:written", (payload) => {
+      ctx.on(FileEvents.Written, (payload) => {
         const { path } = payload as { path: string };
         tabState.setDirty(path, false);
       });
 
       // file:close → close tab
-      ctx.on("file:close", (payload) => {
+      ctx.on(FileEvents.Close, (payload) => {
         const { path } = payload as { path: string };
         tabState.close(path);
       });

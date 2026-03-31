@@ -3,6 +3,7 @@
 import type { MonacoPlugin, Monaco, MonacoEditor, BootConfig } from "./types";
 import { EventBus } from "./event-bus";
 import { PluginEngine } from "./plugin-engine";
+import { EditorEvents } from "./events";
 
 export interface CreateIDEOptions {
   /** Container element (or CSS selector) for the editor */
@@ -85,7 +86,7 @@ export async function createMonacoIDE(
   // Boot — runs Phase 1-5 lifecycle
   await engine.boot(monacoGlobal, editor);
 
-  eventBus.emit("editor:create", { languageId: language ?? "plaintext" });
+  eventBus.emit(EditorEvents.Create, { languageId: language ?? "plaintext" });
 
   return {
     editor,
@@ -96,7 +97,7 @@ export async function createMonacoIDE(
     destroy: async () => {
       await engine.destroyAll();
       editor.dispose();
-      eventBus.emit("editor:destroy", {});
+      eventBus.emit(EditorEvents.Destroy, {});
     },
   };
 }

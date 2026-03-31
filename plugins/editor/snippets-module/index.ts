@@ -1,8 +1,9 @@
 // ── Snippets plugin — registers Monaco completion provider for snippets ──
 import type * as monacoNs from "monaco-editor";
-import type { MonacoPlugin, PluginContext } from "../../../core/types";
+import type { MonacoPlugin, PluginContext } from "@core/types";
 import type { SnippetConfig, SnippetDefinition, VSCodeSnippetFile } from "./types";
 import { parseVSCodeSnippets, toCompletionItem } from "./parser";
+import { SnippetEvents } from "@core/events";
 
 export function createSnippetsPlugin(config?: SnippetConfig): MonacoPlugin {
   const snippets: SnippetDefinition[] = [];
@@ -57,12 +58,12 @@ export function createSnippetsPlugin(config?: SnippetConfig): MonacoPlugin {
       };
 
       // Wire event-driven API
-      ctx.on("snippets:add", (payload) => {
+      ctx.on(SnippetEvents.Add, (payload) => {
         const snippet = payload as SnippetDefinition;
         snippets.push(snippet);
       });
 
-      ctx.on("snippets:load-vscode", (payload) => {
+      ctx.on(SnippetEvents.LoadVscode, (payload) => {
         const { json, source } = payload as { json: VSCodeSnippetFile; source?: string };
         const parsed = parseVSCodeSnippets(json, source);
         snippets.push(...parsed);

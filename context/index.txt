@@ -14,51 +14,51 @@ is the only shared runtime. Everything else communicates through events.
   TOTAL: 22 spec files + 1 build plan + 1 instructions = 24 files
   TOTAL LINES: ~14,800
 
-  #   File                              Lines   Description
-  ──  ────────────────────────────────  ──────  ─────────────────────────────────────
+  #   File                              Lines   Status      Description
+  ──  ────────────────────────────────  ──────  ──────────  ─────────────────────────────────────
 
   CORE ARCHITECTURE (extracted from original context.txt):
-  ──  ────────────────────────────────  ──────  ─────────────────────────────────────
-  1.  tech-stack.txt                       90   Bun, Vite, Rolldown, ESM+CJS, package exports, directory layout
-  2.  plugin-contract.txt                  68   Core philosophy, Plugin interface, ModuleContext, EventBus contract
-  3.  layout-shell.txt                   1000   Visual frame: header, title, sidebar, editor, panels, status bar, webviews
-  4.  auth-module.txt                      97   GitHub & Gmail OAuth, PKCE, token storage, route protection
-  5.  fs-connections.txt                  678   FSAdapter interface, 5 adapters (SFTP/API/Local/OPFS/IndexedDB), AI gating
-  6.  modules-core.txt                    254   23 core modules + 19 advanced modules (42 module summaries)
-  7.  event-bus.txt                       178   Full event catalogue (~140 events across 18 domains)
-  8.  wiring-patterns.txt                 208   User-side handler patterns, registration order, data flow walkthroughs
-  9.  settings-module.txt                 292   VSCode-style configuration: layers, API, UI, snippets, JSON, events
-  10. symbol-providers.txt                500   Symbol index + 6 Monaco providers (definition, reference, hover, rename)
-  11. registry-enums.txt                  340   Full module registry (78 modules, 12 categories) + event name enums
+  ──  ────────────────────────────────  ──────  ──────────  ─────────────────────────────────────
+  1.  tech-stack.txt                       90   ✅ Done     Bun, Vite, Rolldown, ESM+CJS, package exports, directory layout
+  2.  plugin-contract.txt                  68   ✅ Done     Core philosophy, Plugin interface, ModuleContext, EventBus contract
+  3.  layout-shell.txt                   1000   Pending     Visual frame: header, title, sidebar, editor, panels, status bar, webviews
+  4.  auth-module.txt                      97   Pending     GitHub & Gmail OAuth, PKCE, token storage, route protection
+  5.  fs-connections.txt                  678   Pending     FSAdapter interface, 5 adapters (SFTP/API/Local/OPFS/IndexedDB), AI gating
+  6.  modules-core.txt                    254   Partial     23 core modules + 19 advanced modules (42 module summaries)
+  7.  event-bus.txt                       178   ✅ Done     Full event catalogue (~140 events across 18 domains)
+  8.  wiring-patterns.txt                 208   ✅ Done     User-side handler patterns, registration order, data flow walkthroughs
+  9.  settings-module.txt                 292   Pending     VSCode-style configuration: layers, API, UI, snippets, JSON, events
+  10. symbol-providers.txt                500   Pending     Symbol index + 6 Monaco providers (definition, reference, hover, rename)
+  11. registry-enums.txt                  340   ✅ Done     Full module registry (78 modules, 12 categories) + event name enums
 
   EXTENDED SPECIFICATIONS:
-  ──  ────────────────────────────────  ──────  ─────────────────────────────────────
-  12. advanced-modules.txt               1999   Phase 1/2/3 — 26 new modules (#47-#72), 16 expansions
-  13. filesystem-advanced.txt             666   Strategy Pattern handlers, lifecycle hooks, FS context menu system
-  14. plugin-lifecycle.txt                323   Mount lifecycle (onReady/onFailed), universal operation callbacks
-  15. webview-triggers.txt                706   WebviewPanel API, lazy registration, 8 trigger mechanisms
-  16. custom-context-enginge.txt          365   Context Engine — CDN language packs, 25 providers, Dexie storage
-  17. custom-plugins.txt                  246   Plugin system TypeScript interfaces — PluginContext, MonacoPlugin
+  ──  ────────────────────────────────  ──────  ──────────  ─────────────────────────────────────
+  12. advanced-modules.txt               1999   Pending     Phase 1/2/3 — 26 new modules (#47-#72), 16 expansions
+  13. filesystem-advanced.txt             666   Pending     Strategy Pattern handlers, lifecycle hooks, FS context menu system
+  14. plugin-lifecycle.txt                323   ✅ Done     Mount lifecycle (onReady/onFailed), universal operation callbacks
+  15. webview-triggers.txt                706   Pending     WebviewPanel API, lazy registration, 8 trigger mechanisms
+  16. custom-context-enginge.txt          365   Pending     Context Engine — CDN language packs, 25 providers, Dexie storage
+  17. custom-plugins.txt                  246   ✅ Done     Plugin system TypeScript interfaces — PluginContext, MonacoPlugin
 
   COMMAND & EXTENSION SYSTEM:
-  ──  ────────────────────────────────  ──────  ─────────────────────────────────────
-  18. monaco-command-system.txt           678   Command palette + editor context menu, preconditions, when-clauses
-  19. custom-extension-host.txt          1022   Extension host: OPFS VFS, Dexie.js index, contribution parser, webview panels
+  ──  ────────────────────────────────  ──────  ──────────  ─────────────────────────────────────
+  18. monaco-command-system.txt           678   Pending     Command palette + editor context menu, preconditions, when-clauses
+  19. custom-extension-host.txt          1022   Pending     Extension host: OPFS VFS, Dexie.js index, contribution parser, webview panels
 
   INTERACTION & PREVIEW SYSTEM:
-  ──  ────────────────────────────────  ──────  ─────────────────────────────────────
-  20. custom-dialog.txt                  1516   TWO SEPARATE SYSTEMS: Notification system (toasts, user-configurable)
-                                                + Dialog system (modals: confirm/input/trust/auth/permission/custom/wizard)
-                                                + File preview system (markdown, image, audio, video, PDF, font, HTML, JSON, CSV)
+  ──  ────────────────────────────────  ──────  ──────────  ─────────────────────────────────────
+  20. custom-dialog.txt                  1516   Partial     TWO SEPARATE SYSTEMS: Notification system (toasts, user-configurable)
+                                                            + Dialog system (modals: confirm/input/trust/auth/permission/custom/wizard)
+                                                            + File preview system (markdown, image, audio, video, PDF, font, HTML, JSON, CSV)
 
   LANGUAGE SERVER:
-  ──  ────────────────────────────────  ──────  ─────────────────────────────────────
-  21. lsp-bridge-module.txt             1297   Dual-mode LSP client (V1 custom JSON-RPC + V2 built-in Monaco LSP), 24 providers, converters, settings, status bar
+  ──  ────────────────────────────────  ──────  ──────────  ─────────────────────────────────────
+  21. lsp-bridge-module.txt             1380   Pending     Dual-mode LSP client (V1 custom JSON-RPC + V2 built-in Monaco LSP), 24 providers, converters, settings, ping/pong liveness, status bar
 
   BUILD & INSTRUCTIONS:
-  ──  ────────────────────────────────  ──────  ─────────────────────────────────────
-  22. instructions.md                    2508   Project instructions and conventions
-  23. PLAN.md                            1277   Master build plan, module list, dependency graph, progress tracking
+  ──  ────────────────────────────────  ──────  ──────────  ─────────────────────────────────────
+  22. instructions.md                    2508   ✅ Done     Project instructions and conventions
+  23. PLAN.md                            1277   ✅ Done     Master build plan, module list, dependency graph, progress tracking
 
 ================================================================================
   QUICK REFERENCE
@@ -79,10 +79,20 @@ is the only shared runtime. Everything else communicates through events.
   New event files:
     core/events/interaction.events.ts    (dialogs, prompts, notifications)
     core/events/preview.events.ts        (file preview system)
+    core/events/decoration.events.ts     (editor decorations)
+    core/events/snippet.events.ts        (snippet completions)
+    core/events/virtualize.events.ts     (DOM virtualization)
 
-  New modules scaffolded:
-    plugins/editor/preview-module/       (10 preview providers)
-    plugins/infrastructure/notification-module/trust-store.ts
+  Implementation status:
+    ✅ Core Engine:    8 files — types, event-bus, disposable-store, language-registry,
+                       error-boundary, plugin-context, plugin-engine, facade
+    ✅ Event Enums:    40 files — 37 domain enums + 3 new (decoration, snippet, virtualize) + barrel
+    ✅ Editor Section: 6 modules, 30 files — editor, tabs, decorations, snippets,
+                       preview (10 providers), virtualization
+    ❌ Language Section:    Not started
+    ❌ Filesystem Section:  Not started
+    ❌ Layout Section:      Not started
+    ❌ All other sections:  Not started
 
 ================================================================================
   HOW TO USE THIS INDEX

@@ -1,7 +1,8 @@
 // ── Virtualization plugin — virtual scroll for large lists ──
-import type { MonacoPlugin, PluginContext } from "../../../core/types";
+import type { MonacoPlugin, PluginContext } from "@core/types";
 import type { VirtualListConfig, VirtualHandle } from "./types";
 import { createVirtualList } from "./virtual-list";
+import { VirtualizeEvents } from "@core/events";
 
 export function createVirtualizationPlugin(): MonacoPlugin {
   const lists = new Map<string, VirtualHandle>();
@@ -16,12 +17,12 @@ export function createVirtualizationPlugin(): MonacoPlugin {
 
     onMount(ctx: PluginContext) {
       // Listen for virtualize:create-list events from other plugins
-      ctx.on("virtualize:create-list", (payload) => {
+      ctx.on(VirtualizeEvents.CreateList, (payload) => {
         const config = payload as VirtualListConfig;
         const id = config.id ?? `vlist-${Date.now()}`;
         const handle = createVirtualList({ ...config, id });
         lists.set(id, handle);
-        ctx.emit("virtualize:mount", { listId: id, itemCount: config.itemCount });
+        ctx.emit(VirtualizeEvents.Mount, { listId: id, itemCount: config.itemCount });
       });
     },
 

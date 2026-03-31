@@ -7,6 +7,7 @@ import { EventBus } from "./event-bus";
 import { PluginContext } from "./plugin-context";
 import { ErrorBoundary } from "./error-boundary";
 import { LanguageRegistry } from "./language-registry";
+import { PluginEvents, EditorEvents } from "./events";
 
 interface PluginEntry {
   plugin: MonacoPlugin;
@@ -53,7 +54,7 @@ export class PluginEngine {
       plugin,
       enabled: plugin.defaultEnabled !== false,
     });
-    this.eventBus.emit("plugin:register", { name: plugin.id });
+    this.eventBus.emit(PluginEvents.Register, { name: plugin.id });
   }
 
   registerAll(plugins: MonacoPlugin[]): void {
@@ -141,13 +142,13 @@ export class PluginEngine {
       const ctx = new PluginContext(id, monaco, editor, this.eventBus);
       this.contexts.set(id, ctx);
 
-      this.eventBus.emit("plugin:init", { name: id });
+      this.eventBus.emit(PluginEvents.Init, { name: id });
 
       const ok = await this.initWithStrategy(id, plugin, ctx);
 
       if (ok) {
         succeeded.push(id);
-        this.eventBus.emit("plugin:ready", { name: id });
+        this.eventBus.emit(PluginEvents.Ready, { name: id });
         if (plugin.onReady) {
           await this.errorBoundary.guard(id, "onReady", () => plugin.onReady!(ctx));
         }
@@ -155,7 +156,7 @@ export class PluginEngine {
         failures.push({ pluginId: id, error: `Init failed for ${id}` });
         if (this.bootConfig.onPluginError === "abort") {
           this.bootConfig.onAnyFailed(failures);
-          this.eventBus.emit("plugin:boot-failed", {
+          this.eventBus.emit(PluginEvents.BootFailed, {
             failedCount: failures.length,
             names: failures.map((f) => f.pluginId),
           });
@@ -170,13 +171,13 @@ export class PluginEngine {
     // Boot complete — fire global hooks
     if (failures.length > 0) {
       this.bootConfig.onAnyFailed(failures);
-      this.eventBus.emit("plugin:boot-failed", {
+      this.eventBus.emit(PluginEvents.BootFailed, {
         failedCount: failures.length,
         names: failures.map((f) => f.pluginId),
       });
     }
 
-    this.eventBus.emit("plugin:all-ready", {
+    this.eventBus.emit(PluginEvents.AllReady, {
       count: succeeded.length,
       names: succeeded,
     });
@@ -215,7 +216,7 @@ export class PluginEngine {
 
     // All attempts exhausted
     console.error(`[PluginEngine] Plugin "${id}" failed to init after ${maxAttempts} attempt(s).`);
-    this.eventBus.emit("plugin:error", { name: id, error: `Init failed` });
+    this.eventBus.emit(PluginEvents.Error, { name: id, error: `Init failed` });
     ctx.dispose();
     this.contexts.delete(id);
     return false;
@@ -227,7 +228,7 @@ export class PluginEngine {
     // Language change
     editor.onDidChangeModelLanguage?.((e) => {
       const language = e.newLanguage;
-      this.eventBus.emit("editor:language-change", { language });
+      this.eventBus.emit(EditorEvents.LanguageChange, { language });
       for (const id of this.bootOrder) {
         const { plugin } = this.plugins.get(id)!;
         const ctx = this.contexts.get(id);
@@ -272,7 +273,7 @@ export class PluginEngine {
     const ok = await this.initWithStrategy(plugin.id, plugin, ctx);
     if (ok) {
       this.bootOrder.push(plugin.id);
-      this.eventBus.emit("plugin:ready", { name: plugin.id });
+      this.eventBus.emit(PluginEvents.Ready, { name: plugin.id });
     }
   }
 
@@ -290,7 +291,7 @@ export class PluginEngine {
     this.contexts.delete(id);
     this.plugins.delete(id);
     this.bootOrder = this.bootOrder.filter((pid) => pid !== id);
-    this.eventBus.emit("plugin:destroy", { name: id });
+    this.eventBus.emit(PluginEvents.Destroy, { name: id });
   }
 
   // ── Full shutdown ─────────────────────────────────────────

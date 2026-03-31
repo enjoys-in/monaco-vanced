@@ -12,4 +12,7 @@ export enum LspEvents {
   DefinitionResponse = "lsp:definition-response",
   ReferencesRequest = "lsp:references-request",
   ReferencesResponse = "lsp:references-response",
+  PingSuccess = "lsp:ping-success",
+  PingTimeout = "lsp:ping-timeout",
+  PingFailed = "lsp:ping-failed",
 }

@@ -985,6 +985,18 @@ SECTION 10 — SETTINGS INTEGRATION
       "type": "boolean",
       "default": true,
       "description": "Enable LSP WebSocket connection"
+    },
+    "lsp.ping.enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable periodic server liveness ping"
+    },
+    "lsp.ping.intervalMs": {
+      "type": "number",
+      "default": 15000,
+      "minimum": 15000,
+      "maximum": 120000,
+      "description": "Ping interval in milliseconds (min: 15s, max: 2min)"
     }
   }
 
@@ -997,6 +1009,8 @@ SECTION 10 — SETTINGS INTEGRATION
   - Changing lsp.autoConnect to false → disconnect (if connected)
   - Changing retry/timeout → applies to NEXT connection attempt
   - Changing lsp.enabled to false → disconnect + dispose all clients
+  - Changing lsp.ping.enabled to false → stop liveness polling immediately
+  - Changing lsp.ping.intervalMs → applies to NEXT polling cycle (clamped 15s–2min)
 
 
 ================================================================================
@@ -1279,7 +1293,86 @@ SECTION 14 — FILE MAP
 
 
 ================================================================================
-SECTION 15 — WHAT TO AVOID
+SECTION 15 — SERVER LIVENESS POLLING (PING/PONG)
+================================================================================
+
+  The LSP module includes a keep-alive health check that periodically pings
+  the LSP server to verify liveness. If the server stops responding, the
+  module transitions to reconnecting state automatically.
+
+──────────────────────────────────────────────────────────────
+15A — PING ENDPOINT
+──────────────────────────────────────────────────────────────
+
+  HTTP GET  ${lsp.url}/ping
+  Expected: 200 OK  body: "pong"
+
+  The ping endpoint is a lightweight HTTP GET (not WebSocket) that verifies
+  the server process is alive. It's separate from the WebSocket connection
+  to detect server restarts even when the WS connection appears open.
+
+──────────────────────────────────────────────────────────────
+15B — POLLING BEHAVIOR
+──────────────────────────────────────────────────────────────
+
+  - Enabled by default (lsp.ping.enabled = true)
+  - Interval: lsp.ping.intervalMs (default: 15000 — 15 seconds)
+  - Minimum interval: 15 seconds (15000ms — enforced, ignores lower values)
+  - Maximum interval: 2 minutes (120000ms — enforced, clamps higher values)
+  - Only polls when connection state is "connected"
+  - Stops polling on disconnect/reconnecting/failed
+  - Resumes polling on successful reconnect
+  - Timeout per ping: 5000ms (5 seconds) — if no response, treat as failure
+
+  FAILURE HANDLING:
+  - 1 missed ping → emit LspEvent.PingTimeout, log warning
+  - 2 consecutive missed pings → transition to "reconnecting", start retry
+  - On successful ping after failure → reset missed count, emit LspEvent.PingSuccess
+
+  ┌──────────────────────┬─────────────────────────────────────────────────┐
+  │ Ping result          │ Action                                          │
+  ├──────────────────────┼─────────────────────────────────────────────────┤
+  │ 200 + "pong"         │ Reset missed count, emit PingSuccess            │
+  │ Non-200 / timeout    │ Increment missed count                          │
+  │ 2+ consecutive miss  │ Transition to "reconnecting", trigger retry     │
+  │ Network error        │ Count as missed ping                            │
+  └──────────────────────┴─────────────────────────────────────────────────┘
+
+──────────────────────────────────────────────────────────────
+15C — LIVENESS EVENTS
+──────────────────────────────────────────────────────────────
+
+  LspEvent.PingSuccess    = "lsp:ping-success"     { latencyMs }
+  LspEvent.PingTimeout    = "lsp:ping-timeout"     { missedCount }
+  LspEvent.PingFailed     = "lsp:ping-failed"      { missedCount, error }
+
+──────────────────────────────────────────────────────────────
+15D — SETTINGS
+──────────────────────────────────────────────────────────────
+
+  {
+    "lsp.ping.enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable periodic server liveness ping"
+    },
+    "lsp.ping.intervalMs": {
+      "type": "number",
+      "default": 15000,
+      "minimum": 15000,
+      "maximum": 120000,
+      "description": "Ping interval in milliseconds (min: 15s, max: 2min)"
+    }
+  }
+
+  LIVE SETTINGS UPDATE:
+  - Changing lsp.ping.enabled to false → stop polling immediately
+  - Changing lsp.ping.intervalMs → applies to NEXT polling cycle
+  - Clamped at runtime: Math.max(15000, Math.min(120000, value))
+
+
+================================================================================
+SECTION 16 — WHAT TO AVOID
 ================================================================================
 
   - ❌ Don't reconnect infinitely (max 10 retries, then stop)

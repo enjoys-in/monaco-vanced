@@ -6,6 +6,7 @@ import type * as monacoNs from "monaco-editor";
 import type { IDisposable, PluginContext as IPluginContext, Monaco, MonacoEditor } from "./types";
 import type { EventBus } from "./event-bus";
 import { DisposableStore } from "./disposable-store";
+import { NotifyEvents } from "./events";
 
 export class PluginContext implements IPluginContext {
   private store = new DisposableStore();
@@ -76,7 +77,7 @@ export class PluginContext implements IPluginContext {
   // ── Notifications ────────────────────────────────────────
 
   notify(message: string, type: "info" | "success" | "warning" | "error" = "info"): void {
-    this.eventBus.emit("notify:show", { message, level: type, source: this.pluginId });
+    this.eventBus.emit(NotifyEvents.Show, { message, level: type, source: this.pluginId });
   }
 
   // ── Keybindings + actions ────────────────────────────────

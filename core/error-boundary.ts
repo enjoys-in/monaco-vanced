@@ -1,6 +1,7 @@
 // ── Error boundary — catches uncaught errors during plugin lifecycle ──
 
 import type { EventBus } from "./event-bus";
+import { PluginEvents } from "./events";
 
 export class ErrorBoundary {
   constructor(private eventBus: EventBus) {}
@@ -19,7 +20,7 @@ export class ErrorBoundary {
       return { ok: true, value };
     } catch (error) {
       console.error(`[ErrorBoundary] ${pluginId}/${operation} failed:`, error);
-      this.eventBus.emit("plugin:error", { name: pluginId, error, operation });
+      this.eventBus.emit(PluginEvents.Error, { name: pluginId, error, operation });
       return { ok: false, error };
     }
   }
@@ -32,7 +33,7 @@ export class ErrorBoundary {
       fn();
     } catch (error) {
       console.error(`[ErrorBoundary] ${pluginId}/${operation} failed:`, error);
-      this.eventBus.emit("plugin:error", { name: pluginId, error, operation });
+      this.eventBus.emit(PluginEvents.Error, { name: pluginId, error, operation });
     }
   }
 }

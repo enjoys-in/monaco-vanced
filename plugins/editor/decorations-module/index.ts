@@ -1,7 +1,8 @@
 // ── Decorations plugin — manage editor decorations by type ──
 import type * as monacoNs from "monaco-editor";
-import type { MonacoPlugin, PluginContext } from "../../../core/types";
+import type { MonacoPlugin, PluginContext } from "@core/types";
 import type { DecorationConfig, DecorationEntry } from "./types";
+import { DecorationEvents } from "@core/events";
 
 type MonacoEditor = monacoNs.editor.IStandaloneCodeEditor;
 
@@ -70,17 +71,17 @@ export function createDecorationsPlugin(): MonacoPlugin {
       };
 
       // Wire event-driven API
-      ctx.on("decorations:apply", (payload) => {
+      ctx.on(DecorationEvents.Apply, (payload) => {
         const { config: cfg, ranges: r } = payload as { config: DecorationConfig; ranges: monacoNs.IRange[] };
         applyDecoration(cfg, r);
       });
 
-      ctx.on("decorations:remove", (payload) => {
+      ctx.on(DecorationEvents.Remove, (payload) => {
         const { id } = payload as { id: string };
         removeDecoration(id);
       });
 
-      ctx.on("decorations:clear", () => {
+      ctx.on(DecorationEvents.Clear, () => {
         clearAll();
       });
     },

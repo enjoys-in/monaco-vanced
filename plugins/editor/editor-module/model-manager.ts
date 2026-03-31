@@ -1,7 +1,8 @@
 // ── Model manager — create/dispose Monaco text models per file URI ──
 import type * as monacoNs from "monaco-editor";
-import type { PluginContext } from "../../../core/types";
+import type { PluginContext } from "@core/types";
 import type { ModelState } from "./types";
+import { TabEvents, ModelEvents } from "@core/events";
 
 type Monaco = typeof monacoNs;
 
@@ -33,10 +34,10 @@ export class ModelManager {
     // Track dirty state via version changes
     model.onDidChangeContent(() => {
       this.dirty.add(uri);
-      this.ctx.emit("tab:dirty", { uri, dirty: true });
+      this.ctx.emit(TabEvents.Dirty, { uri, dirty: true });
     });
 
-    this.ctx.emit("model:create", { uri, language: detectedLang });
+    this.ctx.emit(ModelEvents.Create, { uri, language: detectedLang });
     return model;
   }
 
@@ -49,7 +50,7 @@ export class ModelManager {
     model.dispose();
     this.models.delete(uri);
     this.dirty.delete(uri);
-    this.ctx.emit("model:dispose", { uri });
+    this.ctx.emit(ModelEvents.Dispose, { uri });
   }
 
   /**
@@ -65,7 +66,7 @@ export class ModelManager {
    */
   markClean(uri: string): void {
     this.dirty.delete(uri);
-    this.ctx.emit("tab:dirty", { uri, dirty: false });
+    this.ctx.emit(TabEvents.Dirty, { uri, dirty: false });
   }
 
   isDirty(uri: string): boolean {
@@ -94,7 +95,7 @@ export class ModelManager {
   disposeAll(): void {
     for (const [uri, model] of this.models) {
       model.dispose();
-      this.ctx.emit("model:dispose", { uri });
+      this.ctx.emit(ModelEvents.Dispose, { uri });
     }
     this.models.clear();
     this.dirty.clear();
