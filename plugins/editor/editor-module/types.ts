@@ -8,6 +8,8 @@ export interface EditorConfig {
   editorOptions?: monacoNs.editor.IStandaloneEditorConstructionOptions;
   /** Whether to auto-dispose models when their tab closes */
   autoDisposeModels?: boolean;
+  /** Monaco override services (advanced — not user-configurable, internal only) */
+  overrideServices?: monacoNs.editor.IEditorOverrideServices;
 }
 
 export interface ModelState {

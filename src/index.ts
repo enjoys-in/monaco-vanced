@@ -9,6 +9,8 @@
 export { PluginEngine } from "@core/plugin-engine";
 export { EventBus } from "@core/event-bus";
 export { PluginContext } from "@core/plugin-context";
+export { createMonacoIDE } from "@core/facade";
+export type { CreateIDEOptions, MonacoVancedInstance } from "@core/facade";
 
 // ── Core Types ───────────────────────────────────────────────
 export type {

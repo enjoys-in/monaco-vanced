@@ -42,6 +42,8 @@
 32. [All Enums Quick Reference](#32-all-enums-quick-reference)
 33. [Complete Register Function Index](#33-complete-register-function-index)
 34. [Agent Rules](#34-agent-rules)
+35. [Rendering & Performance Discipline](#35-rendering--performance-discipline)
+36. [Script-to-Editor RPC Communication](#36-script-to-editor-rpc-communication)
 
 ---
 
@@ -2506,3 +2508,91 @@ When implementing or modifying `monaco.languages` providers in this codebase:
 8. **Return `{ suggestions: [] }` not `null`** for empty completion results (avoids editor errors)
 9. **Snippet insertText** requires `CompletionItemInsertTextRule.InsertAsSnippet` with `$1`, `$2`, `${1:placeholder}` syntax
 10. **LanguageSelector** — all `register*` functions accept `string | LanguageFilter | ReadonlyArray<string | LanguageFilter>`; for single-language use, just pass the `string` language ID
+
+---
+
+## 35. Rendering & Performance Discipline
+
+The editor will be wrapped inside a layout shell (TUI / layout-module).
+Prevent unnecessary re-renders — only update components whose state actually changed.
+
+### Rules
+
+1. **Editor instance is stable** — once `monaco.editor.create()` returns, never destroy and recreate. Use `editor.updateOptions()` for setting changes, `editor.setModel()` for content/language switching
+2. **Isolate state boundaries** — status bar, sidebar, tabs, command palette, right-click context menu are SEPARATE render scopes. Clicking the status bar must NOT trigger an editor re-render
+3. **Granular event listeners** — each UI component subscribes only to events it cares about:
+   - Status bar → `EditorEvents.LanguageChange`, `TabEvents.Dirty`, cursor position
+   - Tab strip → `TabEvents.Open`, `TabEvents.Close`, `TabEvents.Switch`, `TabEvents.Dirty`
+   - Command palette → keyboard shortcut trigger only, renders on demand
+   - Context menu → right-click trigger only, renders on demand, destroyed on dismiss
+4. **No cascading state** — a setting change emits `settings:change` → only the affected component picks it up. Do NOT propagate through a top-level state tree that re-renders everything
+5. **Memoize expensive computations** — file tree, search results, symbol lists. Virtualize long lists (virtualization-module)
+6. **Debounce content changes** — model content changes are already debounced at 300ms in plugin-engine. Downstream consumers must NOT add additional debounce
+7. **Lazy mount UI overlays** — command palette, dialogs, context menus are not in the DOM until triggered. Mount on demand, unmount on dismiss
+8. **Editor updateOptions() is cheap** — Monaco internally diffs options. Call it freely on setting changes without worrying about re-render cost
+9. **Layout wrapper responsibility** — the layout shell wraps the editor in a container. It handles resize (ResizeObserver or `automaticLayout: true`). The editor-module does NOT manage layout dimensions
+
+### What NOT to do
+
+- Do NOT re-mount the editor when a peripheral component updates (status bar click, tab switch styling, sidebar toggle)
+- Do NOT use a single global state store that triggers full-tree re-renders
+- Do NOT recreate the Monaco editor for theme changes — use `monaco.editor.setTheme()`
+- Do NOT create new models for the same URI — reuse existing models (ModelManager enforces this)
+- Do NOT subscribe to `*` (wildcard) events in performance-critical components
+
+---
+
+## 36. Script-to-Editor RPC Communication
+
+For webview panels and external scripts that need to communicate with
+the Monaco editor (similar to VS Code's postMessage bridge):
+
+### Pattern: EventBus as RPC bridge
+
+External scripts (webview iframes, worker threads, extension host) communicate
+via the EventBus using a structured request/response pattern:
+
+```
+  ┌──────────────┐    postMessage     ┌──────────────┐
+  │   Webview     │ ──────────────────▶│  Host Frame  │
+  │   (iframe)    │◀────────────────── │  (EventBus)  │
+  └──────────────┘    postMessage     └──────────────┘
+```
+
+The host frame bridges `window.postMessage` ↔ `EventBus`:
+
+```typescript
+// Host-side bridge (in extension-host or webview-module)
+window.addEventListener("message", (e) => {
+  if (e.data?.type === "rpc:request") {
+    eventBus.emit(e.data.event, e.data.payload);
+  }
+});
+
+eventBus.on("rpc:response", (data) => {
+  iframe.contentWindow?.postMessage({ type: "rpc:response", ...data }, "*");
+});
+```
+
+### Supported RPC commands
+
+Scripts can trigger any Monaco command via the command palette system:
+
+```typescript
+// From webview script
+parent.postMessage({
+  type: "rpc:request",
+  event: "command:execute",
+  payload: { commandId: "editor.action.formatDocument" }
+}, "*");
+
+// Execute arbitrary editor actions
+parent.postMessage({
+  type: "rpc:request",
+  event: "command:execute",
+  payload: { commandId: "editor.action.triggerSuggest" }
+}, "*");
+```
+
+This pattern mirrors VS Code's `vscode.postMessage()` API but uses
+the EventBus instead of the VS Code extension API.

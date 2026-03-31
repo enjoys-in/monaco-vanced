@@ -251,6 +251,83 @@ The user can also drag-resize panels — the new dimensions write back
 to layout settings automatically.
 
 
+EDITOR CONSTRUCTION OPTIONS (IStandaloneEditorConstructionOptions)
+------------------------------------------------------------------
+When the editor-module creates the Monaco editor instance, it merges
+settings from three sources (lowest → highest priority):
+
+  1. Built-in defaults (plugins/editor/editor-module/options.ts)
+  2. User settings (settings.json → "editor.*" namespace)
+  3. Workspace settings (.vscode/settings.json → "editor.*")
+
+Default editor options (shipped with editor-module):
+
+  "editor.automaticLayout":              true
+  "editor.fontSize":                     14
+  "editor.fontFamily":                   "'Fira Code', 'Cascadia Code', 'JetBrains Mono', Menlo, Monaco, monospace"
+  "editor.fontLigatures":                true
+  "editor.minimap.enabled":              true
+  "editor.scrollBeyondLastLine":         false
+  "editor.smoothScrolling":              true
+  "editor.cursorBlinking":               "smooth"       // "blink" | "smooth" | "phase" | "expand" | "solid"
+  "editor.cursorSmoothCaretAnimation":   "on"           // "on" | "off" | "explicit"
+  "editor.bracketPairColorization":      true
+  "editor.padding.top":                  8
+  "editor.padding.bottom":              8
+  "editor.renderLineHighlight":          "all"          // "none" | "gutter" | "line" | "all"
+  "editor.tabSize":                      2
+  "editor.wordWrap":                     "off"          // "off" | "on" | "wordWrapColumn" | "bounded"
+  "editor.lineNumbers":                  "on"           // "on" | "off" | "relative" | "interval"
+  "editor.folding":                      true
+  "editor.glyphMargin":                  true
+  "editor.fixedOverflowWidgets":         true
+  "editor.formatOnSave":                 false
+  "editor.formatOnPaste":                false
+  "editor.formatOnType":                 false
+  "editor.rulers":                       []             // number[] — vertical ruler columns
+  "editor.stickyScroll.enabled":         false
+  "editor.inlineSuggest.enabled":        true
+  "editor.suggest.showMethods":          true
+  "editor.suggest.showFunctions":        true
+
+All settings above map 1:1 to monaco.editor.IStandaloneEditorConstructionOptions.
+The editor-module reads them via ctx.settings.getAll("editor") and passes them
+to monaco.editor.create(container, mergedOptions).
+
+LIVE EDITOR SETTINGS UPDATE:
+  When any "editor.*" setting changes at runtime, the settings-module emits
+  settings:change → the editor-module catches it and calls:
+    editor.updateOptions({ [changedKey]: newValue })
+  This applies changes LIVE without recreating the editor instance.
+
+EDITOR OVERRIDE SERVICES (IEditorOverrideServices):
+  Monaco supports injecting override services at construction time.
+  These are internal service replacements (rarely needed by users).
+  The editor-module does NOT expose these in settings — they are only
+  used internally when embedding Monaco in custom shell layouts:
+
+    monaco.editor.create(container, editorOptions, overrideServices?)
+
+  Override services are passed via EditorConfig.overrideServices in the
+  plugin constructor, not via settings.json. This is intentional —
+  override services modify Monaco internals and are not user-configurable.
+
+PER-LANGUAGE EDITOR OVERRIDES:
+  Users can override editor settings per language:
+
+    "[typescript]": {
+      "editor.tabSize": 2,
+      "editor.formatOnSave": true
+    },
+    "[python]": {
+      "editor.tabSize": 4,
+      "editor.rulers": [79, 120]
+    }
+
+  The editor-module applies these overrides when the active language changes,
+  using editor.updateOptions() with the language-specific values.
+
+
 SETTINGS EVENTS
 ---------------
   settings:change        { key, value, layer, previousValue }

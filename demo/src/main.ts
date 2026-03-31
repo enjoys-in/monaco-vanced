@@ -1,17 +1,11 @@
 import "./style.css";
 import * as monaco from "monaco-editor";
-import { PluginEngine, EventBus } from "@enjoys/monaco-vanced";
+import { createMonacoIDE } from "monaco-vanced";
+import type { MonacoVancedInstance } from "monaco-vanced";
 
-// ── Bootstrap ─────────────────────────────────────────────────
+// ── Default editor options (overridable via settings.json / Settings UI) ──
 
-const eventBus = new EventBus();
-const engine = new PluginEngine(eventBus);
-
-// ── Monaco Editor instance ────────────────────────────────────
-
-const editorContainer = document.getElementById("editor-container")!;
-
-const editor = monaco.editor.create(editorContainer, {
+const editorOptions: monaco.editor.IStandaloneEditorConstructionOptions = {
   value: [
     "// Welcome to Monaco Vanced",
     "// A plugin-based IDE built on Monaco Editor",
@@ -24,15 +18,46 @@ const editor = monaco.editor.create(editorContainer, {
   minimap: { enabled: true },
   fontSize: 14,
   fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+  fontLigatures: true,
   padding: { top: 12 },
-});
+  scrollBeyondLastLine: false,
+  smoothScrolling: true,
+  cursorBlinking: "smooth",
+  cursorSmoothCaretAnimation: "on",
+  bracketPairColorization: { enabled: true },
+  renderLineHighlight: "all",
+  tabSize: 2,
+  wordWrap: "off",
+  lineNumbers: "on",
+  folding: true,
+  glyphMargin: true,
+  fixedOverflowWidgets: true,
+};
 
-// ── Init plugins ──────────────────────────────────────────────
+// ── Bootstrap ─────────────────────────────────────────────────
 
-engine.initAll().then(() => {
-  console.log("[monaco-vanced] Plugins initialized:", engine.getRegisteredIds());
-});
+let ide: MonacoVancedInstance;
 
-// ── Expose for dev console ────────────────────────────────────
+async function bootstrap() {
+  ide = await createMonacoIDE({
+    container: "#editor-container",
+    plugins: [
+      // Add plugins here as they are implemented:
+      // createEditorPlugin(),
+      // createTabsPlugin(),
+    ],
+    language: "typescript",
+    value: editorOptions.value as string,
+    editorOptions,
+  });
 
-Object.assign(window, { monaco, editor, engine, eventBus });
+  console.log("[monaco-vanced] IDE ready:", ide.engine.getRegisteredIds());
+
+  // Expose for dev console (typed via global.d.ts)
+  window.monaco = monaco;
+  window.editor = ide.editor;
+  window.engine = ide.engine;
+  window.eventBus = ide.eventBus;
+}
+
+bootstrap().catch(console.error);
