@@ -48,6 +48,7 @@ export function convertVSCodeTheme(vsTheme: VSCodeTheme): MonacoThemeData {
 function resolveBase(type?: string): MonacoThemeData["base"] {
   switch (type) {
     case "light":
+    case "hc-light":
       return "vs";
     case "hc":
     case "hc-black":

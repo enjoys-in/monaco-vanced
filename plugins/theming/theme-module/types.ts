@@ -8,7 +8,7 @@ export interface ThemeTokenColor {
 export interface ThemeDefinition {
   id: string;
   name: string;
-  type: "light" | "dark" | "hc";
+  type: "light" | "dark" | "hc" | "hc-light";
   colors: Record<string, string>;
   tokenColors: ThemeTokenColor[];
   semanticTokenColors?: Record<string, string>;

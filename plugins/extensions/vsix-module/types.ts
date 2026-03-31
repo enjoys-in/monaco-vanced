@@ -81,12 +81,13 @@ export interface VSIXConfig {
 export interface VSIXLoadedTheme {
   id: string;
   name: string;
-  type: "light" | "dark" | "hc";
+  type: "light" | "dark" | "hc" | "hc-light";
   colors: Record<string, string>;
   tokenColors: Array<{
     scope: string | string[];
     settings: { foreground?: string; background?: string; fontStyle?: string };
   }>;
+  semanticTokenColors?: Record<string, string>;
 }
 
 /** Icon theme data extracted from a VSIX package (emitted via vsix:icons:loaded) */

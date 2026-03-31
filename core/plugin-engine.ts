@@ -165,7 +165,10 @@ export class PluginEngine {
       }
     }
 
-    // Phase 5: Wire runtime event routing
+    // Phase 5: Wire settings accessor into all contexts
+    this.wireSettingsAccessor();
+
+    // Phase 6: Wire runtime event routing
     this.wireRuntimeEvents(monaco, editor);
 
     // Boot complete — fire global hooks
@@ -220,6 +223,22 @@ export class PluginEngine {
     ctx.dispose();
     this.contexts.delete(id);
     return false;
+  }
+
+  // ── Wire settings accessor into all contexts ──────────────
+
+  private wireSettingsAccessor(): void {
+    // The settings-module's API is injected into every PluginContext
+    // so that plugins can use ctx.settings.get/set/watch/register.
+    // Look for the settings plugin by its well-known event pattern.
+    // The settings plugin signals its API via the "settings:api-ready" event.
+    this.eventBus.on("settings:api-ready", (data?: unknown) => {
+      const accessor = data as import("./types").PluginSettingsAccessor | undefined;
+      if (!accessor) return;
+      for (const ctx of this.contexts.values()) {
+        ctx.setSettings(accessor);
+      }
+    });
   }
 
   // ── Runtime event routing ─────────────────────────────────

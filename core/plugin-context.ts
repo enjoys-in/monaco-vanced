@@ -3,15 +3,27 @@
 // Auto-tracks all IDisposable registrations for bulk cleanup.
 
 import type * as monacoNs from "monaco-editor";
-import type { IDisposable, PluginContext as IPluginContext, Monaco, MonacoEditor } from "./types";
+import type { IDisposable, PluginContext as IPluginContext, PluginSettingsAccessor, Monaco, MonacoEditor } from "./types";
 import type { EventBus } from "./event-bus";
 import { DisposableStore } from "./disposable-store";
 import { NotifyEvents } from "./events";
+
+// ── Stub settings accessor (used before settings-module boots) ──
+
+const NO_SETTINGS: PluginSettingsAccessor = {
+  get() { return undefined as any; },
+  set() {},
+  reset() {},
+  getAll() { return {}; },
+  watch() { return { dispose() {} }; },
+  register() {},
+};
 
 export class PluginContext implements IPluginContext {
   private store = new DisposableStore();
   private decorationIds: string[] = [];
   private filePath: string | undefined;
+  private _settings: PluginSettingsAccessor = NO_SETTINGS;
 
   constructor(
     public readonly pluginId: string,
@@ -21,6 +33,16 @@ export class PluginContext implements IPluginContext {
     filePath?: string,
   ) {
     this.filePath = filePath;
+  }
+
+  /** Settings accessor — wired by the engine after settings-module boots. */
+  get settings(): PluginSettingsAccessor {
+    return this._settings;
+  }
+
+  /** @internal Called by PluginEngine to wire the settings API. */
+  setSettings(accessor: PluginSettingsAccessor): void {
+    this._settings = accessor;
   }
 
   // ── Content / state ──────────────────────────────────────

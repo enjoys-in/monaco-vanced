@@ -1,12 +1,26 @@
 // ── Settings Module — Schema Registry ──────────────────────────
 
-import type { SettingSchema } from "./types";
+import type { SettingSchema, SettingSchemaRegistration, SettingsCategory } from "./types";
 
 export class SchemaRegistry {
   private readonly schemas = new Map<string, SettingSchema>();
 
   register(schema: SettingSchema): void {
     this.schemas.set(schema.key, schema);
+  }
+
+  /**
+   * Bulk-register from a namespace object (spec format).
+   * Converts { namespace: "eslint", schema: { "eslint.enable": { type, default, ... } } }
+   * into individual SettingSchema entries.
+   */
+  registerNamespace(reg: SettingSchemaRegistration): void {
+    for (const [key, def] of Object.entries(reg.schema)) {
+      this.schemas.set(key, {
+        key,
+        ...def,
+      });
+    }
   }
 
   unregister(key: string): boolean {
@@ -19,6 +33,17 @@ export class SchemaRegistry {
 
   getAll(): SettingSchema[] {
     return Array.from(this.schemas.values());
+  }
+
+  /** Get all schemas for a given category. */
+  getByCategory(category: SettingsCategory): SettingSchema[] {
+    return this.getAll().filter((s) => s.category === category);
+  }
+
+  /** Get all schemas under a dot-path namespace prefix (e.g. "editor"). */
+  getByNamespace(namespace: string): SettingSchema[] {
+    const prefix = namespace + ".";
+    return this.getAll().filter((s) => s.key.startsWith(prefix) || s.key === namespace);
   }
 
   has(key: string): boolean {

@@ -57,12 +57,27 @@ export function loadIcons(
         if (!def?.iconPath) return undefined;
         // Resolve relative path from the icon theme definition file
         const resolvedPath = resolvePath(baseDir, def.iconPath);
-        const svgKey = findFileKey(pkg.files, resolvedPath);
-        if (!svgKey) return undefined;
-        const svgData = pkg.files.get(svgKey);
-        if (!svgData) return undefined;
-        const svgText = decoder.decode(svgData);
-        return `data:image/svg+xml;base64,${btoa(svgText)}`;
+        const iconKey = findFileKey(pkg.files, resolvedPath);
+        if (!iconKey) return undefined;
+        const iconData = pkg.files.get(iconKey);
+        if (!iconData) return undefined;
+
+        // Detect MIME type from file extension
+        const lowerPath = resolvedPath.toLowerCase();
+        if (lowerPath.endsWith(".png")) {
+          return `data:image/png;base64,${uint8ArrayToBase64(iconData)}`;
+        }
+        if (lowerPath.endsWith(".gif")) {
+          return `data:image/gif;base64,${uint8ArrayToBase64(iconData)}`;
+        }
+        if (lowerPath.endsWith(".jpg") || lowerPath.endsWith(".jpeg")) {
+          return `data:image/jpeg;base64,${uint8ArrayToBase64(iconData)}`;
+        }
+        if (lowerPath.endsWith(".webp")) {
+          return `data:image/webp;base64,${uint8ArrayToBase64(iconData)}`;
+        }
+        // Default: SVG (use binary-safe base64 to handle Unicode SVGs)
+        return `data:image/svg+xml;base64,${uint8ArrayToBase64(iconData)}`;
       }
 
       // File extensions → data URIs
@@ -158,4 +173,13 @@ function resolvePath(base: string, relative: string): string {
     else if (part !== "." && part !== "") resolved.push(part);
   }
   return resolved.join("/");
+}
+
+/** Binary-safe base64 encoding for Uint8Array (handles PNG, Unicode SVG, etc.) */
+function uint8ArrayToBase64(data: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < data.byteLength; i++) {
+    binary += String.fromCharCode(data[i]);
+  }
+  return btoa(binary);
 }

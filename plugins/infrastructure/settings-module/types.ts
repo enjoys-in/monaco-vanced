@@ -2,9 +2,13 @@
 
 import type { IDisposable } from "@core/types";
 
-export type SettingType = "string" | "number" | "boolean" | "object" | "array";
+// ── Primitives ──────────────────────────────────────────────
 
-export type SettingsLayer = "default" | "user" | "workspace";
+export type SettingType = "string" | "number" | "boolean" | "object" | "array" | "enum";
+
+export type SettingsLayer = "defaults" | "user" | "workspace";
+
+// ── Schema ──────────────────────────────────────────────────
 
 export interface SettingSchema {
   key: string;
@@ -15,16 +19,42 @@ export interface SettingSchema {
   enum?: unknown[];
   min?: number;
   max?: number;
+  /** Category shown in Settings UI sidebar */
+  category?: SettingsCategory;
 }
+
+/** Bulk registration used by modules in their init() */
+export interface SettingSchemaRegistration {
+  namespace: string;
+  schema: Record<string, Omit<SettingSchema, "key">>;
+}
+
+export type SettingsCategory =
+  | "themes"
+  | "editor"
+  | "snippets"
+  | "keybindings"
+  | "account"
+  | "command palette"
+  | "layout"
+  | "extensions"
+  | "language"
+  | "terminal"
+  | "linting"
+  | "formatting";
+
+// ── Config ──────────────────────────────────────────────────
 
 export interface SettingsConfig {
   persistKey?: string;
 }
 
+// ── Events ──────────────────────────────────────────────────
+
 export interface SettingsChangeEvent {
   key: string;
-  oldValue: unknown;
-  newValue: unknown;
+  value: unknown;
+  previousValue: unknown;
   layer: SettingsLayer;
 }
 
@@ -33,15 +63,32 @@ export interface ValidationResult {
   errors: string[];
 }
 
+// ── Snippets ────────────────────────────────────────────────
+
+export interface SnippetDefinition {
+  prefix: string;
+  body: string | string[];
+  description?: string;
+}
+
+export type SnippetFile = Record<string, SnippetDefinition>;
+
+// ── Module API (spec-compliant) ─────────────────────────────
+
 export interface SettingsModuleAPI {
-  get<T = unknown>(key: string): T;
-  set(key: string, value: unknown, layer?: SettingsLayer): void;
-  reset(key: string): void;
+  get<T = unknown>(key: string, layer?: SettingsLayer): T;
+  set<T = unknown>(key: string, value: T, layer?: SettingsLayer): void;
+  reset(key: string, layer?: SettingsLayer): void;
+  getAll(namespace: string): Record<string, unknown>;
+  watch(key: string, cb: (value: unknown) => void): IDisposable;
+  register(schema: SettingSchemaRegistration): void;
+  export(layer: SettingsLayer): string;
+  import(json: string, layer: SettingsLayer): void;
+  openUI(section?: string): void;
+  openJSON(layer?: SettingsLayer): void;
+
+  // ── Extras (kept from v1) ─────────────────────────────
   getSchema(key: string): SettingSchema | undefined;
-  registerSchema(schema: SettingSchema): IDisposable;
-  getAll(layer?: SettingsLayer): Record<string, unknown>;
-  onSettingsChange(handler: (data?: unknown) => void): IDisposable;
   validate(key: string, value: unknown): ValidationResult;
-  exportJSON(): string;
-  importJSON(json: string): number;
+  registerSnippets(language: string, snippets: SnippetFile): void;
 }

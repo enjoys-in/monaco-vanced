@@ -68,6 +68,17 @@ export interface MonacoPlugin {
   onDispose?(): void;
 }
 
+// ── Plugin settings accessor (injected by settings-module) ──
+
+export interface PluginSettingsAccessor {
+  get<T = unknown>(key: string): T;
+  set<T = unknown>(key: string, value: T, layer?: string): void;
+  reset(key: string, layer?: string): void;
+  getAll(namespace: string): Record<string, unknown>;
+  watch(key: string, cb: (value: unknown) => void): IDisposable;
+  register(schema: { namespace: string; schema: Record<string, { type: string; default: unknown; description?: string }> }): void;
+}
+
 // ── Plugin context ──────────────────────────────────────────
 
 export interface PluginContext {
@@ -77,6 +88,12 @@ export interface PluginContext {
   readonly editor: MonacoEditor;
   /** Plugin ID that owns this context */
   readonly pluginId: string;
+
+  /**
+   * Settings accessor — available after settings-module boots.
+   * Modules use ctx.settings.get("editor.fontSize") etc.
+   */
+  readonly settings: PluginSettingsAccessor;
 
   // ── Content / state ────────────────────────────────────
 

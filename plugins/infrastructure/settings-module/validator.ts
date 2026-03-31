@@ -6,13 +6,21 @@ export class SettingsValidator {
   validate(value: unknown, schema: SettingSchema): ValidationResult {
     const errors: string[] = [];
 
+    // "enum" type — value must be in schema.enum
+    if (schema.type === "enum") {
+      if (schema.enum && !schema.enum.includes(value)) {
+        errors.push(`Value must be one of: ${schema.enum.join(", ")}`);
+      }
+      return { valid: errors.length === 0, errors };
+    }
+
     // Type check
     if (!this.checkType(value, schema.type)) {
       errors.push(`Expected type "${schema.type}", got "${typeof value}"`);
       return { valid: false, errors };
     }
 
-    // Enum validation
+    // Enum validation (even if type != "enum", schema may have enum constraint)
     if (schema.enum && schema.enum.length > 0) {
       if (!schema.enum.includes(value)) {
         errors.push(`Value must be one of: ${schema.enum.join(", ")}`);
