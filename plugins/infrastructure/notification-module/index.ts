@@ -21,6 +21,7 @@ export function createNotificationPlugin(config: NotificationConfig = {}): {
   const actionHandlers: Array<(data?: unknown) => void> = [];
   const disposables: IDisposable[] = [];
   let ctx: PluginContext | null = null;
+  let emitting = false;
 
   queue.setDismissHandler((id) => {
     ctx?.emit(NotificationEvents.Dismiss, { id });
@@ -40,7 +41,9 @@ export function createNotificationPlugin(config: NotificationConfig = {}): {
         category: notification.category,
       };
       queue.enqueue(full);
+      emitting = true;
       ctx?.emit(NotificationEvents.Show, full);
+      emitting = false;
 
       // Persist to history (fire-and-forget)
       preferences.addHistory({
@@ -115,6 +118,7 @@ export function createNotificationPlugin(config: NotificationConfig = {}): {
 
       disposables.push(
         ctx.on(NotificationEvents.Show, (data?: unknown) => {
+          if (emitting) return; // prevent re-entrancy from api.show()
           const d = data as Omit<Notification, "id"> & { id?: string } | undefined;
           if (d?.message) api.show(d);
         }),

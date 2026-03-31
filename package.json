@@ -8,45 +8,79 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
-      "require": "./dist/index.cjs",
-      "types": "./dist/index.d.ts"
+      "require": "./dist/index.cjs"
+    },
+    "./core/*": {
+      "types": "./dist/core/*.d.ts",
+      "import": "./dist/core/*.mjs",
+      "require": "./dist/core/*.cjs"
+    },
+    "./core/events": {
+      "types": "./dist/core/events/index.d.ts",
+      "import": "./dist/core/events/index.mjs",
+      "require": "./dist/core/events/index.cjs"
     },
     "./editor/*": {
-      "import": "./dist/plugins/editor/*/index.mjs"
+      "types": "./dist/plugins/editor/*/index.d.ts",
+      "import": "./dist/plugins/editor/*/index.mjs",
+      "require": "./dist/plugins/editor/*/index.cjs"
     },
     "./language/*": {
-      "import": "./dist/plugins/language/*/index.mjs"
+      "types": "./dist/plugins/language/*/index.d.ts",
+      "import": "./dist/plugins/language/*/index.mjs",
+      "require": "./dist/plugins/language/*/index.cjs"
     },
     "./filesystem/*": {
-      "import": "./dist/plugins/filesystem/*/index.mjs"
+      "types": "./dist/plugins/filesystem/*/index.d.ts",
+      "import": "./dist/plugins/filesystem/*/index.mjs",
+      "require": "./dist/plugins/filesystem/*/index.cjs"
     },
     "./layout/*": {
-      "import": "./dist/plugins/layout/*/index.mjs"
+      "types": "./dist/plugins/layout/*/index.d.ts",
+      "import": "./dist/plugins/layout/*/index.mjs",
+      "require": "./dist/plugins/layout/*/index.cjs"
     },
     "./ai/*": {
-      "import": "./dist/plugins/ai/*/index.mjs"
+      "types": "./dist/plugins/ai/*/index.d.ts",
+      "import": "./dist/plugins/ai/*/index.mjs",
+      "require": "./dist/plugins/ai/*/index.cjs"
     },
     "./scm/*": {
-      "import": "./dist/plugins/scm/*/index.mjs"
+      "types": "./dist/plugins/scm/*/index.d.ts",
+      "import": "./dist/plugins/scm/*/index.mjs",
+      "require": "./dist/plugins/scm/*/index.cjs"
     },
     "./devtools/*": {
-      "import": "./dist/plugins/devtools/*/index.mjs"
+      "types": "./dist/plugins/devtools/*/index.d.ts",
+      "import": "./dist/plugins/devtools/*/index.mjs",
+      "require": "./dist/plugins/devtools/*/index.cjs"
     },
     "./extensions/*": {
-      "import": "./dist/plugins/extensions/*/index.mjs"
+      "types": "./dist/plugins/extensions/*/index.d.ts",
+      "import": "./dist/plugins/extensions/*/index.mjs",
+      "require": "./dist/plugins/extensions/*/index.cjs"
     },
     "./theming/*": {
-      "import": "./dist/plugins/theming/*/index.mjs"
+      "types": "./dist/plugins/theming/*/index.d.ts",
+      "import": "./dist/plugins/theming/*/index.mjs",
+      "require": "./dist/plugins/theming/*/index.cjs"
     },
     "./infrastructure/*": {
-      "import": "./dist/plugins/infrastructure/*/index.mjs"
+      "types": "./dist/plugins/infrastructure/*/index.d.ts",
+      "import": "./dist/plugins/infrastructure/*/index.mjs",
+      "require": "./dist/plugins/infrastructure/*/index.cjs"
     },
     "./platform/*": {
-      "import": "./dist/plugins/platform/*/index.mjs"
+      "types": "./dist/plugins/platform/*/index.d.ts",
+      "import": "./dist/plugins/platform/*/index.mjs",
+      "require": "./dist/plugins/platform/*/index.cjs"
     },
     "./enterprise/*": {
-      "import": "./dist/plugins/enterprise/*/index.mjs"
+      "types": "./dist/plugins/enterprise/*/index.d.ts",
+      "import": "./dist/plugins/enterprise/*/index.mjs",
+      "require": "./dist/plugins/enterprise/*/index.cjs"
     }
   },
   "files": [

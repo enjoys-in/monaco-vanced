@@ -363,7 +363,6 @@ export function createSettingsPlugin(config: SettingsConfig = {}): {
     name: "Settings Module",
     version: "1.0.0",
     description: "VSCode-style 3-layer settings with schema validation, dot-object paths, snippets, and Settings UI",
-    dependencies: ["infrastructure.storage", "filesystem.fs", "editor.commands"],
     priority: 95,
 
     async onMount(pluginCtx: PluginContext) {

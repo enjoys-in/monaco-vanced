@@ -38,12 +38,13 @@ export function createStatusbarPlugin(
 
     register(item: StatusbarItem): void {
       registry.register(item);
-      ctx?.emit(StatusbarEvents.ItemRegister, { id: item.id, label: item.label });
+      ctx?.emit(StatusbarEvents.ItemRegister, item);
     },
 
     update(id: string, changes: Partial<Omit<StatusbarItem, "id">>): void {
       registry.update(id, changes);
-      ctx?.emit(StatusbarEvents.ItemUpdate, { id, changes });
+      const updated = registry.get(id);
+      if (updated) ctx?.emit(StatusbarEvents.ItemUpdate, updated);
     },
 
     remove(id: string): void {
