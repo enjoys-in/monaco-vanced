@@ -2,6 +2,10 @@ Instruction: Update PLAN.md on every step if any changes, use git-diff or blame
 
 ## CRITICAL NOTE:
 Every thing should be strongly Typed. No Use of any.
+While Emtting and listening on Events Always use enum of Events 
+ - for eg:
+  ctx.emit("preview:provider-added", { id:"value" }); // Wrong
+  ctx.emit(PreviewEvents.ProviderAdded, { id:"value" }); // Correct
 
 # Monaco Vanced — Full IDE Build Plan (79 Components)
 
