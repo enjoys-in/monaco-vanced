@@ -33,7 +33,7 @@ is the only shared runtime. Everything else communicates through events.
   ──  ────────────────────────────────  ──────  ──────────  ─────────────────────────────────────
   1.  tech-stack.txt                       90   ✅ Done     Bun, Vite, Rolldown, ESM+CJS, package exports, directory layout
   2.  plugin-contract.txt                  68   ✅ Done     Core philosophy, Plugin interface, ModuleContext, EventBus contract
-  3.  layout-shell.txt                   1000   Pending     Visual frame: header, title, sidebar, editor, panels, status bar, webviews
+  3.  layout-shell.txt                   1000   ✅ Done     Visual frame: header, title, sidebar, editor, panels, status bar, webviews
   4.  auth-module.txt                      97   Pending     GitHub & Gmail OAuth, PKCE, token storage, route protection
   5.  fs-connections.txt                  678   Pending     FSAdapter interface, 5 adapters (SFTP/API/Local/OPFS/IndexedDB), AI gating
   6.  modules-core.txt                    254   Partial     23 core modules + 19 advanced modules (42 module summaries)
@@ -105,8 +105,9 @@ is the only shared runtime. Everything else communicates through events.
     ✅ Language Section: 9 modules, 63 files — language-detection, language-config,
                        monarch-grammars, diagnostics, symbol-index, context,
                        prettier, eslint, lsp-bridge (24 providers, V1+V2)
-    ❌ Filesystem Section:  Not started
-    ❌ Layout Section:      Not started
+    ✅ Filesystem Section: 4 modules, 29 files — fs-module (12), indexer (6), search (5), workspace (6)
+    ✅ Layout Section:     8 modules, 42 files — layout, sidebar, header, title, statusbar,
+                           navigation, context-menu, ui-module (with 5 headless components)
     ❌ All other sections:  Not started
 
 ================================================================================
