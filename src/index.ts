@@ -13,7 +13,9 @@ export { PluginContext } from "@core/plugin-context";
 // ── Core Types ───────────────────────────────────────────────
 export type {
   MonacoPlugin,
-  PluginManifest,
-  ModuleContext,
+  PluginContext as PluginContextType,
+  Monaco,
+  MonacoEditor,
   IDisposable,
+  BootConfig,
 } from "@core/types";

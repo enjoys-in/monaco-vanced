@@ -170,7 +170,7 @@ export class PluginContext implements IPluginContext {
     this.registerProvider(this.monaco.languages.registerRenameProvider, ls, p);
   }
   registerNewSymbolNameProvider(ls: string | string[], p: monacoNs.languages.NewSymbolNamesProvider): void {
-    this.registerProvider(this.monaco.languages.registerNewSymbolNamesProvider, ls, p);
+    this.registerProvider(this.monaco.languages.registerNewSymbolNameProvider, ls, p);
   }
   registerSelectionRangeProvider(ls: string | string[], p: monacoNs.languages.SelectionRangeProvider): void {
     this.registerProvider(this.monaco.languages.registerSelectionRangeProvider, ls, p);

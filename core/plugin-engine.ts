@@ -2,7 +2,7 @@
 // Topological sort by dependencies + priority. 5-phase lifecycle.
 // Supports skip/abort/retry error strategies, onReady/onFailed hooks.
 
-import type { MonacoPlugin, Monaco, MonacoEditor, BootConfig, PluginErrorStrategy } from "./types";
+import type { MonacoPlugin, Monaco, MonacoEditor, BootConfig } from "./types";
 import { EventBus } from "./event-bus";
 import { PluginContext } from "./plugin-context";
 import { ErrorBoundary } from "./error-boundary";
@@ -223,7 +223,7 @@ export class PluginEngine {
 
   // ── Runtime event routing ─────────────────────────────────
 
-  private wireRuntimeEvents(monaco: Monaco, editor: MonacoEditor): void {
+  private wireRuntimeEvents(_monaco: Monaco, editor: MonacoEditor): void {
     // Language change
     editor.onDidChangeModelLanguage?.((e) => {
       const language = e.newLanguage;

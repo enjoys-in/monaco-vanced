@@ -1,3 +1,8 @@
+Instruction: Update PLAN.md on every step if any changes, use git-diff or blame
+
+## CRITICAL NOTE:
+Every thing should be strongly Typed. No Use of any.
+
 # Monaco Vanced — Full IDE Build Plan (79 Components)
 
 > Every feature is a plugin. Nothing is hardcoded. Plugins talk through events, never import each other.

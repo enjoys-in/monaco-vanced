@@ -1,6 +1,6 @@
 // ── Public API — single entry point for creating a Monaco Vanced IDE instance ──
 
-import type { MonacoPlugin, Monaco, BootConfig } from "./types";
+import type { MonacoPlugin, Monaco, MonacoEditor, BootConfig } from "./types";
 import { EventBus } from "./event-bus";
 import { PluginEngine } from "./plugin-engine";
 
@@ -23,7 +23,7 @@ export interface CreateIDEOptions {
 
 export interface MonacoVancedInstance {
   /** The underlying Monaco editor */
-  editor: monaco.editor.IStandaloneCodeEditor;
+  editor: MonacoEditor;
   /** Plugin engine for runtime plugin management */
   engine: PluginEngine;
   /** Event bus shared across all plugins */
