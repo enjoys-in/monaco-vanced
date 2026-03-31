@@ -679,14 +679,22 @@ Custom header bar (anti-gravity / Electron-style). Contains menu bar, layout con
 
 ### M28. `lsp-bridge-module`
 
+Dual-mode LSP client. V1 (Custom): direct WebSocket + manual JSON-RPC 2.0. V2 (Built-in): full LSP lifecycle with initialize handshake, 24 typed Monaco providers, document sync, diagnostics bridge. User chooses via `lsp.mode` setting.
+
+→ Full spec in `context/lsp-bridge-module.txt` (1297 lines, 15 sections)
+
 | File | What |
 |---|---|
-| `plugins/lsp-bridge-module/index.ts` | `createLSPBridgePlugin()` |
-| `plugins/lsp-bridge-module/connection.ts` | WebSocket to LSP server |
-| `plugins/lsp-bridge-module/protocol.ts` | LSP JSON-RPC messages |
-| `plugins/lsp-bridge-module/converters.ts` | Monaco ↔ LSP position/range (1-based ↔ 0-based) |
-| `plugins/lsp-bridge-module/provider-bridge.ts` | LSP capabilities → Monaco `register*Provider` |
-| `plugins/lsp-bridge-module/types.ts` | `LSPConfig`, `ServerCapabilities` |
+| `plugins/lsp-bridge-module/index.ts` | `LspBridgePlugin` — plugin init, mode switching, auto-connect |
+| `plugins/lsp-bridge-module/types.ts` | `LspConnectionConfig`, `LspMode`, `JsonRpcRequest/Response/Notification`, `LspConnectionOptions` |
+| `plugins/lsp-bridge-module/languages.ts` | `LSP_LANGUAGES` map (70+ langs), `hasLSPSupport()`, `buildLSPWebSocketUrl()` |
+| `plugins/lsp-bridge-module/connection.ts` | `LspConnectionManager` — shared retry/state machine for V1 & V2 |
+| `plugins/lsp-bridge-module/v1-custom-client.ts` | `CustomLspClient` — direct WebSocket, manual JSON-RPC, ProviderFactory bridge |
+| `plugins/lsp-bridge-module/provider-bridge.ts` | `LspProviderBridge` — V1 generic provider registration |
+| `plugins/lsp-bridge-module/protocol.ts` | V1 JSON-RPC 2.0 method map (29+ LSP methods) |
+| `plugins/lsp-bridge-module/v2-builtin-client.ts` | `BuiltinLspClient` — full LSP lifecycle, initialize handshake, didOpen/didChange |
+| `plugins/lsp-bridge-module/v2-providers.ts` | 24 typed Monaco provider registrations for V2 |
+| `plugins/lsp-bridge-module/converters.ts` | LSP ↔ Monaco type converters (position, range, completion, hover, diagnostics, etc.) |
 
 ---
 
@@ -975,6 +983,8 @@ Custom header bar (anti-gravity / Electron-style). Contains menu bar, layout con
 
 ### `context-engine`
 
+→ Full spec in `context/custom-context-enginge.txt` (365 lines)
+
 | File | What |
 |---|---|
 | `plugins/context-engine/index.ts` | `createContextEnginePlugin()` |
@@ -982,6 +992,7 @@ Custom header bar (anti-gravity / Electron-style). Contains menu bar, layout con
 | `plugins/context-engine/storage.ts` | IndexedDB (two Dexie databases) |
 | `plugins/context-engine/converters.ts` | 25 `to*Provider()` functions |
 | `plugins/context-engine/providers.ts` | Registration orchestrator |
+| `plugins/context-engine/interfaces/` | **32 files** — 29 provider interfaces + manifest.ts + lsp.ts + index.ts barrel |
 
 ---
 
@@ -1164,33 +1175,50 @@ const myPlugin: MonacoPlugin = {
 
 ## Plugin Directory Structure (12 Categories)
 
-All 78 plugin directories are organized into 12 categories under `plugins/`:
+All 80 plugin directories are organized into 12 categories under `plugins/`.
+This matches the ACTUAL on-disk layout (verified against scaffolded directories).
 
 ```
 plugins/
-├── editor/          — editor-module, tabs-module, decorations-module, context-module
-├── language/        — monarch-grammars, language-detection, language-config, snippets-module, symbol-index-module
-├── filesystem/      — fs-module
-├── layout/          — layout-module, sidebar-module, statusbar-module, title-module, header-module, context-menu-module
-├── ai/              — ai-module, agent-module, memory-module, rag-module, eval-module, ai-memory-module,
-│                      context-fusion-module, predictive-module, intent-module
-├── scm/             — git-module, review-module, collab-module
-├── devtools/        — terminal-module, debugger-module, test-module, diagnostics-module, profiler-module,
-│                      search-module, notebook-module, lsp-bridge-module
-├── extensions/      — extension-module, vsix-module, marketplace-module
+├── editor/          — editor-module, tabs-module, decorations-module, snippets-module,
+│                      preview-module, virtualization-module
+├── language/        — context-module, monarch-grammars, language-detection, language-config,
+│                      symbol-index-module, diagnostics-module, lsp-bridge-module,
+│                      eslint-module, prettier-module
+├── filesystem/      — fs-module, indexer-module, search-module, workspace-module
+├── layout/          — layout-module, sidebar-module, statusbar-module, title-module,
+│                      header-module, context-menu-module, navigation-module, ui-module
+├── ai/              — ai-module, agent-module, memory-module, rag-module, eval-module,
+│                      ai-memory-module, context-fusion-module, predictive-module,
+│                      intent-module, knowledge-graph-module
+├── scm/             — git-module, review-module, collab-module, snapshot-module, sync-module
+├── devtools/        — terminal-module, debugger-module, test-module, profiler-module,
+│                      notebook-module, task-module
+├── extensions/      — extension-module, vsix-module, marketplace-module, embed-module
 ├── theming/         — theme-module, icon-module
-├── infrastructure/  — core-engine, storage-module, command-module, keybinding-module, notification-module,
-│                      settings-module, indexer-module, performance-module, crash-recovery-module,
-│                      migration-module, offline-module, sync-module, resource-module, concurrency-module,
-│                      streaming-module, virtualization-module, fallback-module, api-stability-module,
-│                      deep-link-module, knowledge-graph-module, workspace-module, snapshot-module
-├── platform/        — embed-module, auth-module, secrets-module, security-module, audit-module,
-│                      telemetry-module, testing-harness-module, accessibility-module, i18n-module,
-│                      policy-module, realtime-module
-├── enterprise/      — context-engine, eslint-module, prettier-module, saas-tenant-module, billing-module
+├── infrastructure/  — storage-module, command-module, keybinding-module, notification-module,
+│                      settings-module, auth-module, deep-link-module, dialog-module
+├── platform/        — security-module, concurrency-module, crash-recovery-module, fallback-module,
+│                      performance-module, resource-module, streaming-module,
+│                      feature-flags-module, worker-module
+├── enterprise/      — context-engine, api-stability-module, audit-module, billing-module,
+│                      policy-module, realtime-module, saas-tenant-module, secrets-module,
+│                      telemetry-module
 ```
 
-Total: 12 categories, 78 module directories, ~490 scaffold files.
+Total: 12 categories, 80 module directories, ~570 scaffold files.
+
+**Modules not yet scaffolded** (in PLAN but no directory on disk):
+- `accessibility-module`, `i18n-module`, `migration-module`, `offline-module`, `testing-harness-module`
+
+**Extra modules on disk** (scaffolded but not in original 79-module PLAN):
+- `navigation-module` (layout/) — breadcrumb navigation, file path bar
+- `ui-module` (layout/) — shared UI components
+- `task-module` (devtools/) — build/run task runner
+- `dialog-module` (infrastructure/) — separated from notification-module per custom-dialog.txt
+- `preview-module` (editor/) — file preview system per custom-dialog.txt
+- `feature-flags-module` (platform/) — feature flag management
+- `worker-module` (platform/) — web worker pool management
 
 ---
 
@@ -1244,18 +1272,62 @@ Universal operation callbacks (`on: { onSuccess, onError }`) are standardized ac
 
 ---
 
-## Extended Specification Files
+## Extended Specification Files (22 spec + 2 meta = 24 total)
 
-| File | Contents |
-|---|---|
-| `context/context.txt` | **PRIMARY** — 15 sections, ~3500 lines. Full architecture spec |
-| `context/advanced-modules.txt` | Phase 1/2/3 — 26 new modules (#47-#72), 16 expansions. ~2000 lines |
-| `context/filesystem-advanced.txt` | Strategy Pattern handlers, lifecycle hooks, context menu system |
-| `context/plugin-lifecycle.txt` | Mount lifecycle (onReady/onFailed), universal operation callbacks |
-| `context/webview-triggers.txt` | WebviewPanel API, lazy registration, 8 trigger mechanisms |
-| `context/custom-context-enginge.txt` | Context Engine — CDN language packs, 25 providers, terminal commands |
-| `context/monaco-custom-plugins.txt` | Plugin system TypeScript interfaces — PluginContext, MonacoPlugin |
-| `context/PLAN.md` | **THIS FILE** — master build plan, module list, dependency graph |
+All spec files are in `context/`. See `context/index.txt` for the canonical read order.
+
+### Core Architecture (11 files — extracted from original context.txt)
+
+| # | File | Lines | Contents |
+|---|---|---|---|
+| 1 | `tech-stack.txt` | 90 | Bun, Vite, Rolldown, ESM+CJS, package exports, directory layout |
+| 2 | `plugin-contract.txt` | 68 | Core philosophy, Plugin interface, ModuleContext, EventBus contract |
+| 3 | `layout-shell.txt` | 1000 | Visual frame: header, title, sidebar, editor, panels, status bar, webviews |
+| 4 | `auth-module.txt` | 97 | GitHub & Gmail OAuth, PKCE, token storage, route protection |
+| 5 | `fs-connections.txt` | 678 | FSAdapter interface, 5 adapters (SFTP/API/Local/OPFS/IndexedDB), AI gating |
+| 6 | `modules-core.txt` | 254 | 23 core modules + 19 advanced modules (42 module summaries) |
+| 7 | `event-bus.txt` | 178 | Full event catalogue (~140 events across 18 domains) |
+| 8 | `wiring-patterns.txt` | 208 | User-side handler patterns, registration order, data flow walkthroughs |
+| 9 | `settings-module.txt` | 292 | VSCode-style configuration: layers, API, UI, snippets, JSON, events |
+| 10 | `symbol-providers.txt` | 500 | Symbol index + 6 Monaco providers (definition, reference, hover, rename) |
+| 11 | `registry-enums.txt` | 340 | Full module registry (78 modules, 12 categories) + event name enums |
+
+### Extended Specifications (6 files)
+
+| # | File | Lines | Contents |
+|---|---|---|---|
+| 12 | `advanced-modules.txt` | 1999 | Phase 1/2/3 — 26 new modules (#47-#72), 16 expansions |
+| 13 | `filesystem-advanced.txt` | 666 | Strategy Pattern handlers, lifecycle hooks, FS context menu system |
+| 14 | `plugin-lifecycle.txt` | 323 | Mount lifecycle (onReady/onFailed), universal operation callbacks |
+| 15 | `webview-triggers.txt` | 706 | WebviewPanel API, lazy registration, 8 trigger mechanisms |
+| 16 | `custom-context-enginge.txt` | 365 | Context Engine — CDN language packs, 25 providers, Dexie storage |
+| 17 | `custom-plugins.txt` | 246 | Plugin system TypeScript interfaces — PluginContext, MonacoPlugin |
+
+### Command & Extension System (2 files)
+
+| # | File | Lines | Contents |
+|---|---|---|---|
+| 18 | `monaco-command-system.txt` | 678 | Command palette + editor context menu, preconditions, when-clauses |
+| 19 | `custom-extension-host.txt` | 1022 | Extension host: OPFS VFS, Dexie.js index, contribution parser, webview panels |
+
+### Interaction & Preview System (1 file)
+
+| # | File | Lines | Contents |
+|---|---|---|---|
+| 20 | `custom-dialog.txt` | 1516 | Notification system (toasts) + Dialog system (modals) + File preview system |
+
+### Language Server (1 file)
+
+| # | File | Lines | Contents |
+|---|---|---|---|
+| 21 | `lsp-bridge-module.txt` | 1297 | Dual-mode LSP client (V1 custom JSON-RPC + V2 built-in Monaco LSP), 24 providers, converters |
+
+### Build & Instructions (2 meta files)
+
+| # | File | Lines | Contents |
+|---|---|---|---|
+| 22 | `instructions.md` | 2508 | Project instructions and conventions (Monaco `languages.*` API reference) |
+| 23 | `PLAN.md` | — | **THIS FILE** — master build plan, module list, dependency graph |
 
 ---
 
