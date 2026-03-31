@@ -1,19 +1,23 @@
 // ── Icon Module — Plugin Entry ───────────────────────────────
+// File/folder icons via vscode-icons-js.
+// VS Code UI icons via @vscode/codicons (CSS class + SVG URL).
 
 import type { MonacoPlugin, PluginContext } from "@core/types";
 import type { IconConfig, IconTheme, IconModuleAPI } from "./types";
-import { DefaultIconMap } from "./icon-map";
+import { VSCodeIconResolver, CodiconResolver } from "./icon-map";
 import { SVGCache } from "./svg-cache";
 
 export type { IconConfig, IconMapping, IconTheme, IconModuleAPI } from "./types";
-export { DefaultIconMap } from "./icon-map";
+export { VSCodeIconResolver, CodiconResolver } from "./icon-map";
 export { SVGCache } from "./svg-cache";
 
 export function createIconPlugin(config: IconConfig = {}): {
   plugin: MonacoPlugin;
   api: IconModuleAPI;
 } {
-  const __svgCache = new SVGCache(config.cacheEnabled ?? true); void __svgCache;
+  const svgCache = new SVGCache(config.cacheEnabled ?? true);
+  const vsIcons = new VSCodeIconResolver(config.vsIconsCdn);
+  const codicons = new CodiconResolver(config.codiconsCdn);
   const themes = new Map<string, IconTheme>();
   let activeThemeId: string | null = null;
   let ctx: PluginContext | null = null;
@@ -23,16 +27,38 @@ export function createIconPlugin(config: IconConfig = {}): {
   }
 
   const api: IconModuleAPI = {
-    getIcon(filename: string) {
+    getFileIcon(filename: string, isDirectory = false, isOpen = false): string {
       const theme = getActiveTheme();
       if (theme) {
-        // Check theme definitions first
-        const ext = filename.includes(".") ? `.${filename.split(".").pop()!.toLowerCase()}` : "";
-        const fromTheme = theme.definitions.get(ext) ?? theme.definitions.get(filename);
+        const baseName = filename.split("/").pop() ?? filename;
+        const ext = baseName.includes(".") ? `.${baseName.split(".").pop()!.toLowerCase()}` : "";
+        const fromTheme = theme.definitions.get(ext) ?? theme.definitions.get(baseName);
         if (fromTheme) return fromTheme;
+        if (isDirectory && theme.folderMappings) {
+          const fromFolder = theme.folderMappings.get(baseName);
+          if (fromFolder) return fromFolder;
+        }
       }
-      // Fall back to default map
-      return DefaultIconMap.getIconName(filename);
+      // Primary: use vscode-icons-js resolver
+      const url = vsIcons.resolve(filename, isDirectory, isOpen);
+      // Trigger background caching
+      void svgCache.get(url).then((cached) => {
+        if (!cached) {
+          void fetch(url)
+            .then((r) => r.text())
+            .then((svg) => svgCache.set(url, svg))
+            .catch(() => {});
+        }
+      });
+      return url;
+    },
+
+    getCodicon(name: string): string {
+      return codicons.className(name);
+    },
+
+    getCodiconUrl(name: string): string {
+      return codicons.svgUrl(name);
     },
 
     registerTheme(theme: IconTheme) {
@@ -57,13 +83,12 @@ export function createIconPlugin(config: IconConfig = {}): {
   const plugin: MonacoPlugin = {
     id: "icon-module",
     name: "Icon Module",
-    version: "1.0.0",
-    description: "File icon themes with caching support",
+    version: "2.0.0",
+    description: "File icons via vscode-icons, UI icons via @vscode/codicons",
 
     onMount(pluginCtx: PluginContext) {
       ctx = pluginCtx;
 
-      // Listen for icon theme change events
       ctx.on("icon:change", (data?: unknown) => {
         const payload = data as { themeId?: string } | undefined;
         if (payload?.themeId) {

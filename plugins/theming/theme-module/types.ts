@@ -14,15 +14,36 @@ export interface ThemeDefinition {
   semanticTokenColors?: Record<string, string>;
 }
 
+/** Stored in IndexedDB via Dexie — theme index entry */
+export interface ThemeIndexEntry {
+  id: string;
+  file: string;
+}
+
+/** Stored in IndexedDB via Dexie — cached full theme */
+export interface CachedTheme {
+  id: string;
+  data: ThemeDefinition;
+  fetchedAt: number;
+}
+
 export interface ThemeConfig {
   defaultTheme?: string;
   persistKey?: string;
+  /** CDN base URL for theme JSON files */
+  cdnBase?: string;
 }
 
 export interface ThemeModuleAPI {
-  apply(themeId: string): void;
+  apply(themeId: string): Promise<void>;
   register(theme: ThemeDefinition): void;
   getThemes(): ThemeDefinition[];
   getCurrent(): string;
+  /** Get the full theme index (available remote themes) */
+  getIndex(): ThemeIndexEntry[];
+  /** Fetch a remote theme by ID from CDN (loads + caches in IndexedDB) */
+  loadRemoteTheme(themeId: string): Promise<ThemeDefinition>;
+  /** Refresh the theme index from CDN (re-fetch _index.json) */
+  refreshIndex(): Promise<ThemeIndexEntry[]>;
   onThemeChange(handler: (themeId: string) => void): void;
 }

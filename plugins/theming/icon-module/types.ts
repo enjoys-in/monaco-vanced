@@ -14,11 +14,19 @@ export interface IconTheme {
 
 export interface IconConfig {
   cacheEnabled?: boolean;
-  cdnUrl?: string;
+  /** CDN base for vscode-icons SVGs (default: GitHub raw) */
+  vsIconsCdn?: string;
+  /** CDN base for @vscode/codicons (default: jsDelivr) */
+  codiconsCdn?: string;
 }
 
 export interface IconModuleAPI {
-  getIcon(filename: string): string | undefined;
+  /** Get the full icon URL for a file or folder in the explorer */
+  getFileIcon(filename: string, isDirectory?: boolean, isOpen?: boolean): string;
+  /** Get a codicon CSS class name for VS Code UI elements */
+  getCodicon(name: string): string;
+  /** Get the full codicon SVG URL */
+  getCodiconUrl(name: string): string;
   registerTheme(theme: IconTheme): void;
   getThemes(): IconTheme[];
   setTheme(id: string): void;
