@@ -24,6 +24,7 @@ export interface VSIXGrammarContribution {
 
 export interface VSIXIconContribution {
   id: string;
+  label?: string;
   path: string;
 }
 
@@ -74,6 +75,28 @@ export interface VSIXPackage {
 export interface VSIXConfig {
   cacheDir?: string;
   cdnUrl?: string;
+}
+
+/** Theme data extracted from a VSIX package (emitted via vsix:themes:loaded) */
+export interface VSIXLoadedTheme {
+  id: string;
+  name: string;
+  type: "light" | "dark" | "hc";
+  colors: Record<string, string>;
+  tokenColors: Array<{
+    scope: string | string[];
+    settings: { foreground?: string; background?: string; fontStyle?: string };
+  }>;
+}
+
+/** Icon theme data extracted from a VSIX package (emitted via vsix:icons:loaded) */
+export interface VSIXLoadedIconTheme {
+  id: string;
+  name: string;
+  /** File extension (e.g. ".ts") or filename → data URI */
+  definitions: Map<string, string>;
+  /** Folder name → data URI */
+  folderMappings: Map<string, string>;
 }
 
 export interface VSIXModuleAPI {

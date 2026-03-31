@@ -45,6 +45,7 @@ function parseContributes(raw: Record<string, unknown> | undefined): VSIXContrib
     icons: Array.isArray(raw.iconThemes)
       ? (raw.iconThemes as Array<Record<string, string>>).map((i) => ({
           id: i.id ?? "",
+          label: i.label,
           path: i.path ?? "",
         }))
       : undefined,

@@ -33,6 +33,8 @@ export type {
   VSIXCommandContribution,
   VSIXKeybindingContribution,
   VSIXLanguageContribution,
+  VSIXLoadedTheme,
+  VSIXLoadedIconTheme,
 } from "./types";
 export { VSIXFetcher } from "./fetcher";
 export { VSIXExtractor } from "./extractor";
@@ -42,7 +44,7 @@ export { parseVSIXManifest } from "./manifest-parser";
 export { convertVSCodeTheme } from "./converters/theme-converter";
 export { convertTextmateToMonarch } from "./converters/textmate-to-monarch";
 export { convertIconTheme } from "./converters/icon-converter";
-export { loadThemes } from "./loaders/theme-loader";
+export { loadThemes, type ThemeLoadResult } from "./loaders/theme-loader";
 export { loadGrammars } from "./loaders/grammar-loader";
 export { loadIcons } from "./loaders/icon-loader";
 export { loadSnippets } from "./loaders/snippet-loader";
@@ -76,9 +78,9 @@ export function createVSIXPlugin(config: VSIXConfig = {}): {
       if (ctx) {
         const monaco = ctx.monaco;
         // Load all contributions
-        loadThemes(pkg, pkg.manifest, monaco);
+        const themeResult = loadThemes(pkg, pkg.manifest, monaco);
         loadGrammars(pkg, pkg.manifest, monaco);
-        loadIcons(pkg, pkg.manifest);
+        const iconThemes = loadIcons(pkg, pkg.manifest);
         loadSnippets(pkg, pkg.manifest, monaco);
         loadCommands(pkg, pkg.manifest, (cmdId, title) => {
           ctx!.emit("vsix:command:registered", { command: cmdId, title });
@@ -87,6 +89,16 @@ export function createVSIXPlugin(config: VSIXConfig = {}): {
           ctx!.emit("vsix:keybinding:registered", { command: binding.command, key: binding.key });
         });
         loadLanguages(pkg, pkg.manifest, monaco);
+
+        // Emit theme data for theme-module to consume
+        if (themeResult.themes.length > 0) {
+          ctx.emit("vsix:themes:loaded", { themes: themeResult.themes, extensionId: id });
+        }
+
+        // Emit icon theme data for icon-module to consume
+        if (iconThemes.length > 0) {
+          ctx.emit("vsix:icons:loaded", { iconThemes, extensionId: id });
+        }
       }
 
       registry.register(pkg.manifest);

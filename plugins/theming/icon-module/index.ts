@@ -96,6 +96,28 @@ export function createIconPlugin(config: IconConfig = {}): {
         }
       });
 
+      // Listen for icon themes loaded from VSIX extension installations
+      ctx.on("vsix:icons:loaded", (data?: unknown) => {
+        const payload = data as {
+          iconThemes?: Array<{ id: string; name: string; definitions: Map<string, string>; folderMappings: Map<string, string> }>;
+          extensionId?: string;
+        } | undefined;
+        if (payload?.iconThemes && Array.isArray(payload.iconThemes)) {
+          for (const iconTheme of payload.iconThemes) {
+            api.registerTheme({
+              id: iconTheme.id,
+              name: iconTheme.name,
+              definitions: iconTheme.definitions instanceof Map ? iconTheme.definitions : new Map(Object.entries(iconTheme.definitions)),
+              folderMappings: iconTheme.folderMappings instanceof Map ? iconTheme.folderMappings : new Map(Object.entries(iconTheme.folderMappings ?? {})),
+            });
+          }
+          // Auto-activate first VSIX icon theme if none active
+          if (!activeThemeId && payload.iconThemes.length > 0) {
+            api.setTheme(payload.iconThemes[0].id);
+          }
+        }
+      });
+
       ctx.emit("icon:ready", {});
     },
 

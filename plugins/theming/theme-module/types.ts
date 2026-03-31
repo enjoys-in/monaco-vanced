@@ -37,6 +37,8 @@ export interface ThemeConfig {
 export interface ThemeModuleAPI {
   apply(themeId: string): Promise<void>;
   register(theme: ThemeDefinition): void;
+  /** Register themes extracted from a VSIX extension package */
+  registerFromVSIX(themes: ThemeDefinition[]): void;
   getThemes(): ThemeDefinition[];
   getCurrent(): string;
   /** Get the full theme index (available remote themes) */

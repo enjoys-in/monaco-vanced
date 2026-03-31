@@ -1,24 +1,30 @@
 // ── VSIX Module — Theme Loader ───────────────────────────────
 
-import type { VSIXPackage, VSIXManifest } from "../types";
+import type { VSIXPackage, VSIXManifest, VSIXLoadedTheme } from "../types";
 import { convertVSCodeTheme } from "../converters/theme-converter";
+
+export interface ThemeLoadResult {
+  registeredIds: string[];
+  themes: VSIXLoadedTheme[];
+}
 
 /**
  * Load themes from a VSIX package and register them via Monaco API.
- * Returns the list of registered theme IDs.
+ * Also returns structured ThemeDefinition data for consumption by theme-module.
  */
 export function loadThemes(
   pkg: VSIXPackage,
   manifest: VSIXManifest,
   monaco: { editor: { defineTheme(name: string, data: unknown): void } },
-): string[] {
-  const registered: string[] = [];
-  const themes = manifest.contributes.themes;
-  if (!themes) return registered;
+): ThemeLoadResult {
+  const registeredIds: string[] = [];
+  const themes: VSIXLoadedTheme[] = [];
+  const themeContribs = manifest.contributes.themes;
+  if (!themeContribs) return { registeredIds, themes };
 
   const decoder = new TextDecoder();
 
-  for (const theme of themes) {
+  for (const theme of themeContribs) {
     const fileKey = findFileKey(pkg.files, theme.path);
     if (!fileKey) {
       console.warn(`[vsix-theme-loader] theme file not found: ${theme.path}`);
@@ -32,13 +38,27 @@ export function loadThemes(
       const themeId = toKebabCase(theme.label || vsTheme.name || fileKey);
 
       monaco.editor.defineTheme(themeId, monacoTheme);
-      registered.push(themeId);
+      registeredIds.push(themeId);
+
+      // Build structured theme data for theme-module consumption
+      const uiTheme = theme.uiTheme ?? vsTheme.type ?? "vs-dark";
+      let type: VSIXLoadedTheme["type"] = "dark";
+      if (uiTheme === "vs" || uiTheme === "vs-light" || vsTheme.type === "light") type = "light";
+      else if (uiTheme === "hc-black" || uiTheme === "hc-light" || vsTheme.type === "hc") type = "hc";
+
+      themes.push({
+        id: themeId,
+        name: theme.label || vsTheme.name || themeId,
+        type,
+        colors: vsTheme.colors ?? {},
+        tokenColors: vsTheme.tokenColors ?? [],
+      });
     } catch (err) {
       console.warn(`[vsix-theme-loader] failed to load theme "${theme.label}":`, err);
     }
   }
 
-  return registered;
+  return { registeredIds, themes };
 }
 
 function findFileKey(files: Map<string, Uint8Array>, path: string): string | undefined {

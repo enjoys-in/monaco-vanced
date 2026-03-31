@@ -137,6 +137,15 @@ export function createThemePlugin(config: ThemeConfig = {}): {
       ctx?.emit("theme:registered", { id: theme.id });
     },
 
+    registerFromVSIX(vsixThemes: ThemeDefinition[]) {
+      for (const theme of vsixThemes) {
+        registry.register(theme);
+        // Cache each theme in IndexedDB for persistence
+        void setCachedTheme(theme.id, theme);
+        ctx?.emit("theme:registered", { id: theme.id, source: "vsix" });
+      }
+    },
+
     getThemes() {
       return registry.getAll();
     },
@@ -221,6 +230,14 @@ export function createThemePlugin(config: ThemeConfig = {}): {
         } catch (err) {
           ctx?.notify("Failed to refresh themes", "error");
           console.warn("[theme-module] refresh error:", err);
+        }
+      });
+
+      // Listen for themes loaded from VSIX extension installations
+      ctx.on("vsix:themes:loaded", (data?: unknown) => {
+        const payload = data as { themes?: Array<ThemeDefinition>; extensionId?: string } | undefined;
+        if (payload?.themes && Array.isArray(payload.themes)) {
+          api.registerFromVSIX(payload.themes);
         }
       });
 
