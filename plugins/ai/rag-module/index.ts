@@ -2,6 +2,7 @@
 // Vector index of workspace. Embedding + retrieval for AI context.
 
 import type { MonacoPlugin, PluginContext } from "@core/types";
+import { RagEvents } from "@core/events";
 import type { RAGModuleAPI, RAGPluginOptions, RetrievalResult } from "./types";
 import { chunkFile } from "./chunker";
 import { Embedder } from "./embedder";
@@ -51,19 +52,19 @@ export function createRAGPlugin(
   const api: RAGModuleAPI = {
     async index(filePath, content, language): Promise<void> {
       await indexFile(filePath, content, language);
-      ctx?.emit("rag:indexed", { filePath, chunkCount: store.getByFile(filePath).length });
+      ctx?.emit(RagEvents.Indexed, { filePath, chunkCount: store.getByFile(filePath).length });
     },
 
     async indexBulk(files): Promise<void> {
       for (const file of files) {
         await indexFile(file.path, file.content, file.language);
       }
-      ctx?.emit("rag:indexed", { fileCount: files.length, stats: store.getStats() });
+      ctx?.emit(RagEvents.Indexed, { fileCount: files.length, stats: store.getStats() });
     },
 
     async query(text: string, k?: number): Promise<RetrievalResult[]> {
       const results = await retriever.query(text, k);
-      ctx?.emit("rag:results", { query: text, resultCount: results.length });
+      ctx?.emit(RagEvents.Results, { query: text, resultCount: results.length });
       return results;
     },
 
@@ -91,10 +92,10 @@ export function createRAGPlugin(
 
       // Listen for rag query events (from search-module or ai-module)
       ctx.addDisposable(
-        ctx.on("rag:query", async (data) => {
+        ctx.on(RagEvents.Query, async (data) => {
           const { query, topK: k } = data as { query: string; topK?: number };
           const results = await api.query(query, k);
-          ctx?.emit("rag:results", { query, results });
+          ctx?.emit(RagEvents.Results, { query, results });
         }),
       );
     },

@@ -4,6 +4,7 @@ import type { MonacoPlugin, PluginContext } from "@core/types";
 import type { AuditConfig, AuditEvent, AuditExporter, AuditFilter, AuditModuleAPI, AuditStats, RedactConfig } from "./types";
 import { AuditCollector } from "./collector";
 import { Redactor } from "./redactor";
+import { AuditEvents } from "@core/events";
 
 export type { AuditConfig, AuditEvent, AuditExporter, AuditFilter, AuditModuleAPI, AuditStats, RedactConfig };
 export { AuditCollector, Redactor };
@@ -32,7 +33,7 @@ export function createAuditPlugin(
     log(event: Omit<AuditEvent, "id" | "timestamp">): void {
       let full = collector.log(event);
       if (redactor) full = redactor.redact(full);
-      ctx?.emit("audit:event", { id: full.id, actor: full.actor, action: full.action });
+      ctx?.emit(AuditEvents.Event, { id: full.id, actor: full.actor, action: full.action });
     },
 
     query(filter: AuditFilter): AuditEvent[] {
@@ -45,7 +46,7 @@ export function createAuditPlugin(
 
     async flush(): Promise<void> {
       await collector.flush();
-      ctx?.emit("audit:flush", undefined);
+      ctx?.emit(AuditEvents.Flush, undefined);
     },
 
     getStats(): AuditStats {

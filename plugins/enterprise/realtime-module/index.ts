@@ -11,6 +11,7 @@ import type {
 import { RealtimeTransport } from "./transport";
 import { ChannelManager } from "./channels";
 import { PresenceManager } from "./presence";
+import { RealtimeEvents } from "@core/events";
 
 export type { Channel, PresenceState, RealtimeConfig, RealtimeMessage, RealtimeModuleAPI };
 export { RealtimeTransport, ChannelManager, PresenceManager };
@@ -47,7 +48,7 @@ export function createRealtimePlugin(
       };
       channels.publish(channelId, full);
       transport?.send(full);
-      ctx?.emit("realtime:message", { channel: channelId, type: message.type });
+      ctx?.emit(RealtimeEvents.Message, { channel: channelId, type: message.type });
     },
 
     getPresence(channelId: string): PresenceState[] {
@@ -56,7 +57,7 @@ export function createRealtimePlugin(
 
     setPresence(state: Omit<PresenceState, "lastSeen">): void {
       presence.setPresence(state);
-      ctx?.emit("realtime:presence-change", { userId: state.userId, status: state.status });
+      ctx?.emit(RealtimeEvents.PresenceChange, { userId: state.userId, status: state.status });
     },
   };
 
@@ -78,7 +79,7 @@ export function createRealtimePlugin(
       });
 
       presence.onPresenceChange((state) => {
-        ctx?.emit("realtime:presence-change", { userId: state.userId, status: state.status });
+        ctx?.emit(RealtimeEvents.PresenceChange, { userId: state.userId, status: state.status });
       });
 
       presence.startHeartbeatDetection();

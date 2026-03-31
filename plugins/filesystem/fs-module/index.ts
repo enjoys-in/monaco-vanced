@@ -5,6 +5,7 @@
 
 import type { MonacoPlugin, PluginContext, IDisposable } from "@core/types";
 import { FileEvents, FsEvents } from "@core/events/file.events";
+import { ContextMenuEvents } from "@core/events";
 import type {
   FSAdapter,
   FSPluginOptions,
@@ -202,23 +203,23 @@ export function createFSPlugin(options: FSPluginOptions): MonacoPlugin {
       }
 
       // ── Register explorer context menu actions ──────────
-      ctx.emit("context-menu:register", {
+      ctx.emit(ContextMenuEvents.Register, {
         context: "explorer",
         item: { id: "explorer.newFile", label: "New File", command: "explorer.newFile", group: "navigation", order: 1, condition: { when: "isDirectory == true" } },
       });
-      ctx.emit("context-menu:register", {
+      ctx.emit(ContextMenuEvents.Register, {
         context: "explorer",
         item: { id: "explorer.newFolder", label: "New Folder", command: "explorer.newFolder", group: "navigation", order: 2, condition: { when: "isDirectory == true" } },
       });
-      ctx.emit("context-menu:register", {
+      ctx.emit(ContextMenuEvents.Register, {
         context: "explorer",
         item: { id: "explorer.rename", label: "Rename", command: "explorer.rename", group: "1_modification", order: 1, condition: { when: "isFile == true || isDirectory == true" } },
       });
-      ctx.emit("context-menu:register", {
+      ctx.emit(ContextMenuEvents.Register, {
         context: "explorer",
         item: { id: "explorer.delete", label: "Delete", command: "explorer.delete", group: "1_modification", order: 2, condition: { when: "!isRoot" } },
       });
-      ctx.emit("context-menu:register", {
+      ctx.emit(ContextMenuEvents.Register, {
         context: "explorer",
         item: { id: "explorer.copyPath", label: "Copy Path", command: "explorer.copyPath", group: "9_cutcopypaste", order: 1 },
       });

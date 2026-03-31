@@ -5,6 +5,7 @@ import type { Command, CommandConfig, CommandModuleAPI, CommandHistoryEntry } fr
 import { CommandRegistry } from "./registry";
 import { CommandRouter } from "./router";
 import { CommandPalette } from "./palette";
+import { CommandEvents } from "@core/events";
 
 export type { Command, CommandConfig, CommandModuleAPI, CommandHistoryEntry, ExecutionContext, ActionDefinition } from "./types";
 export { CommandRegistry } from "./registry";
@@ -35,7 +36,7 @@ export function createCommandPlugin(config: CommandConfig = {}): {
     async execute(id: string, ...args: unknown[]): Promise<void> {
       await router.execute(id, args);
       palette.execute(id);
-      ctx?.emit("command:execute", { commandId: id, args });
+      ctx?.emit(CommandEvents.Execute, { commandId: id, args });
     },
 
     getAll(): Command[] {
@@ -87,7 +88,7 @@ export function createCommandPlugin(config: CommandConfig = {}): {
       ctx = pluginCtx;
 
       disposables.push(
-        ctx.on("command:execute", async (data?: unknown) => {
+        ctx.on(CommandEvents.Execute, async (data?: unknown) => {
           const d = data as { commandId?: string; args?: unknown[] } | undefined;
           if (d?.commandId) {
             try {

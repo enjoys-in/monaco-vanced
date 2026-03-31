@@ -1,5 +1,6 @@
 export enum FeatureFlagEvents {
-  Change = "feature-flag:change",
-  Evaluate = "feature-flag:evaluate",
-  Override = "feature-flag:override",
+  Change = "flags:change",
+  Evaluate = "flags:evaluate",
+  Override = "flags:override",
+  Sync = "flags:sync",
 }

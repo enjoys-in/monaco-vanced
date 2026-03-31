@@ -10,6 +10,8 @@ export interface CreateIDEOptions {
   container: HTMLElement | string;
   /** Plugins to load */
   plugins: MonacoPlugin[];
+  /** Monaco namespace (import * as monaco from 'monaco-editor') */
+  monaco?: Monaco;
   /** Initial editor value */
   value?: string;
   /** Initial language */
@@ -62,10 +64,11 @@ export async function createMonacoIDE(
     throw new Error("Monaco Vanced: container element not found.");
   }
 
-  // Resolve Monaco global
-  const monacoGlobal = (globalThis as Record<string, unknown>).monaco as Monaco | undefined;
+  // Resolve Monaco — prefer explicit param, fallback to globalThis
+  const monacoGlobal = options.monaco
+    ?? (globalThis as Record<string, unknown>).monaco as Monaco | undefined;
   if (!monacoGlobal) {
-    throw new Error("Monaco Vanced: `monaco` global not found. Ensure monaco-editor is loaded.");
+    throw new Error("Monaco Vanced: `monaco` not provided and global not found. Pass it via options.monaco or ensure monaco-editor is loaded globally.");
   }
 
   // Create event bus + engine

@@ -7,7 +7,7 @@ import { EventBus } from "./event-bus";
 import { PluginContext } from "./plugin-context";
 import { ErrorBoundary } from "./error-boundary";
 import { LanguageRegistry } from "./language-registry";
-import { PluginEvents, EditorEvents } from "./events";
+import { PluginEvents, EditorEvents, SettingsEvents, AuthEvents, NotificationEvents } from "./events";
 
 interface PluginEntry {
   plugin: MonacoPlugin;
@@ -231,16 +231,16 @@ export class PluginEngine {
 
   private wireModuleAccessors(): void {
     const wireMap: Array<{ event: string; setter: keyof PluginContext }> = [
-      { event: "settings:api-ready", setter: "setSettings" as any },
+      { event: SettingsEvents.ApiReady, setter: "setSettings" as any },
       { event: "fs:api-ready", setter: "setFs" as any },
       { event: "storage:api-ready", setter: "setStorage" as any },
       { event: "ai:api-ready", setter: "setAi" as any },
-      { event: "auth:api-ready", setter: "setAuth" as any },
+      { event: AuthEvents.Ready, setter: "setAuth" as any },
       { event: "indexer:api-ready", setter: "setIndexer" as any },
       { event: "commands:api-ready", setter: "setCommands" as any },
       { event: "layout:api-ready", setter: "setLayout" as any },
       { event: "contextMenu:api-ready", setter: "setContextMenu" as any },
-      { event: "notifications:api-ready", setter: "setNotifications" as any },
+      { event: NotificationEvents.ApiReady, setter: "setNotifications" as any },
     ];
 
     for (const { event, setter } of wireMap) {
@@ -290,7 +290,7 @@ export class PluginEngine {
     });
 
     // Config change — settings module emits settings:change, we route to onConfigChange
-    this.eventBus.on("settings:change", (data?: unknown) => {
+    this.eventBus.on(SettingsEvents.Change, (data?: unknown) => {
       const d = data as { key?: string; value?: unknown } | undefined;
       if (!d?.key) return;
       const config = { [d.key]: d.value };

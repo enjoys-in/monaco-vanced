@@ -1,6 +1,7 @@
 // ── Extension Module — Plugin Entry ──────────────────────────
 
 import type { MonacoPlugin, PluginContext } from "@core/types";
+import { ExtensionEvents } from "@core/events";
 import type {
   ExtensionConfig,
   ExtensionManifest,
@@ -50,7 +51,7 @@ export function createExtensionPlugin(config: ExtensionConfig = {}): {
       extensions.set(manifest.id, ext);
 
       await lifecycle.activate(ext, code);
-      ctx?.emit("extension:installed", { id: manifest.id });
+      ctx?.emit(ExtensionEvents.Installed, { id: manifest.id });
     },
 
     async uninstall(extensionId: string) {
@@ -59,21 +60,21 @@ export function createExtensionPlugin(config: ExtensionConfig = {}): {
 
       await lifecycle.deactivate(ext);
       extensions.delete(extensionId);
-      ctx?.emit("extension:uninstalled", { id: extensionId });
+      ctx?.emit(ExtensionEvents.Uninstalled, { id: extensionId });
     },
 
     enable(extensionId: string) {
       const ext = extensions.get(extensionId);
       if (!ext) throw new Error(`Extension "${extensionId}" not found`);
       ext.state = "enabled";
-      ctx?.emit("extension:enabled", { id: extensionId });
+      ctx?.emit(ExtensionEvents.Enabled, { id: extensionId });
     },
 
     disable(extensionId: string) {
       const ext = extensions.get(extensionId);
       if (!ext) throw new Error(`Extension "${extensionId}" not found`);
       ext.state = "disabled";
-      ctx?.emit("extension:disabled", { id: extensionId });
+      ctx?.emit(ExtensionEvents.Disabled, { id: extensionId });
     },
 
     getAll() {
@@ -90,7 +91,7 @@ export function createExtensionPlugin(config: ExtensionConfig = {}): {
 
       await lifecycle.deactivate(ext);
       await lifecycle.activate(ext);
-      ctx?.emit("extension:reloaded", { id: extensionId });
+      ctx?.emit(ExtensionEvents.Reloaded, { id: extensionId });
     },
   };
 
@@ -102,7 +103,7 @@ export function createExtensionPlugin(config: ExtensionConfig = {}): {
 
     onMount(pluginCtx: PluginContext) {
       ctx = pluginCtx;
-      ctx.emit("extension:ready", {});
+      ctx.emit(ExtensionEvents.Ready, {});
     },
 
     onDispose() {

@@ -5,6 +5,7 @@ import type { DeepLinkConfig, DeepLinkModuleAPI, DeepLinkTarget } from "./types"
 import { parseDeepLink } from "./parser";
 import { DeepLinkNavigator } from "./navigator";
 import { generateDeepLink } from "./generator";
+import { DeepLinkEvents, CommandEvents } from "@core/events";
 
 export type { DeepLinkConfig, DeepLinkModuleAPI, DeepLinkTarget, DeepLinkTargetType } from "./types";
 export { parseDeepLink, validateScheme } from "./parser";
@@ -41,11 +42,11 @@ export function createDeepLinkPlugin(config: DeepLinkConfig = {}): {
         return;
       }
       notifyNavigate(target);
-      ctx?.emit("deep-link:navigate", target);
+      ctx?.emit(DeepLinkEvents.Navigate, target);
 
       // Route based on type
       if (target.type === "command" && target.commandId) {
-        ctx?.emit("command:execute", {
+        ctx?.emit(CommandEvents.Execute, {
           commandId: target.commandId,
           args: target.args ?? [],
         });
@@ -71,7 +72,7 @@ export function createDeepLinkPlugin(config: DeepLinkConfig = {}): {
 
   // Wire navigator to emit events through plugin context
   navigator.setNavigationHandler(async (target) => {
-    ctx?.emit("deep-link:navigate", target);
+    ctx?.emit(DeepLinkEvents.Navigate, target);
   });
 
   const plugin: MonacoPlugin = {
@@ -108,7 +109,7 @@ export function createDeepLinkPlugin(config: DeepLinkConfig = {}): {
 
       // Listen for event bus navigation
       disposables.push(
-        ctx.on("deep-link:navigate", async (data?: unknown) => {
+        ctx.on(DeepLinkEvents.Navigate, async (data?: unknown) => {
           if (typeof data === "string") {
             await api.navigate(data);
           } else {

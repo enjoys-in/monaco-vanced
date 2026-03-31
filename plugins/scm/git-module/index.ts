@@ -28,13 +28,13 @@ export function createGitPlugin(
     async stage(paths) {
       await client.stage(paths);
       staging.stage(paths);
-      ctx?.emit("git:stage", { paths });
+      ctx?.emit(GitEvents.Stage, { paths });
     },
 
     async unstage(paths) {
       await client.unstage(paths);
       staging.unstage(paths);
-      ctx?.emit("git:unstage", { paths });
+      ctx?.emit(GitEvents.Unstage, { paths });
     },
 
     async commit(message) {
@@ -84,7 +84,7 @@ export function createGitPlugin(
       // Apply resolution — in real impl, read + write via fs-module
       void resolveContent("", resolution, content);
       void detectConflicts(path, "");
-      ctx?.emit("git:conflict-resolved", { path, resolution });
+      ctx?.emit(GitEvents.ConflictResolved, { path, resolution });
     },
   };
 
@@ -105,7 +105,7 @@ export function createGitPlugin(
         precondition: "gitRepo",
         contextMenuGroupId: "4_git",
         contextMenuOrder: 1,
-        run: () => { ctx?.emit("git:stage-current", {}); },
+        run: () => { ctx?.emit(GitEvents.StageCurrent, {}); },
       });
 
       ctx.addAction({
@@ -115,7 +115,7 @@ export function createGitPlugin(
         precondition: "gitRepo",
         contextMenuGroupId: "4_git",
         contextMenuOrder: 2,
-        run: () => { ctx?.emit("git:diff-current", {}); },
+        run: () => { ctx?.emit(GitEvents.DiffCurrent, {}); },
       });
 
       ctx.addAction({
@@ -125,7 +125,7 @@ export function createGitPlugin(
         precondition: "gitRepo",
         contextMenuGroupId: "4_git",
         contextMenuOrder: 3,
-        run: () => { ctx?.emit("git:blame-current", {}); },
+        run: () => { ctx?.emit(GitEvents.BlameCurrent, {}); },
       });
     },
 

@@ -3,6 +3,7 @@
 import type { MonacoPlugin, PluginContext, IDisposable } from "@core/types";
 import type { WorkerModuleConfig, WorkerModuleAPI, PoolConfig, WorkerTask } from "./types";
 import { WorkerPool } from "./pool";
+import { WorkerEvents } from "@core/events";
 
 export type { WorkerModuleConfig, WorkerModuleAPI, PoolConfig, PoolStats, WorkerTask, WorkerHandle, TaskPriority } from "./types";
 export { WorkerPool } from "./pool";
@@ -33,10 +34,10 @@ export function createWorkerPlugin(_config: WorkerModuleConfig = {}): {
       const fullTask: WorkerTask = { ...task, poolId };
       try {
         const result = await pool.run(fullTask);
-        ctx?.emit("worker:complete", { taskId: task.id, poolId, result });
+        ctx?.emit(WorkerEvents.Complete, { taskId: task.id, poolId, result });
         return result;
       } catch (err) {
-        ctx?.emit("worker:error", { taskId: task.id, poolId, error: String(err) });
+        ctx?.emit(WorkerEvents.Error, { taskId: task.id, poolId, error: String(err) });
         throw err;
       }
     },
@@ -61,7 +62,7 @@ export function createWorkerPlugin(_config: WorkerModuleConfig = {}): {
 
     onMount(_ctx: PluginContext) {
       ctx = _ctx;
-      ctx.emit("worker:spawn", { status: "ready" });
+      ctx.emit(WorkerEvents.Spawn, { status: "ready" });
     },
 
     onDispose() {

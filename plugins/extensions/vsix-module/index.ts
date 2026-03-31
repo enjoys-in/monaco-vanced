@@ -2,6 +2,7 @@
 // Orchestrates: fetch → extract → parse → load pipeline
 
 import type { MonacoPlugin, PluginContext } from "@core/types";
+import { VsixEvents } from "@core/events";
 import type {
   VSIXConfig,
   VSIXPackage,
@@ -64,16 +65,16 @@ export function createVSIXPlugin(config: VSIXConfig = {}): {
 
   const api: VSIXModuleAPI = {
     async fetch(id: string, version?: string) {
-      ctx?.emit("vsix:fetch:start", { id, version });
+      ctx?.emit(VsixEvents.FetchStart, { id, version });
       const buffer = await fetcher.fetch(id, version);
       const pkg = await extractor.extract(buffer);
-      ctx?.emit("vsix:fetch:complete", { id, manifest: pkg.manifest });
+      ctx?.emit(VsixEvents.FetchComplete, { id, manifest: pkg.manifest });
       return pkg;
     },
 
     async install(pkg: VSIXPackage) {
       const id = `${pkg.manifest.publisher}.${pkg.manifest.name}`;
-      ctx?.emit("vsix:install:start", { id });
+      ctx?.emit(VsixEvents.InstallStart, { id });
 
       if (ctx) {
         const monaco = ctx.monaco;
@@ -83,26 +84,26 @@ export function createVSIXPlugin(config: VSIXConfig = {}): {
         const iconThemes = loadIcons(pkg, pkg.manifest);
         loadSnippets(pkg, pkg.manifest, monaco);
         loadCommands(pkg, pkg.manifest, (cmdId, title) => {
-          ctx!.emit("vsix:command:registered", { command: cmdId, title });
+          ctx!.emit(VsixEvents.CommandRegistered, { command: cmdId, title });
         });
         loadKeybindings(pkg, pkg.manifest, (binding) => {
-          ctx!.emit("vsix:keybinding:registered", { command: binding.command, key: binding.key });
+          ctx!.emit(VsixEvents.KeybindingRegistered, { command: binding.command, key: binding.key });
         });
         loadLanguages(pkg, pkg.manifest, monaco);
 
         // Emit theme data for theme-module to consume
         if (themeResult.themes.length > 0) {
-          ctx.emit("vsix:themes:loaded", { themes: themeResult.themes, extensionId: id });
+          ctx.emit(VsixEvents.ThemesLoaded, { themes: themeResult.themes, extensionId: id });
         }
 
         // Emit icon theme data for icon-module to consume
         if (iconThemes.length > 0) {
-          ctx.emit("vsix:icons:loaded", { iconThemes, extensionId: id });
+          ctx.emit(VsixEvents.IconsLoaded, { iconThemes, extensionId: id });
         }
       }
 
       registry.register(pkg.manifest);
-      ctx?.emit("vsix:install:complete", { id });
+      ctx?.emit(VsixEvents.InstallComplete, { id });
     },
 
     getInstalled() {
@@ -111,12 +112,12 @@ export function createVSIXPlugin(config: VSIXConfig = {}): {
 
     uninstall(id: string) {
       registry.unregister(id);
-      ctx?.emit("vsix:uninstalled", { id });
+      ctx?.emit(VsixEvents.Uninstalled, { id });
     },
 
     async clearCache() {
       await cache.clear();
-      ctx?.emit("vsix:cache:cleared", {});
+      ctx?.emit(VsixEvents.CacheCleared, {});
     },
   };
 
@@ -128,7 +129,7 @@ export function createVSIXPlugin(config: VSIXConfig = {}): {
 
     onMount(pluginCtx: PluginContext) {
       ctx = pluginCtx;
-      ctx.emit("vsix:ready", {});
+      ctx.emit(VsixEvents.Ready, {});
     },
 
     onDispose() {

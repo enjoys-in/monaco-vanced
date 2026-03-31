@@ -1,6 +1,7 @@
 // ── Embed Module — Plugin Entry ──────────────────────────────
 
 import type { MonacoPlugin, PluginContext } from "@core/types";
+import { EmbedEvents } from "@core/events";
 import type { EmbedConfig, EmbedMessage, EmbedModuleAPI } from "./types";
 import { MessageBridge } from "./message-handler";
 import { EmbedAPI } from "./api";
@@ -21,12 +22,12 @@ export function createEmbedPlugin(_config: EmbedConfig = { containerId: "editor"
   const api: EmbedModuleAPI = {
     mount(containerId: string, options?: Record<string, unknown>) {
       if (ctx) {
-        ctx.emit("embed:mount", { containerId, options });
+        ctx.emit(EmbedEvents.Mount, { containerId, options });
       }
     },
     unmount() {
       if (ctx) {
-        ctx.emit("embed:unmount", {});
+        ctx.emit(EmbedEvents.Unmount, {});
       }
     },
     sendMessage(msg: EmbedMessage) {
@@ -74,7 +75,7 @@ export function createEmbedPlugin(_config: EmbedConfig = { containerId: "editor"
         }
       });
 
-      ctx.emit("embed:ready", { embedded: isEmbeddedCheck() });
+      ctx.emit(EmbedEvents.Ready, { embedded: isEmbeddedCheck() });
     },
 
     onContentChange(content: string) {

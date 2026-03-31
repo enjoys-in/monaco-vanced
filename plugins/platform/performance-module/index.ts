@@ -8,6 +8,7 @@ import { MemoryMonitor } from "./memory";
 import { PerfMarks } from "./marks";
 import { BudgetManager } from "./budgets";
 import { PerfDashboard } from "./dashboard";
+import { PerformanceEvents } from "@core/events";
 
 export type {
   PerformanceConfig, PerformanceModuleAPI, PerfMark, PerfBudget,
@@ -66,7 +67,7 @@ export function createPerformancePlugin(config: PerformanceConfig = {}): {
     measure(name: string, startMark: string, endMark?: string): PerfMark | null {
       const result = perfMarks.measure(name, startMark, endMark);
       if (result?.duration && result.duration > longTaskMs) {
-        ctx?.emit("perf:long-task", { name, duration: result.duration });
+        ctx?.emit(PerformanceEvents.LongTask, { name, duration: result.duration });
         dashboard.recordLongTask();
       }
       return result;
@@ -105,7 +106,7 @@ export function createPerformancePlugin(config: PerformanceConfig = {}): {
       ctx = _ctx;
 
       const removeWarning = memoryMonitor.onWarning((usage) => {
-        ctx?.emit("perf:memory-warning", usage);
+        ctx?.emit(PerformanceEvents.PerfMemoryWarning, usage);
         memoryWarningHandlers.forEach((h) => {
           try { h(usage); } catch {}
         });

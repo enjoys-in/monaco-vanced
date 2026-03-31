@@ -34,6 +34,7 @@ export enum FsEvents {
   ListRequest = "fs:list-request",
   Listed = "fs:listed",
   Change = "fs:change",
+  Read = "fs:read",
   Connected = "fs:connected",
   Disconnected = "fs:disconnected",
   WatchError = "fs:watch-error",

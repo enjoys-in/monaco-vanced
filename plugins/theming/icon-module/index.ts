@@ -4,6 +4,7 @@
 
 import type { MonacoPlugin, PluginContext } from "@core/types";
 import type { IconConfig, IconTheme, IconModuleAPI } from "./types";
+import { IconEvents } from "@core/events";
 import { VSCodeIconResolver, CodiconResolver } from "./icon-map";
 import { SVGCache } from "./svg-cache";
 
@@ -63,7 +64,7 @@ export function createIconPlugin(config: IconConfig = {}): {
 
     registerTheme(theme: IconTheme) {
       themes.set(theme.id, theme);
-      ctx?.emit("icon:theme:registered", { id: theme.id });
+      ctx?.emit(IconEvents.ThemeRegistered, { id: theme.id });
     },
 
     getThemes() {
@@ -76,7 +77,7 @@ export function createIconPlugin(config: IconConfig = {}): {
         return;
       }
       activeThemeId = id;
-      ctx?.emit("icon:theme:changed", { id });
+      ctx?.emit(IconEvents.ThemeChanged, { id });
     },
   };
 
@@ -118,7 +119,7 @@ export function createIconPlugin(config: IconConfig = {}): {
         }
       });
 
-      ctx.emit("icon:ready", {});
+      ctx.emit(IconEvents.Ready, {});
     },
 
     onDispose() {

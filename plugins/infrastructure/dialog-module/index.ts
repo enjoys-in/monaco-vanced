@@ -5,6 +5,7 @@ import type { DialogConfig, DialogModuleAPI, DialogResult, QuickPickItem, QuickP
 import { QuickPick } from "./quick-pick";
 import { DialogRenderer } from "./renderer";
 import { TrustStore } from "./trust-store";
+import { DialogEvents } from "@core/events";
 
 export type { DialogConfig, DialogModuleAPI, DialogResult, DialogType, DialogAction, DialogField, QuickPickItem, QuickPickOptions } from "./types";
 export { QuickPick } from "./quick-pick";
@@ -106,7 +107,7 @@ export function createDialogPlugin(_config: Partial<DialogConfig> = {}): {
           const cfg = data as DialogConfig | undefined;
           if (cfg) {
             const result = await api.showCustom(cfg);
-            ctx?.emit("dialog:result", result);
+            ctx?.emit(DialogEvents.Result, result);
           }
         }),
       );

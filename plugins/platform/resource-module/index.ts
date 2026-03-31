@@ -6,6 +6,7 @@ import { ResourceRegistry } from "./registry";
 import { LeakScanner } from "./leak-scan";
 import { DisposeGroupManager } from "./groups";
 import { GCStrategy } from "./gc-strategy";
+import { ResourceEvents } from "@core/events";
 
 export type { ResourceConfig, ResourceModuleAPI, ResourceEntry, LeakReport, DisposeGroup } from "./types";
 export { ResourceRegistry } from "./registry";
@@ -31,21 +32,21 @@ export function createResourcePlugin(config: ResourceConfig = {}): {
       if (opts?.group) {
         groupManager.addToGroup(opts.group, key);
       }
-      ctx?.emit("resource:register", { type, key, owner: opts?.owner });
+      ctx?.emit(ResourceEvents.Register, { type, key, owner: opts?.owner });
     },
 
     dispose(key: string): void {
       const entry = registry.get(key);
       if (entry) {
         registry.dispose(key);
-        ctx?.emit("resource:dispose", { key, type: entry.type });
+        ctx?.emit(ResourceEvents.Dispose, { key, type: entry.type });
       }
     },
 
     disposeGroup(groupId: string): void {
       const disposed = groupManager.disposeGroup(groupId);
       if (disposed.length > 0) {
-        ctx?.emit("resource:dispose", { groupId, count: disposed.length });
+        ctx?.emit(ResourceEvents.Dispose, { groupId, count: disposed.length });
       }
     },
 
@@ -56,7 +57,7 @@ export function createResourcePlugin(config: ResourceConfig = {}): {
     onLeak(handler: (data?: unknown) => void): IDisposable {
       leakHandlers.push(handler);
       const remove = leakScanner.onLeak((reports) => {
-        ctx?.emit("resource:leak", { count: reports.length, reports });
+        ctx?.emit(ResourceEvents.Leak, { count: reports.length, reports });
         handler({ count: reports.length, reports });
       });
       return {
@@ -75,7 +76,7 @@ export function createResourcePlugin(config: ResourceConfig = {}): {
     releaseRef(key: string): void {
       const disposed = registry.releaseRef(key);
       if (disposed) {
-        ctx?.emit("resource:dispose", { key, reason: "ref-count-zero" });
+        ctx?.emit(ResourceEvents.Dispose, { key, reason: "ref-count-zero" });
       }
     },
   };

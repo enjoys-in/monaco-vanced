@@ -11,6 +11,7 @@ import type {
 import { TestDiscovery } from "./discovery";
 import { TestRunner } from "./runner";
 import { CoverageCollector } from "./coverage";
+import { TestEvents } from "@core/events";
 
 export type {
   TestItem,
@@ -45,28 +46,28 @@ export function createTestPlugin(config: TestConfig = {}): {
   const api: TestModuleAPI = {
     async discover(rootPath: string): Promise<TestSuite[]> {
       // Emit discovery request — the FS module would resolve files
-      ctx?.emit("test:discover:start", { rootPath });
+      ctx?.emit(TestEvents.DiscoverStart, { rootPath });
 
       // In a real implementation, we'd read files from the FS adapter.
       // Here we store discovered suites for later runs.
       // External consumers can call this with pre-resolved file data.
       suites = await discovery.discoverTests([]);
-      ctx?.emit("test:discover:complete", { count: suites.length });
+      ctx?.emit(TestEvents.DiscoverComplete, { count: suites.length });
       return suites;
     },
 
     async run(ids?: string[]): Promise<TestItem[]> {
-      ctx?.emit("test:run", { ids });
+      ctx?.emit(TestEvents.Run, { ids });
 
       lastResults = await runner.run(suites, ids, (test) => {
         if (test.state === "passed") {
-          ctx?.emit("test:complete", { test });
+          ctx?.emit(TestEvents.Complete, { test });
         } else if (test.state === "failed") {
-          ctx?.emit("test:fail", { test });
+          ctx?.emit(TestEvents.Fail, { test });
         }
       });
 
-      ctx?.emit("test:run:complete", {
+      ctx?.emit(TestEvents.RunComplete, {
         total: lastResults.length,
         passed: lastResults.filter((t) => t.state === "passed").length,
         failed: lastResults.filter((t) => t.state === "failed").length,
@@ -89,7 +90,7 @@ export function createTestPlugin(config: TestConfig = {}): {
 
     cancel(): void {
       runner.cancel();
-      ctx?.emit("test:cancel", {});
+      ctx?.emit(TestEvents.Cancel, {});
     },
   };
 
@@ -105,14 +106,14 @@ export function createTestPlugin(config: TestConfig = {}): {
       ctx = pluginCtx;
 
       disposables.push(
-        ctx.on("test:run", (data?: unknown) => {
+        ctx.on(TestEvents.Run, (data?: unknown) => {
           const d = data as { ids?: string[] } | undefined;
           api.run(d?.ids);
         }),
       );
 
       disposables.push(
-        ctx.on("test:cancel", () => {
+        ctx.on(TestEvents.Cancel, () => {
           api.cancel();
         }),
       );

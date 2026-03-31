@@ -100,9 +100,9 @@ export function createTitlePlugin(
         ctx.on(TitlebarEvents.ActionClick, (data) => {
           const { action } = data as { action: string; segment?: string };
           if (action === "language-click") {
-            ctx?.emit("titlebar:language-click", {});
+            ctx?.emit(TitlebarEvents.LanguageClick, {});
           } else if (action === "encoding-click") {
-            ctx?.emit("titlebar:encoding-click", {});
+            ctx?.emit(TitlebarEvents.EncodingClick, {});
           }
         }),
       );

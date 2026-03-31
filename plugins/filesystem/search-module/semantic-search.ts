@@ -3,6 +3,7 @@
 
 import type { SemanticSearchQuery, SemanticSearchResult } from "./types";
 import type { PluginContext } from "@core/types";
+import { RagEvents } from "@core/events";
 
 /**
  * Semantic search support — requires rag-module to be active.
@@ -43,7 +44,7 @@ export class SemanticSearchEngine {
         resolve([]);
       }, 10_000);
 
-      const sub = this.ctx.on("rag:results", (data) => {
+      const sub = this.ctx.on(RagEvents.Results, (data) => {
         clearTimeout(timeout);
         sub.dispose();
 
@@ -55,7 +56,7 @@ export class SemanticSearchEngine {
         resolve(filtered);
       });
 
-      this.ctx.emit("rag:query", {
+      this.ctx.emit(RagEvents.Query, {
         query: query.query,
         limit: query.limit ?? 10,
         fileTypes: query.fileTypes,

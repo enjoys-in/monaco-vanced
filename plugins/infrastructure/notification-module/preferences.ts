@@ -1,28 +1,53 @@
-// ── Notification Module — Preferences ─────────────────────────
+// ── Notification Module — Preferences (Dexie) ────────────────
 
+import Dexie from "dexie";
 import type { NotificationType } from "./types";
+import type { CategoryPreference, GlobalPreference, NotificationHistoryEntry } from "./types";
 
-interface CategoryPrefs {
-  muted: boolean;
-  customDuration?: number;
+// ── Dexie Database ───────────────────────────────────────────
+
+class NotificationDB extends Dexie {
+  history!: Dexie.Table<NotificationHistoryEntry, string>;
+  categoryPrefs!: Dexie.Table<CategoryPreference, string>;
+  globalPrefs!: Dexie.Table<GlobalPreference, string>;
+
+  constructor(name: string) {
+    super(name);
+    this.version(1).stores({
+      history: "id, type, category, timestamp, read",
+      categoryPrefs: "category",
+      globalPrefs: "key",
+    });
+  }
 }
 
-const STORAGE_KEY = "monaco-vanced-notification-prefs";
+// ── In-memory cache for fast reads ──────────────────────────
 
 export class NotificationPreferences {
-  private categories = new Map<string, CategoryPrefs>();
+  private readonly db: NotificationDB;
+  private readonly maxHistory: number;
+  private categories = new Map<string, { muted: boolean; customDuration?: number }>();
   private typeDurations = new Map<NotificationType, number>();
   private globalMute = false;
+  private _ready: Promise<void>;
 
-  constructor() {
-    this.restore();
+  constructor(persistKey = "monaco-vanced-notifications", maxHistory = 200) {
+    this.db = new NotificationDB(persistKey);
+    this.maxHistory = maxHistory;
+    this._ready = this.restore();
   }
+
+  ready(): Promise<void> {
+    return this._ready;
+  }
+
+  // ── Category prefs (in-memory + Dexie) ─────────────────
 
   mute(category: string): void {
     const existing = this.categories.get(category) ?? { muted: false };
     existing.muted = true;
     this.categories.set(category, existing);
-    this.persist();
+    this.persistCategory(category);
   }
 
   unmute(category: string): void {
@@ -30,7 +55,7 @@ export class NotificationPreferences {
     if (existing) {
       existing.muted = false;
       this.categories.set(category, existing);
-      this.persist();
+      this.persistCategory(category);
     }
   }
 
@@ -41,7 +66,7 @@ export class NotificationPreferences {
 
   setGlobalMute(muted: boolean): void {
     this.globalMute = muted;
-    this.persist();
+    this.db.globalPrefs.put({ key: "globalMute", value: muted }).catch(() => {});
   }
 
   isGloballyMuted(): boolean {
@@ -50,7 +75,7 @@ export class NotificationPreferences {
 
   setDurationForType(type: NotificationType, duration: number): void {
     this.typeDurations.set(type, duration);
-    this.persist();
+    this.db.globalPrefs.put({ key: `typeDuration:${type}`, value: duration }).catch(() => {});
   }
 
   getDurationForType(type: NotificationType): number | undefined {
@@ -61,7 +86,7 @@ export class NotificationPreferences {
     const existing = this.categories.get(category) ?? { muted: false };
     existing.customDuration = duration;
     this.categories.set(category, existing);
-    this.persist();
+    this.persistCategory(category);
   }
 
   getCategoryDuration(category: string): number | undefined {
@@ -80,40 +105,72 @@ export class NotificationPreferences {
     this.categories.clear();
     this.typeDurations.clear();
     this.globalMute = false;
-    localStorage.removeItem(STORAGE_KEY);
+    this.db.categoryPrefs.clear().catch(() => {});
+    this.db.globalPrefs.clear().catch(() => {});
   }
 
-  private persist(): void {
-    try {
-      const data = {
-        categories: Object.fromEntries(this.categories),
-        typeDurations: Object.fromEntries(this.typeDurations),
-        globalMute: this.globalMute,
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    } catch {
-      // silent fail
+  // ── History (Dexie only — heavy data) ─────────────────
+
+  async addHistory(entry: NotificationHistoryEntry): Promise<void> {
+    await this.db.history.put(entry);
+    // Trim excess
+    const count = await this.db.history.count();
+    if (count > this.maxHistory) {
+      const excess = await this.db.history
+        .orderBy("timestamp")
+        .limit(count - this.maxHistory)
+        .primaryKeys();
+      await this.db.history.bulkDelete(excess);
     }
   }
 
-  private restore(): void {
+  async getHistory(): Promise<NotificationHistoryEntry[]> {
+    return this.db.history.orderBy("timestamp").reverse().toArray();
+  }
+
+  async clearHistory(): Promise<void> {
+    await this.db.history.clear();
+  }
+
+  async markRead(id: string): Promise<void> {
+    await this.db.history.update(id, { read: true });
+  }
+
+  async markAllRead(): Promise<void> {
+    await this.db.history.toCollection().modify({ read: true });
+  }
+
+  async getUnreadCount(): Promise<number> {
+    return this.db.history.where("read").equals(0).count();
+  }
+
+  // ── Persistence helpers ────────────────────────────────
+
+  private persistCategory(category: string): void {
+    const prefs = this.categories.get(category);
+    if (!prefs) return;
+    this.db.categoryPrefs.put({ category, ...prefs }).catch(() => {});
+  }
+
+  private async restore(): Promise<void> {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      const data = JSON.parse(raw);
-      if (data.categories) {
-        for (const [k, v] of Object.entries(data.categories)) {
-          this.categories.set(k, v as CategoryPrefs);
+      // Restore category prefs
+      const cats = await this.db.categoryPrefs.toArray();
+      for (const c of cats) {
+        this.categories.set(c.category, { muted: c.muted, customDuration: c.customDuration });
+      }
+      // Restore global prefs
+      const globals = await this.db.globalPrefs.toArray();
+      for (const g of globals) {
+        if (g.key === "globalMute") {
+          this.globalMute = Boolean(g.value);
+        } else if (g.key.startsWith("typeDuration:")) {
+          const type = g.key.replace("typeDuration:", "") as NotificationType;
+          this.typeDurations.set(type, g.value as number);
         }
       }
-      if (data.typeDurations) {
-        for (const [k, v] of Object.entries(data.typeDurations)) {
-          this.typeDurations.set(k as NotificationType, v as number);
-        }
-      }
-      this.globalMute = Boolean(data.globalMute);
     } catch {
-      // silent fail
+      // First run or DB error — start fresh
     }
   }
 }

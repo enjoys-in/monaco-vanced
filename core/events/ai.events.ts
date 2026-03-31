@@ -4,7 +4,12 @@ export enum AiEvents {
   Reject = "ai:reject",
   Stream = "ai:stream",
   ChatMessage = "ai:chat-message",
+  ChatRequest = "ai:chat-request",
+  ChatResponse = "ai:chat-response",
   Status = "ai:status",
   Error = "ai:error",
   Cost = "ai:cost",
+  Explain = "ai:explain",
+  Generate = "ai:generate",
+  Fix = "ai:fix",
 }

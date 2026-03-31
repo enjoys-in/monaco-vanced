@@ -19,12 +19,38 @@ export interface Notification {
   autoHide?: boolean;
   duration?: number;
   progress?: number;
+  category?: string;
+}
+
+/** Persisted notification history entry (Dexie) */
+export interface NotificationHistoryEntry {
+  id: string;
+  message: string;
+  type: NotificationType;
+  category?: string;
+  timestamp: number;
+  read: boolean;
+}
+
+/** Persisted category preferences (Dexie) */
+export interface CategoryPreference {
+  category: string;
+  muted: boolean;
+  customDuration?: number;
+}
+
+/** Persisted global preferences (Dexie) */
+export interface GlobalPreference {
+  key: string;
+  value: unknown;
 }
 
 export interface NotificationConfig {
   maxToasts?: number;
   defaultDuration?: number;
   position?: NotificationPosition;
+  persistKey?: string;
+  maxHistory?: number;
 }
 
 export interface NotificationModuleAPI {
@@ -32,5 +58,10 @@ export interface NotificationModuleAPI {
   dismiss(id: string): void;
   dismissAll(): void;
   getActive(): Notification[];
+  getHistory(): Promise<NotificationHistoryEntry[]>;
+  clearHistory(): Promise<void>;
+  markRead(id: string): Promise<void>;
+  markAllRead(): Promise<void>;
+  getUnreadCount(): Promise<number>;
   onAction(handler: (data?: unknown) => void): IDisposable;
 }

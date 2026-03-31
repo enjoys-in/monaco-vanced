@@ -11,6 +11,7 @@ import type {
 import { TenantIsolation } from "./isolation";
 import { TenantQuotaManager } from "./quotas";
 import { TenantAdmin } from "./admin";
+import { TenantEvents } from "@core/events";
 
 export type { SaasTenantConfig, SaasTenantModuleAPI, Tenant, TenantConfig, TenantIsolationConfig };
 export { TenantIsolation, TenantQuotaManager, TenantAdmin };
@@ -37,7 +38,7 @@ export function createSaasTenantPlugin(
         storagePrefix: `tenant:${tenant.id}`,
         namespacePrefix: `ns:${tenant.id}`,
       });
-      ctx?.emit("tenant:switch", { from: prev?.id, to: tenant.id });
+      ctx?.emit(TenantEvents.Switch, { from: prev?.id, to: tenant.id });
     },
 
     getConfig(): TenantConfig | null {
@@ -51,7 +52,7 @@ export function createSaasTenantPlugin(
         config: { ...currentTenant.config, ...partial },
       };
       admin.update(currentTenant.id, { config: currentTenant.config });
-      ctx?.emit("tenant:config-change", { tenantId: currentTenant.id, config: currentTenant.config });
+      ctx?.emit(TenantEvents.ConfigChange, { tenantId: currentTenant.id, config: currentTenant.config });
     },
 
     getIsolation(): TenantIsolationConfig {

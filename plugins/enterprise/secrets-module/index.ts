@@ -9,6 +9,7 @@ import type {
   SecretsModuleAPI,
 } from "./types";
 import { SecretInjector } from "./injector";
+import { SecretsEvents } from "@core/events";
 
 export type { InjectorConfig, Secret, SecretProvider, SecretsConfig, SecretsModuleAPI };
 export { SecretInjector };
@@ -42,17 +43,17 @@ export function createSecretsPlugin(
 
   const api: SecretsModuleAPI = {
     async get(key: string): Promise<string | null> {
-      ctx?.emit("secrets:access", { key, action: "get" });
+      ctx?.emit(SecretsEvents.Access, { key, action: "get" });
       return getProvider().get(key);
     },
 
     async set(key: string, value: string): Promise<void> {
-      ctx?.emit("secrets:access", { key, action: "set" });
+      ctx?.emit(SecretsEvents.Access, { key, action: "set" });
       return getProvider().set(key, value);
     },
 
     async delete(key: string): Promise<void> {
-      ctx?.emit("secrets:access", { key, action: "delete" });
+      ctx?.emit(SecretsEvents.Access, { key, action: "delete" });
       return getProvider().delete(key);
     },
 

@@ -11,6 +11,7 @@ import type {
 import { DeprecationRegistry } from "./deprecation";
 import { VersionManager } from "./versioning";
 import { ShimLayer } from "./shims";
+import { ApiStabilityEvents } from "@core/events";
 
 export type { APIStabilityConfig, APIStabilityModuleAPI, APIVersion, DeprecationEntry, Shim };
 export { DeprecationRegistry, VersionManager, ShimLayer };
@@ -27,7 +28,7 @@ export function createAPIStabilityPlugin(
   const api: APIStabilityModuleAPI = {
     deprecate(entry: DeprecationEntry): void {
       deprecations.register(entry);
-      ctx?.emit("api:deprecated-access", { api: entry.api, since: entry.since });
+      ctx?.emit(ApiStabilityEvents.DeprecatedAccess, { api: entry.api, since: entry.since });
     },
 
     getDeprecations(): DeprecationEntry[] {
@@ -41,7 +42,7 @@ export function createAPIStabilityPlugin(
     setVersion(v: APIVersion): void {
       const prev = versions.toString();
       versions.set(v);
-      ctx?.emit("api:version-change", { from: prev, to: versions.toString() });
+      ctx?.emit(ApiStabilityEvents.VersionChange, { from: prev, to: versions.toString() });
     },
 
     createShim(shim: Shim): void {
@@ -64,7 +65,7 @@ export function createAPIStabilityPlugin(
 
       if (config.warnOnDeprecated !== false) {
         ctx.addDisposable(
-          ctx.on("api:deprecated-access", (data?: unknown) => {
+          ctx.on(ApiStabilityEvents.DeprecatedAccess, (data?: unknown) => {
             const d = data as { api: string } | undefined;
             if (d?.api) {
               deprecations.check(d.api);

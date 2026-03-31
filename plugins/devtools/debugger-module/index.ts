@@ -14,6 +14,7 @@ import { DAPClient } from "./dap-client";
 import { BreakpointManager } from "./breakpoint-manager";
 import { CallStack } from "./call-stack";
 import { VariableStore } from "./variables";
+import { DebugEvents } from "@core/events";
 
 export type {
   Breakpoint,
@@ -48,7 +49,7 @@ export function createDebugPlugin(config: DebugConfig = {}): {
   function updateState(state: DebugState): void {
     if (session) {
       session.state = state;
-      ctx?.emit("debug:state", { session: { ...session } });
+      ctx?.emit(DebugEvents.State, { session: { ...session } });
     }
   }
 
@@ -57,13 +58,13 @@ export function createDebugPlugin(config: DebugConfig = {}): {
   const api: DebugModuleAPI = {
     setBreakpoint(file: string, line: number, condition?: string): Breakpoint {
       const bp = bpManager.add(file, line, condition);
-      ctx?.emit("debug:breakpoint:set", { breakpoint: bp });
+      ctx?.emit(DebugEvents.BreakpointSet, { breakpoint: bp });
       return bp;
     },
 
     removeBreakpoint(id: string): void {
       bpManager.remove(id);
-      ctx?.emit("debug:breakpoint:remove", { id });
+      ctx?.emit(DebugEvents.BreakpointRemove, { id });
     },
 
     getBreakpoints(): Breakpoint[] {
@@ -109,7 +110,7 @@ export function createDebugPlugin(config: DebugConfig = {}): {
       }
 
       await dapClient.send("configurationDone", {});
-      ctx?.emit("debug:launch", { session: { ...session } });
+      ctx?.emit(DebugEvents.Launch, { session: { ...session } });
     },
 
     async continue(): Promise<void> {
@@ -146,7 +147,7 @@ export function createDebugPlugin(config: DebugConfig = {}): {
       updateState("disconnected");
       callStack.clear();
       variableStore.clear();
-      ctx?.emit("debug:terminate", { sessionId: session?.id });
+      ctx?.emit(DebugEvents.Terminate, { sessionId: session?.id });
       session = null;
     },
   };
@@ -171,13 +172,13 @@ export function createDebugPlugin(config: DebugConfig = {}): {
           dapClient.send("stackTrace", { threadId: 1 }).then((body) => {
             const frames = (body?.stackFrames as StackFrame[] | undefined) ?? [];
             callStack.setFrames(frames);
-            ctx?.emit("debug:stopped", { frames });
+            ctx?.emit(DebugEvents.Stopped, { frames });
           }).catch(() => {});
         } else if (event.event === "terminated") {
           updateState("disconnected");
-          ctx?.emit("debug:terminate", { sessionId: session?.id });
+          ctx?.emit(DebugEvents.Terminate, { sessionId: session?.id });
         } else if (event.event === "output") {
-          ctx?.emit("debug:output", event.body);
+          ctx?.emit(DebugEvents.Output, event.body);
         }
       });
 

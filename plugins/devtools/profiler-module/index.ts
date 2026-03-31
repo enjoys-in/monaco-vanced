@@ -4,6 +4,7 @@ import type { MonacoPlugin, PluginContext, IDisposable } from "@core/types";
 import type { FlameNode, MemorySnapshot, ProfilerConfig, ProfilerModuleAPI } from "./types";
 import { FlameGraphBuilder } from "./flame-graph";
 import { MemoryTracker } from "./memory-tracker";
+import { ProfilerEvents } from "@core/events";
 
 export type { FlameNode, MemorySnapshot, ProfilerConfig, ProfilerModuleAPI } from "./types";
 export { FlameGraphBuilder } from "./flame-graph";
@@ -50,7 +51,7 @@ export function createProfilerPlugin(config: ProfilerConfig = {}): {
         // The builder.addSample() would be called with actual stack traces.
       }, sampleInterval);
 
-      ctx?.emit("profiler:start", { sampleInterval, maxDuration });
+      ctx?.emit(ProfilerEvents.Start, { sampleInterval, maxDuration });
     },
 
     stopProfiling(): FlameNode | null {
@@ -63,7 +64,7 @@ export function createProfilerPlugin(config: ProfilerConfig = {}): {
       }
 
       lastGraph = builder.build();
-      ctx?.emit("profiler:stop", { samples: builder.samples });
+      ctx?.emit(ProfilerEvents.Stop, { samples: builder.samples });
       return lastGraph;
     },
 
@@ -73,7 +74,7 @@ export function createProfilerPlugin(config: ProfilerConfig = {}): {
 
     takeMemorySnapshot(): MemorySnapshot {
       const snap = memTracker.snapshot();
-      ctx?.emit("profiler:memory", { snapshot: snap });
+      ctx?.emit(ProfilerEvents.Memory, { snapshot: snap });
       return snap;
     },
 
@@ -101,13 +102,13 @@ export function createProfilerPlugin(config: ProfilerConfig = {}): {
       ctx = pluginCtx;
 
       disposables.push(
-        ctx.on("profiler:start", () => {
+        ctx.on(ProfilerEvents.Start, () => {
           api.startProfiling();
         }),
       );
 
       disposables.push(
-        ctx.on("profiler:stop", () => {
+        ctx.on(ProfilerEvents.Stop, () => {
           api.stopProfiling();
         }),
       );

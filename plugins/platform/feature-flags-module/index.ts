@@ -6,6 +6,7 @@ import { FlagRegistry } from "./registry";
 import { RemoteFlagSync } from "./remote";
 import { CapabilityDetector } from "./capabilities";
 import { BrowserDetector } from "./browser";
+import { FeatureFlagEvents } from "@core/events";
 
 export type { FeatureFlagConfig, FeatureFlagModuleAPI, FlagConfig, FlagValue } from "./types";
 export { FlagRegistry } from "./registry";
@@ -26,7 +27,7 @@ export function createFeatureFlagPlugin(config: FeatureFlagConfig = {}): {
   let ctx: PluginContext | null = null;
 
   function notifyChange(data?: unknown): void {
-    ctx?.emit("flags:change", data);
+    ctx?.emit(FeatureFlagEvents.Change, data);
     changeHandlers.forEach((h) => {
       try { h(data); } catch {}
     });
@@ -59,7 +60,7 @@ export function createFeatureFlagPlugin(config: FeatureFlagConfig = {}): {
       try {
         const flags = await remoteSync.fetch();
         registry.setRemoteValues(flags);
-        ctx?.emit("flags:sync", { count: flags.size });
+        ctx?.emit(FeatureFlagEvents.Sync, { count: flags.size });
         notifyChange({ action: "sync", count: flags.size });
       } catch (err) {
         console.warn("[feature-flags] Sync failed:", err);

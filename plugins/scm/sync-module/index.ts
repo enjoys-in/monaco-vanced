@@ -3,6 +3,7 @@
 
 import type { MonacoPlugin, PluginContext } from "@core/types";
 import type { SyncConfig, SyncModuleAPI, SyncStrategy } from "./types";
+import { SyncEvents } from "@core/events";
 import { OfflineQueue } from "./queue";
 import { StatusTracker } from "./status-tracker";
 
@@ -20,7 +21,7 @@ export function createSyncPlugin(
 
     async forceSync(uri) {
       if (!online) return;
-      ctx?.emit("sync:start", { queueLength: queue.length });
+      ctx?.emit(SyncEvents.Start, { queueLength: queue.length });
       let synced = 0;
       let failed = 0;
 
@@ -41,7 +42,7 @@ export function createSyncPlugin(
         }
       }
 
-      ctx?.emit("sync:complete", { synced, failed });
+      ctx?.emit(SyncEvents.Complete, { synced, failed });
     },
 
     setStrategy(s) { strategy = s; void strategy; },
@@ -50,7 +51,7 @@ export function createSyncPlugin(
     enqueue(uri, operation, data) {
       queue.enqueue(uri, operation, data);
       tracker.set(uri, "pending");
-      ctx?.emit("sync:enqueue", { uri, operation });
+      ctx?.emit(SyncEvents.Enqueue, { uri, operation });
     },
 
     isOnline: () => online,
@@ -68,12 +69,12 @@ export function createSyncPlugin(
       if (typeof window !== "undefined") {
         window.addEventListener("online", () => {
           online = true;
-          ctx?.emit("sync:online", {});
+          ctx?.emit(SyncEvents.Online, {});
           api.forceSync();
         });
         window.addEventListener("offline", () => {
           online = false;
-          ctx?.emit("sync:offline", {});
+          ctx?.emit(SyncEvents.Offline, {});
         });
       }
     },

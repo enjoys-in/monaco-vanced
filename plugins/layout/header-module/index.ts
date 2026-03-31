@@ -3,7 +3,7 @@
 // notification badge. Independent of editor content.
 
 import type { MonacoPlugin, PluginContext } from "@core/types";
-import { HeaderEvents } from "@core/events";
+import { HeaderEvents, SidebarEvents } from "@core/events";
 import { AuthEvents } from "@core/events";
 import { AiEvents } from "@core/events";
 import type {
@@ -108,7 +108,7 @@ export function createHeaderPlugin(
       // Emit sidebar toggle on request
       ctx.addDisposable(
         ctx.on(HeaderEvents.SidebarToggle, () => {
-          ctx?.emit("sidebar:toggle", {});
+          ctx?.emit(SidebarEvents.Toggle, {});
         }),
       );
 

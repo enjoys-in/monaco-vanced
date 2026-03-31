@@ -173,12 +173,12 @@ export function createLayoutPlugin(
         webviewContainer: container,
       };
       panelManager.registerView(view);
-      ctx?.emit("layout:webview-mounted", { id, location });
+      ctx?.emit(LayoutEvents.WebviewMounted, { id, location });
     },
 
     unmountWebview(id: string): void {
       panelManager.unregisterView(`webview:${id}`);
-      ctx?.emit("layout:webview-unmounted", { id });
+      ctx?.emit(LayoutEvents.WebviewUnmounted, { id });
     },
 
     getWebviewViews(location: PanelViewLocation): PanelView[] {

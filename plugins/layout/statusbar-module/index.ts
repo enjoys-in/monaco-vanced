@@ -3,7 +3,7 @@
 // Each slot is registered by a module via the API.
 
 import type { MonacoPlugin, PluginContext } from "@core/types";
-import { StatusbarEvents, CursorEvents, EditorEvents, GitEvents, DiagnosticEvents } from "@core/events";
+import { StatusbarEvents, CursorEvents, EditorEvents, GitEvents, DiagnosticEvents, CommandEvents } from "@core/events";
 import type {
   StatusbarAlignment,
   StatusbarItem,
@@ -125,7 +125,7 @@ export function createStatusbarPlugin(
           const { id } = data as { id: string };
           const item = registry.get(id);
           if (item?.command) {
-            ctx?.emit("command:execute", { commandId: item.command });
+            ctx?.emit(CommandEvents.Execute, { commandId: item.command });
           }
         }),
       );

@@ -2,6 +2,7 @@
 // Builds and maintains a code knowledge graph for AI context.
 
 import type { MonacoPlugin, PluginContext } from "@core/types";
+import { GraphEvents } from "@core/events";
 import type { KnowledgeGraphAPI, KnowledgeGraphConfig } from "./types";
 import { Graph } from "./graph";
 import { IncrementalUpdater } from "./incremental";
@@ -14,7 +15,7 @@ export function createKnowledgeGraphPlugin(
   let ctx: PluginContext | null = null;
 
   const updater = new IncrementalUpdater(graph, (filePath) => {
-    ctx?.emit("graph:updated", { filePath, stats: graph.getStats() });
+    ctx?.emit(GraphEvents.Updated, { filePath, stats: graph.getStats() });
   });
 
   const api: KnowledgeGraphAPI = {
@@ -60,7 +61,7 @@ export function createKnowledgeGraphPlugin(
         }
       });
 
-      ctx?.emit("graph:built", { stats: graph.getStats() });
+      ctx?.emit(GraphEvents.Built, { stats: graph.getStats() });
     },
 
     onDispose(): void {

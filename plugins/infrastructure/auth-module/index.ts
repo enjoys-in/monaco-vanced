@@ -7,6 +7,7 @@ import { TokenStore } from "./token-store";
 import { GitHubAuthProvider } from "./providers/github";
 import { GoogleAuthProvider } from "./providers/google";
 import { CustomAuthProvider } from "./providers/custom";
+import { AuthEvents } from "@core/events";
 
 export type { AuthConfig, AuthModuleAPI, AuthProvider, AuthSession, User, OAuthProviderInterface } from "./types";
 export { SessionManager } from "./session";
@@ -58,13 +59,13 @@ export function createAuthPlugin(config: AuthConfig): {
 
       const url = p.getAuthUrl(state, codeVerifier);
       window.open(url, "_blank", "width=600,height=700");
-      ctx?.emit("auth:login", { provider });
+      ctx?.emit(AuthEvents.Login, { provider });
     },
 
     async logout(): Promise<void> {
       sessionManager.clear();
       notifyAuthChange({ type: "logout" });
-      ctx?.emit("auth:logout", undefined);
+      ctx?.emit(AuthEvents.Logout, undefined);
     },
 
     getSession(): AuthSession | null {
@@ -103,7 +104,7 @@ export function createAuthPlugin(config: AuthConfig): {
           expiresAt: Date.now() + result.expiresIn * 1000,
         });
         notifyAuthChange({ type: "refresh" });
-        ctx?.emit("auth:token-refresh", undefined);
+        ctx?.emit(AuthEvents.TokenRefresh, undefined);
         return true;
       } catch {
         return false;
@@ -187,20 +188,20 @@ export function createAuthPlugin(config: AuthConfig): {
       );
 
       disposables.push(
-        ctx.on("auth:login", (data?: unknown) => {
+        ctx.on(AuthEvents.Login, (data?: unknown) => {
           const d = data as { provider?: AuthProvider } | undefined;
           if (d?.provider) api.login(d.provider).catch(console.error);
         }),
       );
 
       disposables.push(
-        ctx.on("auth:logout", () => {
+        ctx.on(AuthEvents.Logout, () => {
           api.logout().catch(console.error);
         }),
       );
 
       disposables.push(
-        ctx.on("auth:token-refresh", () => {
+        ctx.on(AuthEvents.TokenRefresh, () => {
           api.refreshToken().catch(console.error);
         }),
       );

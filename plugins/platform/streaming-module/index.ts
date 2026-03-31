@@ -3,6 +3,7 @@
 import type { MonacoPlugin, PluginContext } from "@core/types";
 import type { StreamingModuleConfig, StreamingModuleAPI, StreamConfig, StreamHandle } from "./types";
 import { ManagedStream } from "./stream";
+import { StreamingEvents } from "@core/events";
 
 export type { StreamingModuleConfig, StreamingModuleAPI, StreamConfig, StreamHandle, StreamStatus } from "./types";
 export { ManagedStream } from "./stream";
@@ -28,7 +29,7 @@ export function createStreamingPlugin(config: StreamingModuleConfig = {}): {
 
       const stream = new ManagedStream(id, effectiveConfig);
       streams.set(id, stream);
-      ctx?.emit("stream:start", { id });
+      ctx?.emit(StreamingEvents.Start, { id });
 
       return {
         id,
@@ -48,7 +49,7 @@ export function createStreamingPlugin(config: StreamingModuleConfig = {}): {
       if (!stream) return;
       stream.complete();
       streams.delete(id);
-      ctx?.emit("stream:complete", { id });
+      ctx?.emit(StreamingEvents.Complete, { id });
     },
 
     abort(id: string): void {

@@ -3,6 +3,7 @@
 import type { MonacoPlugin, PluginContext, IDisposable } from "@core/types";
 import type { TerminalSession, TerminalConfig, TerminalModuleAPI } from "./types";
 import { PtyClient } from "./pty-client";
+import { TerminalEvents } from "@core/events";
 
 export type { TerminalSession, TerminalConfig, TerminalModuleAPI } from "./types";
 export type { TerminalError } from "./error-parser";
@@ -47,7 +48,7 @@ export function createTerminalPlugin(config: TerminalConfig = {}): {
       pty.connect(id, config);
       clients.set(id, pty);
 
-      ctx?.emit("terminal:create", { session });
+      ctx?.emit(TerminalEvents.Create, { session });
       return session;
     },
 
@@ -60,7 +61,7 @@ export function createTerminalPlugin(config: TerminalConfig = {}): {
       clients.delete(id);
       sessions.delete(id);
 
-      ctx?.emit("terminal:close", { id });
+      ctx?.emit(TerminalEvents.Close, { id });
 
       // If active session was closed, activate the last remaining one
       if (session.active && sessions.size > 0) {
@@ -81,7 +82,7 @@ export function createTerminalPlugin(config: TerminalConfig = {}): {
       const pty = clients.get(id);
       if (!pty) return;
       pty.write(data);
-      ctx?.emit("terminal:data", { id, data });
+      ctx?.emit(TerminalEvents.Data, { id, data });
     },
 
     onData(id: string, handler: (data: string) => void): () => void {
@@ -117,21 +118,21 @@ export function createTerminalPlugin(config: TerminalConfig = {}): {
 
       // Wire external events
       disposables.push(
-        ctx.on("terminal:create", (data?: unknown) => {
+        ctx.on(TerminalEvents.Create, (data?: unknown) => {
           const d = data as { label?: string; cwd?: string } | undefined;
           api.createSession(d?.label, d?.cwd);
         }),
       );
 
       disposables.push(
-        ctx.on("terminal:close", (data?: unknown) => {
+        ctx.on(TerminalEvents.Close, (data?: unknown) => {
           const d = data as { id: string } | undefined;
           if (d?.id) api.closeSession(d.id);
         }),
       );
 
       disposables.push(
-        ctx.on("terminal:data", (data?: unknown) => {
+        ctx.on(TerminalEvents.Data, (data?: unknown) => {
           const d = data as { id: string; data: string } | undefined;
           if (d?.id && d.data) api.write(d.id, d.data);
         }),

@@ -5,6 +5,13 @@ export enum LayoutEvents {
   StateChange = "layout:state-change",
   StateRestore = "layout:state-restore",
   StateSave = "layout:state-save",
+  WebviewMount = "layout:webview-mount",
+  WebviewMounted = "layout:webview-mounted",
+  WebviewUnmount = "layout:webview-unmount",
+  WebviewUnmounted = "layout:webview-unmounted",
+  WebviewShow = "layout:webview-show",
+  WebviewHide = "layout:webview-hide",
+  RegisterRightView = "layout:register-right-view",
 }
 
 export enum SidebarEvents {

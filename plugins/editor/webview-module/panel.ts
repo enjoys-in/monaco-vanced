@@ -114,7 +114,7 @@ export class WebviewPanelImpl implements WebviewPanel {
     if (this._disposed) return;
     this.show();
     // Emit focus event for layout system to handle
-    this._ctx.emit("webview:focus", { id: this.id });
+    this._ctx.emit(WebviewEvents.Focus, { id: this.id });
   }
 
   // ── Messaging ──────────────────────────────────────────

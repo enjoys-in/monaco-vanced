@@ -3,7 +3,7 @@ import type { MonacoPlugin, PluginContext, Monaco } from "@core/types";
 import { ModelManager } from "./model-manager";
 import { mergeEditorOptions } from "./options";
 import type { EditorConfig } from "./types";
-import { FileEvents, TabEvents, EditorEvents } from "@core/events";
+import { FileEvents, TabEvents, EditorEvents, CommandEvents } from "@core/events";
 
 export function createEditorPlugin(config?: EditorConfig): MonacoPlugin {
   let modelManager: ModelManager;
@@ -26,7 +26,7 @@ export function createEditorPlugin(config?: EditorConfig): MonacoPlugin {
       modelManager = new ModelManager(monaco, ctx);
 
       // Bind all registered commands to this editor instance
-      ctx.emit("command:bind-editor", { editor });
+      ctx.emit(CommandEvents.BindEditor, { editor });
 
       // Listen for file:read → create model
       ctx.on(FileEvents.Read, (payload) => {
@@ -63,7 +63,7 @@ export function createEditorPlugin(config?: EditorConfig): MonacoPlugin {
       ctx.on(EditorEvents.Ready, (payload) => {
         const { instance } = payload as { instance: unknown };
         if (instance && instance !== editor) {
-          ctx.emit("command:bind-editor", { editor: instance });
+          ctx.emit(CommandEvents.BindEditor, { editor: instance });
         }
       });
 

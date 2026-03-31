@@ -10,6 +10,7 @@ import type {
 } from "./types";
 import { SpanManager } from "./span-manager";
 import { AnalyticsCollector } from "./analytics";
+import { TelemetryEvents } from "@core/events";
 
 export type { AnalyticsEvent, Span, TelemetryConfig, TelemetryExporter, TelemetryModuleAPI };
 export { SpanManager, AnalyticsCollector };
@@ -34,7 +35,7 @@ export function createTelemetryPlugin(
     startSpan(name: string, parent?: string): Span {
       const span = spans.startSpan(name, parent);
       if (shouldSample()) {
-        ctx?.emit("telemetry:span-start", { spanId: span.spanId, name });
+        ctx?.emit(TelemetryEvents.SpanStart, { spanId: span.spanId, name });
       }
       return span;
     },
@@ -42,7 +43,7 @@ export function createTelemetryPlugin(
     endSpan(spanId: string): void {
       const span = spans.endSpan(spanId);
       if (span && shouldSample()) {
-        ctx?.emit("telemetry:span-end", {
+        ctx?.emit(TelemetryEvents.SpanEnd, {
           spanId: span.spanId,
           name: span.name,
           duration: span.endTime! - span.startTime,
@@ -53,7 +54,7 @@ export function createTelemetryPlugin(
     recordEvent(name: string, props?: Record<string, unknown>): void {
       if (!shouldSample()) return;
       analytics.record(name, props);
-      ctx?.emit("telemetry:event", { name, properties: props });
+      ctx?.emit(TelemetryEvents.Event, { name, properties: props });
     },
 
     addExporter(exporter: TelemetryExporter): void {

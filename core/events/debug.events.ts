@@ -4,6 +4,13 @@ export enum DebugEvents {
   Paused = "debug:paused",
   Resumed = "debug:resumed",
   Breakpoint = "debug:breakpoint",
+  BreakpointSet = "debug:breakpoint:set",
+  BreakpointRemove = "debug:breakpoint:remove",
   Variable = "debug:variable",
   Step = "debug:step",
+  State = "debug:state",
+  Launch = "debug:launch",
+  Terminate = "debug:terminate",
+  Stopped = "debug:stopped",
+  Output = "debug:output",
 }

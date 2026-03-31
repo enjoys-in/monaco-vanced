@@ -5,6 +5,7 @@ import type { BillingConfig, BillingModuleAPI, BillingPlan, MeterEvent, Quota, Q
 import { MeteringEngine } from "./metering";
 import { BillingProvider } from "./provider";
 import { QuotaManager } from "./quotas";
+import { BillingEvents } from "@core/events";
 
 export type { BillingConfig, BillingModuleAPI, BillingPlan, MeterEvent, Quota, QuotaCheckResult };
 export { MeteringEngine, BillingProvider, QuotaManager };
@@ -28,10 +29,10 @@ export function createBillingPlugin(
       metering.record(feature, qty);
       quotaManager.updateUsage(feature, metering.getUsage(feature));
 
-      ctx?.emit("billing:meter", { feature, qty });
+      ctx?.emit(BillingEvents.Meter, { feature, qty });
 
       if (check.allowed && !quotaManager.check(feature).allowed) {
-        ctx?.emit("billing:quota-exceeded", { feature });
+        ctx?.emit(BillingEvents.QuotaExceeded, { feature });
       }
     },
 

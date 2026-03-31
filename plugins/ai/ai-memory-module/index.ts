@@ -2,6 +2,7 @@
 // Conversations, corrections, project facts, keyword recall.
 
 import type { MonacoPlugin, PluginContext } from "@core/types";
+import { AiMemoryEvents } from "@core/events";
 import type { AIMemoryConfig, AIMemoryModuleAPI } from "./types";
 import { ConversationStore } from "./conversations";
 import { CorrectionStore } from "./corrections";
@@ -20,7 +21,7 @@ export function createAIMemoryPlugin(
   const api: AIMemoryModuleAPI = {
     storeMessage(workspace, role, content) {
       conversations.addMessage(workspace, role, content);
-      ctx?.emit("ai-memory:stored", { workspace, role });
+      ctx?.emit(AiMemoryEvents.Stored, { workspace, role });
     },
 
     getConversation: (workspace) => conversations.get(workspace),
@@ -28,21 +29,21 @@ export function createAIMemoryPlugin(
 
     recordCorrection(original, corrected, filePath) {
       const corr = corrections.record(original, corrected, filePath);
-      ctx?.emit("ai-memory:correction", { pattern: corr.pattern, count: corr.count });
+      ctx?.emit(AiMemoryEvents.Correction, { pattern: corr.pattern, count: corr.count });
     },
 
     getCorrections: () => corrections.getAll(),
 
     learnFact(factKey, value, category) {
       const fact = facts.learn(factKey, value, category);
-      ctx?.emit("ai-memory:fact-learned", { key: factKey, category: fact.category });
+      ctx?.emit(AiMemoryEvents.FactLearned, { key: factKey, category: fact.category });
     },
 
     getFacts: (category) => category ? facts.getByCategory(category) : facts.getAll(),
 
     recall(query, limit) {
       const results = recall(query, conversations.getAll(), corrections.getAll(), facts.getAll(), limit);
-      ctx?.emit("ai-memory:recalled", { query, resultCount: results.length });
+      ctx?.emit(AiMemoryEvents.Recalled, { query, resultCount: results.length });
       return results;
     },
 
@@ -53,7 +54,7 @@ export function createAIMemoryPlugin(
       if (stale.length > 0) {
         facts.clear(); // simplified — would ideally remove individual items
       }
-      ctx?.emit("ai-memory:pruned", {});
+      ctx?.emit(AiMemoryEvents.Pruned, {});
     },
 
     clear() {

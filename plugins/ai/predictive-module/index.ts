@@ -2,6 +2,7 @@
 // File/command prediction from usage patterns.
 
 import type { MonacoPlugin, PluginContext } from "@core/types";
+import { PredictEvents } from "@core/events";
 import type { PredictiveConfig, PredictiveModuleAPI } from "./types";
 import { FilePredictor } from "./file-predictor";
 import { CommandPredictor } from "./command-predictor";
@@ -19,7 +20,7 @@ export function createPredictivePlugin(
   let ctx: PluginContext | null = null;
 
   const preloader = new Preloader((filePath) => {
-    ctx?.emit("predict:preload-start", { filePath });
+    ctx?.emit(PredictEvents.PreloadStart, { filePath });
   });
 
   const api: PredictiveModuleAPI = {
@@ -32,7 +33,7 @@ export function createPredictivePlugin(
 
     recordCommand(command) {
       commandPredictor.record(command);
-      ctx?.emit("predict:command-suggested", {
+      ctx?.emit(PredictEvents.CommandSuggested, {
         predictions: commandPredictor.predict(3),
       });
     },

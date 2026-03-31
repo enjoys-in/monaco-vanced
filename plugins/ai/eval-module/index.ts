@@ -4,7 +4,7 @@
 import type { MonacoPlugin, PluginContext } from "@core/types";
 import type { EvalConfig, EvalModuleAPI } from "./types";
 import { EvalTracker } from "./tracker";
-import { AiEvents } from "@core/events/ai.events";
+import { AiEvents, EvalEvents } from "@core/events";
 
 export function createEvalPlugin(
   config: EvalConfig = {},
@@ -15,7 +15,7 @@ export function createEvalPlugin(
   const api: EvalModuleAPI = {
     score(requestId, metrics) {
       const entry = tracker.score(requestId, metrics);
-      ctx?.emit("eval:score", { entry });
+      ctx?.emit(EvalEvents.Score, { entry });
       return entry;
     },
     accept(requestId) {

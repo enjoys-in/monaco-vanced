@@ -3,6 +3,7 @@
 
 import type { MonacoPlugin, PluginContext } from "@core/types";
 import type { SnapshotConfig, SnapshotModuleAPI } from "./types";
+import { SnapshotEvents } from "@core/events";
 import { SnapshotStore } from "./store";
 import { Capturer } from "./capturer";
 import { getVersions, findByVersion, getLatest } from "./versioning";
@@ -20,7 +21,7 @@ export function createSnapshotPlugin(
   const api: SnapshotModuleAPI = {
     capture(file, content, cursor) {
       const snap = capturer.capture(file, content, cursor);
-      ctx?.emit("snapshot:captured", { id: snap.id, file, version: snap.version });
+      ctx?.emit(SnapshotEvents.Captured, { id: snap.id, file, version: snap.version });
       return snap;
     },
 
@@ -29,7 +30,7 @@ export function createSnapshotPlugin(
 
     restore(id) {
       const snap = store.getById(id);
-      if (snap) ctx?.emit("snapshot:restored", { id, file: snap.file });
+      if (snap) ctx?.emit(SnapshotEvents.Restored, { id, file: snap.file });
       return snap;
     },
 
@@ -40,7 +41,7 @@ export function createSnapshotPlugin(
       const snap = findByVersion(snaps, version);
       if (snap) {
         traveler.setPosition(file, version);
-        ctx?.emit("snapshot:time-travel", { file, version });
+        ctx?.emit(SnapshotEvents.TimeTravel, { file, version });
       }
       return snap;
     },
@@ -53,7 +54,7 @@ export function createSnapshotPlugin(
       const latest = getLatest(snaps);
       if (!latest || snaps.length < 2) return undefined;
       const prev = snaps[snaps.length - 2];
-      ctx?.emit("snapshot:undo", { file, version: prev.version });
+      ctx?.emit(SnapshotEvents.Undo, { file, version: prev.version });
       return prev;
     },
 

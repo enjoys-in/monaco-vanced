@@ -3,6 +3,7 @@
 
 import type { MonacoPlugin, PluginContext } from "@core/types";
 import type { ReviewConfig, ReviewModuleAPI, ReviewComment } from "./types";
+import { ReviewEvents } from "@core/events";
 import { GitHubClient } from "./github-client";
 import { GitLabClient } from "./gitlab-client";
 
@@ -38,16 +39,16 @@ export function createReviewPlugin(
         author: "current-user",
         createdAt: Date.now(),
       };
-      ctx?.emit("review:comment-added", result);
+      ctx?.emit(ReviewEvents.CommentAdded, result);
       return result;
     },
 
     async approve(prId) {
-      ctx?.emit("review:approved", { prId });
+      ctx?.emit(ReviewEvents.Approved, { prId });
     },
 
     async requestChanges(prId, message) {
-      ctx?.emit("review:changes-requested", { prId, message });
+      ctx?.emit(ReviewEvents.ChangesRequested, { prId, message });
     },
   };
 

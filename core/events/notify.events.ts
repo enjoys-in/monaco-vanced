@@ -1,4 +1,10 @@
-export enum NotifyEvents {
-  Show = "notify:show",
-  Dismiss = "notify:dismiss",
+export enum NotificationEvents {
+  Show = "notification:show",
+  Dismiss = "notification:dismiss",
+  Action = "notification:action",
+  HistoryClear = "notification:history-clear",
+  ApiReady = "notification:api-ready",
 }
+
+/** @deprecated Use NotificationEvents */
+export const NotifyEvents = NotificationEvents;

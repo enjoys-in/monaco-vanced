@@ -12,6 +12,7 @@ import type {
 import { KernelClient } from "./kernel";
 import { CellManager } from "./cell-manager";
 import { parseIPYNB } from "./ipynb";
+import { NotebookEvents } from "@core/events";
 
 export type {
   NotebookCell,
@@ -49,7 +50,7 @@ export function createNotebookPlugin(config: KernelConfig = {}): {
       mgr.setCells(doc.cells);
       documents.set(doc.id, { doc, mgr });
 
-      ctx?.emit("notebook:open", { docId: doc.id });
+      ctx?.emit(NotebookEvents.Open, { docId: doc.id });
       return doc;
     },
 
@@ -62,7 +63,7 @@ export function createNotebookPlugin(config: KernelConfig = {}): {
       entry.doc.cells = entry.mgr.getCells();
       entry.doc.dirty = true;
 
-      ctx?.emit("notebook:cell:add", { docId, cellId: cell.id });
+      ctx?.emit(NotebookEvents.CellAdd, { docId, cellId: cell.id });
       return cell;
     },
 
@@ -74,7 +75,7 @@ export function createNotebookPlugin(config: KernelConfig = {}): {
       entry.doc.cells = entry.mgr.getCells();
       entry.doc.dirty = true;
 
-      ctx?.emit("notebook:cell:remove", { docId, cellId });
+      ctx?.emit(NotebookEvents.CellRemove, { docId, cellId });
     },
 
     moveCell(docId: string, cellId: string, newIndex: number): void {
@@ -93,7 +94,7 @@ export function createNotebookPlugin(config: KernelConfig = {}): {
       const cell = entry.mgr.getCell(cellId);
       if (!cell || cell.type !== "code") return [];
 
-      ctx?.emit("notebook:cell:execute:start", { docId, cellId });
+      ctx?.emit(NotebookEvents.CellExecuteStart, { docId, cellId });
 
       try {
         // Ensure kernel is connected
@@ -106,7 +107,7 @@ export function createNotebookPlugin(config: KernelConfig = {}): {
         entry.doc.cells = entry.mgr.getCells();
         entry.doc.dirty = true;
 
-        ctx?.emit("notebook:cell:execute:complete", { docId, cellId, outputs });
+        ctx?.emit(NotebookEvents.CellExecuteComplete, { docId, cellId, outputs });
         return outputs;
       } catch (e) {
         const errorOutput: CellOutput = {
@@ -116,7 +117,7 @@ export function createNotebookPlugin(config: KernelConfig = {}): {
         entry.mgr.setOutputs(cellId, [errorOutput]);
         entry.doc.cells = entry.mgr.getCells();
 
-        ctx?.emit("notebook:cell:execute:error", { docId, cellId, error: errorOutput });
+        ctx?.emit(NotebookEvents.CellExecuteError, { docId, cellId, error: errorOutput });
         return [errorOutput];
       }
     },
@@ -139,12 +140,12 @@ export function createNotebookPlugin(config: KernelConfig = {}): {
     setKernel(newConfig: KernelConfig): void {
       kernelConfig = { ...kernelConfig, ...newConfig };
       kernel.disconnect();
-      ctx?.emit("notebook:kernel:set", { config: kernelConfig });
+      ctx?.emit(NotebookEvents.KernelSet, { config: kernelConfig });
     },
 
     interruptKernel(): void {
       kernel.interrupt();
-      ctx?.emit("notebook:kernel:interrupt", {});
+      ctx?.emit(NotebookEvents.KernelInterrupt, {});
     },
   };
 
@@ -167,7 +168,7 @@ export function createNotebookPlugin(config: KernelConfig = {}): {
       );
 
       disposables.push(
-        ctx.on("notebook:kernel:interrupt", () => {
+        ctx.on(NotebookEvents.KernelInterrupt, () => {
           api.interruptKernel();
         }),
       );

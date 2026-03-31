@@ -5,6 +5,7 @@ export enum WebviewEvents {
   Dispose = "webview:dispose",
   Message = "webview:message",
   Post = "webview:post",
+  Focus = "webview:focus",
   StateSave = "webview:state-save",
   StateRestore = "webview:state-restore",
   Error = "webview:error",
@@ -17,4 +18,9 @@ export enum WebviewEvents {
   ActionError = "webview:action-error",
   Registered = "webview:registered",
   LazyCreate = "webview:lazy-create",
+  FsRead = "webview:fs-read",
+  FsWrite = "webview:fs-write",
+  FsList = "webview:fs-list",
+  SettingRead = "webview:setting-read",
+  SettingWrite = "webview:setting-write",
 }

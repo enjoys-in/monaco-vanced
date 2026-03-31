@@ -5,6 +5,7 @@ import { ContextStorage } from "./storage";
 import { ProviderRegistry } from "./providers";
 import { ContextEngineAPI } from "./api";
 import { convertManifestToProviders, convertTheme, convertGrammar } from "./converters";
+import { ContextEngineEvents } from "@core/events";
 
 // Re-export interfaces
 export * from "./interfaces";
@@ -45,7 +46,7 @@ export function createContextEnginePlugin(
         name,
         files: (files ?? {}) as import("./interfaces/manifest").LanguageFileMap,
       });
-      ctx?.emit("context:language-registered", { id, name });
+      ctx?.emit(ContextEngineEvents.LanguageRegistered, { id, name });
     },
 
     getManifest() {
@@ -54,7 +55,7 @@ export function createContextEnginePlugin(
 
     registerProviderData(language: string, providerName: string, data: unknown): void {
       engine.registerProviderData(language, providerName, data);
-      ctx?.emit("context:provider-loaded", { language, provider: providerName });
+      ctx?.emit(ContextEngineEvents.ProviderLoaded, { language, provider: providerName });
     },
 
     getRegisteredLanguages(): string[] {

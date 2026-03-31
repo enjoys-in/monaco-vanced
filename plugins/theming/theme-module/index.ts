@@ -4,6 +4,7 @@
 
 import type { MonacoPlugin, PluginContext } from "@core/types";
 import type { ThemeConfig, ThemeDefinition, ThemeModuleAPI, ThemeIndexEntry } from "./types";
+import { ThemeEvents } from "@core/events";
 import { ThemeRegistry } from "./registry";
 import { convertVSCodeTheme } from "./converter";
 import {
@@ -61,7 +62,7 @@ export function createThemePlugin(config: ThemeConfig = {}): {
         console.warn("[theme-module] change handler error:", err);
       }
     }
-    ctx?.emit("theme:changed", { themeId });
+    ctx?.emit(ThemeEvents.Changed, { themeId });
   }
 
   /** Fetch the _index.json from CDN and cache it */
@@ -113,7 +114,7 @@ export function createThemePlugin(config: ThemeConfig = {}): {
 
     // Register in-memory
     registry.register(theme);
-    ctx?.emit("theme:registered", { id: theme.id });
+    ctx?.emit(ThemeEvents.Registered, { id: theme.id });
     return theme;
   }
 
@@ -134,7 +135,7 @@ export function createThemePlugin(config: ThemeConfig = {}): {
 
     register(theme: ThemeDefinition) {
       registry.register(theme);
-      ctx?.emit("theme:registered", { id: theme.id });
+      ctx?.emit(ThemeEvents.Registered, { id: theme.id });
     },
 
     registerFromVSIX(vsixThemes: ThemeDefinition[]) {
@@ -142,7 +143,7 @@ export function createThemePlugin(config: ThemeConfig = {}): {
         registry.register(theme);
         // Cache each theme in IndexedDB for persistence
         void setCachedTheme(theme.id, theme);
-        ctx?.emit("theme:registered", { id: theme.id, source: "vsix" });
+        ctx?.emit(ThemeEvents.Registered, { id: theme.id, source: "vsix" });
       }
     },
 
@@ -164,7 +165,7 @@ export function createThemePlugin(config: ThemeConfig = {}): {
 
     async refreshIndex(): Promise<ThemeIndexEntry[]> {
       themeIndex = await fetchIndex();
-      ctx?.emit("theme:index-refreshed", { count: themeIndex.length });
+      ctx?.emit(ThemeEvents.IndexRefreshed, { count: themeIndex.length });
       return [...themeIndex];
     },
 
@@ -241,7 +242,7 @@ export function createThemePlugin(config: ThemeConfig = {}): {
         }
       });
 
-      ctx.emit("theme:ready", {
+      ctx.emit(ThemeEvents.Ready, {
         themes: registry.getAll().map((t) => t.id),
         indexCount: themeIndex.length,
       });

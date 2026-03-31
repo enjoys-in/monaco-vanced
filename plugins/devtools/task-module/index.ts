@@ -4,6 +4,7 @@ import type { MonacoPlugin, PluginContext, IDisposable } from "@core/types";
 import type { BackgroundTask, TaskConfig, TaskModuleAPI } from "./types";
 import { TaskRunnerPool } from "./runner";
 import { ProgressTracker } from "./progress";
+import { TaskEvents } from "@core/events";
 
 export type { BackgroundTask, TaskConfig, TaskModuleAPI, TaskStatus, TaskPriority } from "./types";
 export { TaskRunnerPool } from "./runner";
@@ -26,11 +27,11 @@ export function createTaskPlugin(config: TaskConfig = {}): {
       progressTracker.update(task.id, task.progress);
 
       if (task.status === "completed") {
-        ctx?.emit("task:complete", { task });
+        ctx?.emit(TaskEvents.Complete, { task });
       } else if (task.status === "failed") {
-        ctx?.emit("task:fail", { task });
+        ctx?.emit(TaskEvents.Fail, { task });
       } else if (task.status === "cancelled") {
-        ctx?.emit("task:cancel", { task });
+        ctx?.emit(TaskEvents.Cancel, { task });
       }
     },
   });
@@ -51,13 +52,13 @@ export function createTaskPlugin(config: TaskConfig = {}): {
       pool.enqueue(task);
       progressTracker.update(task.id, 0);
 
-      ctx?.emit("task:enqueue", { task });
+      ctx?.emit(TaskEvents.Enqueue, { task });
       return task;
     },
 
     cancel(id: string): void {
       pool.cancel(id);
-      ctx?.emit("task:cancel", { id });
+      ctx?.emit(TaskEvents.Cancel, { id });
     },
 
     getAll(): BackgroundTask[] {
@@ -89,14 +90,14 @@ export function createTaskPlugin(config: TaskConfig = {}): {
       ctx = pluginCtx;
 
       disposables.push(
-        ctx.on("task:enqueue", (data?: unknown) => {
+        ctx.on(TaskEvents.Enqueue, (data?: unknown) => {
           const d = data as Omit<BackgroundTask, "status" | "progress"> | undefined;
           if (d?.id && d.label) api.enqueue(d);
         }),
       );
 
       disposables.push(
-        ctx.on("task:cancel", (data?: unknown) => {
+        ctx.on(TaskEvents.Cancel, (data?: unknown) => {
           const d = data as { id: string } | undefined;
           if (d?.id) api.cancel(d.id);
         }),

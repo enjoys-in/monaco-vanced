@@ -1,6 +1,7 @@
 // ── Marketplace Module — Plugin Entry ────────────────────────
 
 import type { MonacoPlugin, PluginContext } from "@core/types";
+import { MarketplaceEvents } from "@core/events";
 import type { MarketplaceConfig, SearchOptions, MarketplaceModuleAPI } from "./types";
 import { MarketplaceClient } from "./api-client";
 import { SearchEngine } from "./search";
@@ -39,10 +40,10 @@ export function createMarketplacePlugin(config: MarketplaceConfig = {}): {
     },
 
     async install(id: string) {
-      ctx?.emit("marketplace:install:start", { id });
+      ctx?.emit(MarketplaceEvents.InstallStart, { id });
 
       installer.onProgress((progress) => {
-        ctx?.emit("marketplace:install:progress", { id, ...progress });
+        ctx?.emit(MarketplaceEvents.InstallProgress, { id, ...progress });
       });
 
       const buffer = await client.download(id);
@@ -54,7 +55,7 @@ export function createMarketplacePlugin(config: MarketplaceConfig = {}): {
       }
 
       await installer.install(id, files);
-      ctx?.emit("marketplace:install:complete", { id });
+      ctx?.emit(MarketplaceEvents.InstallComplete, { id });
     },
 
     async getPopular(limit?: number) {
@@ -74,7 +75,7 @@ export function createMarketplacePlugin(config: MarketplaceConfig = {}): {
 
     onMount(pluginCtx: PluginContext) {
       ctx = pluginCtx;
-      ctx.emit("marketplace:ready", {});
+      ctx.emit(MarketplaceEvents.Ready, {});
     },
 
     onDispose() {

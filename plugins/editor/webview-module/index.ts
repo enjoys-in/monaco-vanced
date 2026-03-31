@@ -4,7 +4,7 @@
 // message bridge, EngineApi, and loading indicators.
 
 import type { MonacoPlugin, PluginContext } from "@core/types";
-import { WebviewEvents } from "@core/events";
+import { WebviewEvents, LayoutEvents } from "@core/events";
 import { WebviewManager } from "./manager";
 import type { WebviewModuleAPI, WebviewPanelOptions } from "./types";
 import { WebviewPanelImpl } from "./panel";
@@ -81,7 +81,7 @@ export function createWebviewPlugin(): {
             iframeHosts.set(id, host);
 
             // Emit to layout system for placement
-            ctx.emit("layout:webview-mount", {
+            ctx.emit(LayoutEvents.WebviewMount, {
               id,
               location,
               container: host.container,
@@ -90,7 +90,7 @@ export function createWebviewPlugin(): {
             });
           } else if (options.render) {
             // React-mode: emit render request to layout
-            ctx.emit("layout:webview-mount", {
+            ctx.emit(LayoutEvents.WebviewMount, {
               id,
               location,
               render: options.render,
@@ -107,7 +107,7 @@ export function createWebviewPlugin(): {
           const { id } = data as { id: string };
           const host = iframeHosts.get(id);
           if (host) host.container.style.display = "block";
-          ctx?.emit("layout:webview-show", { id });
+          ctx?.emit(LayoutEvents.WebviewShow, { id });
         }),
       );
 
@@ -126,7 +126,7 @@ export function createWebviewPlugin(): {
               iframeHosts.delete(id);
             }
           }
-          ctx?.emit("layout:webview-hide", { id });
+          ctx?.emit(LayoutEvents.WebviewHide, { id });
         }),
       );
 
@@ -139,7 +139,7 @@ export function createWebviewPlugin(): {
             host.destroy();
             iframeHosts.delete(id);
           }
-          ctx?.emit("layout:webview-unmount", { id });
+          ctx?.emit(LayoutEvents.WebviewUnmount, { id });
         }),
       );
 

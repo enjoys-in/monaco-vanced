@@ -12,6 +12,7 @@ import type {
 import { normalizeKey } from "./parser";
 import { KeybindingResolver } from "./resolver";
 import { ConflictDetector } from "./conflict-detector";
+import { CommandEvents } from "@core/events";
 
 export type {
   Keybinding,
@@ -137,7 +138,7 @@ export function createKeybindingPlugin(config: KeybindingConfig = {}): {
         if (resolved) {
           event.preventDefault();
           event.stopPropagation();
-          ctx?.emit("command:execute", {
+          ctx?.emit(CommandEvents.Execute, {
             commandId: resolved.command,
             args: resolved.args ? [resolved.args] : [],
           });

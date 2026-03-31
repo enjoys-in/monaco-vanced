@@ -2,7 +2,7 @@
 // Editor/explorer/tab context menus with when-clause gating.
 
 import type { MonacoPlugin, PluginContext } from "@core/types";
-import { ContextMenuEvents } from "@core/events";
+import { ContextMenuEvents, CommandEvents } from "@core/events";
 import type {
   ContextMenuModuleAPI,
   ContextMenuPluginOptions,
@@ -79,7 +79,7 @@ export function createContextMenuPlugin(
           const items = registry.getResolved(context);
           const item = items.find((i) => i.id === itemId);
           if (item?.command) {
-            ctx?.emit("command:execute", { commandId: item.command });
+            ctx?.emit(CommandEvents.Execute, { commandId: item.command });
           }
           renderer.dismiss();
         }),

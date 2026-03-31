@@ -6,6 +6,7 @@ import { BufferSaver } from "./buffer-saver";
 import { StateSnapshot } from "./state-snapshot";
 import { SafeModeManager } from "./safe-mode";
 import { CrashReportBuilder } from "./crash-report";
+import { CrashEvents } from "@core/events";
 
 export type { RecoveryConfig, CrashRecoveryModuleAPI, CrashReport, EditorState } from "./types";
 export { BufferSaver } from "./buffer-saver";
@@ -39,7 +40,7 @@ export function createCrashRecoveryPlugin(config: RecoveryConfig = {}): {
 
     safeModeManager.recordCrash();
     lastCrashReport = crashReportBuilder.capture(reason, error);
-    ctx?.emit("crash:detected", lastCrashReport);
+    ctx?.emit(CrashEvents.Detected, lastCrashReport);
   }
 
   const api: CrashRecoveryModuleAPI = {
@@ -98,7 +99,7 @@ export function createCrashRecoveryPlugin(config: RecoveryConfig = {}): {
       // Check for unsaved recovery data
       const unsaved = bufferSaver.getAll();
       if (unsaved.size > 0) {
-        ctx.emit("crash:recovery-start", { fileCount: unsaved.size });
+        ctx.emit(CrashEvents.RecoveryStart, { fileCount: unsaved.size });
         recoveryHandlers.forEach((h) => {
           try { h({ fileCount: unsaved.size, files: Array.from(unsaved.keys()) }); } catch {}
         });

@@ -13,6 +13,7 @@ import { RootRegistry } from "./roots";
 import { parseWorkspaceConfig } from "./config";
 import { ScopeManager } from "./scope";
 import { TrustManager } from "./trust";
+import { FileEvents } from "@core/events";
 
 export type {
   WorkspacePluginOptions,
@@ -132,7 +133,7 @@ export function createWorkspacePlugin(
         );
 
         // Request the config file
-        ctx.emit("file:read-request", { path: options.configPath });
+        ctx.emit(FileEvents.ReadRequest, { path: options.configPath });
       }
     },
 

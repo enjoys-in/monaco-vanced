@@ -92,7 +92,7 @@ export function createAIPlugin(
         precondition: "editorHasSelection",
         contextMenuGroupId: "3_ai",
         contextMenuOrder: 1,
-        run: () => { ctx?.emit("ai:explain", {}); },
+        run: () => { ctx?.emit(AiEvents.Explain, {}); },
       });
 
       ctx.addAction({
@@ -102,7 +102,7 @@ export function createAIPlugin(
         precondition: "editorTextFocus",
         contextMenuGroupId: "3_ai",
         contextMenuOrder: 2,
-        run: () => { ctx?.emit("ai:generate", {}); },
+        run: () => { ctx?.emit(AiEvents.Generate, {}); },
       });
 
       ctx.addAction({
@@ -112,19 +112,19 @@ export function createAIPlugin(
         precondition: "editorHasSelection",
         contextMenuGroupId: "3_ai",
         contextMenuOrder: 3,
-        run: () => { ctx?.emit("ai:fix", {}); },
+        run: () => { ctx?.emit(AiEvents.Fix, {}); },
       });
 
       // Listen for chat requests from other plugins
       ctx.addDisposable(
-        ctx.on("ai:chat-request", async (data) => {
+        ctx.on(AiEvents.ChatRequest, async (data) => {
           const { messages, opts } = data as {
             messages: ChatMessage[];
             opts?: Record<string, unknown>;
           };
           try {
             const response = await api.chat(messages, opts);
-            ctx?.emit("ai:chat-response", response);
+            ctx?.emit(AiEvents.ChatResponse, response);
           } catch {
             // Error already emitted
           }

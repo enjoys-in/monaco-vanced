@@ -7,6 +7,7 @@ export enum EditorEvents {
   LanguageChange = "editor:language-change",
   Format = "editor:format",
   Formatted = "editor:formatted",
+  OpenVirtual = "editor:open-virtual",
 }
 
 export enum ModelEvents {

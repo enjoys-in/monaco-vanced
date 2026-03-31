@@ -13,6 +13,7 @@ import { WebviewPanelImpl } from "./panel";
 import { HostBridge } from "./bridge";
 import { buildEngineApiScript } from "./engine-api";
 import { renderLoadingHTML } from "./loading";
+import { SecurityEvents, WebviewEvents } from "@core/events";
 
 export interface IframeHostHandle {
   readonly iframe: HTMLIFrameElement;
@@ -164,7 +165,7 @@ function registerRPCHandlers(
 
   function requirePermission(perm: WebviewPermission): void {
     if (!permissions.has(perm)) {
-      ctx.emit("security:permission-denied", { panelId: panel.id, permission: perm });
+      ctx.emit(SecurityEvents.PermissionDenied, { panelId: panel.id, permission: perm });
       throw new Error(`Permission denied: ${perm}`);
     }
   }
@@ -227,34 +228,34 @@ function registerRPCHandlers(
   bridge.registerRPC("readFile", async (args) => {
     requirePermission("fs.read");
     const [path] = args as [string];
-    ctx.emit("webview:fs-read", { path, panelId: panel.id });
+    ctx.emit(WebviewEvents.FsRead, { path, panelId: panel.id });
     return "";
   });
 
   bridge.registerRPC("writeFile", async (args) => {
     requirePermission("fs.write");
     const [path, content] = args as [string, string];
-    ctx.emit("webview:fs-write", { path, content, panelId: panel.id });
+    ctx.emit(WebviewEvents.FsWrite, { path, content, panelId: panel.id });
   });
 
   bridge.registerRPC("listDir", async (args) => {
     requirePermission("fs.read");
     const [dir] = args as [string];
-    ctx.emit("webview:fs-list", { dir, panelId: panel.id });
+    ctx.emit(WebviewEvents.FsList, { dir, panelId: panel.id });
     return [];
   });
 
   bridge.registerRPC("getSetting", async (args) => {
     requirePermission("settings.read");
     const [key] = args as [string];
-    ctx.emit("webview:setting-read", { key, panelId: panel.id });
+    ctx.emit(WebviewEvents.SettingRead, { key, panelId: panel.id });
     return undefined;
   });
 
   bridge.registerRPC("setSetting", async (args) => {
     requirePermission("settings.write");
     const [key, value] = args as [string, unknown];
-    ctx.emit("webview:setting-write", { key, value, panelId: panel.id });
+    ctx.emit(WebviewEvents.SettingWrite, { key, value, panelId: panel.id });
   });
 
   bridge.registerRPC("submitAction", async (args) => {

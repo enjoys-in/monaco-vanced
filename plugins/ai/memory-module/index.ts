@@ -3,6 +3,7 @@
 // frequently edited files, project summary, task state.
 
 import type { MonacoPlugin, PluginContext } from "@core/types";
+import { MemoryEvents } from "@core/events";
 import type { MemoryModuleAPI, MemoryPluginOptions } from "./types";
 import { ContextStore } from "./context-store";
 import { injectMemory } from "./injector";
@@ -16,18 +17,18 @@ export function createMemoryPlugin(
   const api: MemoryModuleAPI = {
     store(key, value, category) {
       const entry = store.store(key, value, category, ctx?.pluginId);
-      ctx?.emit("memory:update", { key, value, category: entry.category });
+      ctx?.emit(MemoryEvents.Update, { key, value, category: entry.category });
     },
     get: (key) => store.get(key),
     getByCategory: (cat) => store.getByCategory(cat),
     getAll: () => store.getAll(),
     remove(key) {
       store.remove(key);
-      ctx?.emit("memory:update", { key, removed: true });
+      ctx?.emit(MemoryEvents.Update, { key, removed: true });
     },
     clear() {
       store.clear();
-      ctx?.emit("memory:clear", {});
+      ctx?.emit(MemoryEvents.Clear, {});
     },
     inject: () => injectMemory(store.getAll()),
   };

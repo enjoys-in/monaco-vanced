@@ -8,5 +8,11 @@ export enum GitEvents {
   Pulled = "git:pulled",
   BranchChange = "git:branch-change",
   Conflict = "git:conflict",
+  ConflictResolved = "git:conflict-resolved",
   DiffOpen = "git:diff-open",
+  Stage = "git:stage",
+  Unstage = "git:unstage",
+  StageCurrent = "git:stage-current",
+  DiffCurrent = "git:diff-current",
+  BlameCurrent = "git:blame-current",
 }
