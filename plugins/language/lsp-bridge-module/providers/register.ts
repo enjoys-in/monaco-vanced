@@ -9,8 +9,8 @@
 
 import type * as monacoNs from "monaco-editor";
 import type { IDisposable } from "@core/types";
-import type { LspClient, LspProviderRegistration } from "./types";
-import { LSP_METHODS } from "./protocol";
+import type { LspClient, LspProviderRegistration } from "../types";
+import { LSP_METHODS } from "../protocol";
 import {
   fromMonacoPosition,
   fromMonacoRange,

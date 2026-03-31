@@ -12,10 +12,10 @@ import type {
   LspConnectionState,
   LspClient,
   LspConnection,
-} from "./types";
-import { LspMessageType } from "./types";
-import { buildLSPWebSocketUrl } from "./languages";
-import { LSP_METHODS } from "./protocol";
+} from "../types";
+import { LspMessageType } from "../types";
+import { buildLSPWebSocketUrl } from "../languages";
+import { LSP_METHODS } from "../protocol";
 import { LspEvents } from "@core/events";
 
 /** Monaco's lsp namespace (not in @types/monaco-editor yet) */

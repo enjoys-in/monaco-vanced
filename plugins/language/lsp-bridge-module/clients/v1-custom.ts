@@ -10,8 +10,8 @@ import type {
   PendingRequest,
   JsonRpcResponse,
   JsonRpcNotification,
-} from "./types";
-import { LspConnectionManager } from "./connection";
+} from "../types";
+import { LspConnectionManager } from "../connection";
 import { LspEvents } from "@core/events";
 
 /**

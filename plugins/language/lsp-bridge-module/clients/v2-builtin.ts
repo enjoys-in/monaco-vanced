@@ -16,13 +16,13 @@ import type {
   PendingRequest,
   JsonRpcResponse,
   JsonRpcNotification,
-} from "./types";
-import { LspMessageType } from "./types";
-import { LspConnectionManager } from "./connection";
-import { buildLSPWebSocketUrl } from "./languages";
-import { LSP_METHODS } from "./protocol";
-import { setMonacoRef, toMonacoMarkers } from "./converters";
-import { registerLSPProviders } from "./v2-providers";
+} from "../types";
+import { LspMessageType } from "../types";
+import { LspConnectionManager } from "../connection";
+import { buildLSPWebSocketUrl } from "../languages";
+import { LSP_METHODS } from "../protocol";
+import { setMonacoRef, toMonacoMarkers } from "../providers/converters";
+import { registerLSPProviders } from "../providers/register";
 import { LspEvents } from "@core/events";
 
 /**

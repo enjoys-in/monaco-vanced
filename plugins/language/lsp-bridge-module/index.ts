@@ -9,10 +9,10 @@
 import type { MonacoPlugin, PluginContext, IDisposable } from "@core/types";
 import type { LspBridgePluginOptions, LspConnectionConfig, LspMode } from "./types";
 import { DEFAULT_LSP_CONFIG } from "./types";
-import { CustomLspClient } from "./v1-custom-client";
-import { BuiltinLspClient } from "./v2-builtin-client";
-import { NativeLspClient } from "./v3-native-client";
-import { LspProviderBridge } from "./provider-bridge";
+import { CustomLspClient } from "./clients/v1-custom";
+import { BuiltinLspClient } from "./clients/v2-builtin";
+import { NativeLspClient } from "./clients/v3-native";
+import { LspProviderBridge } from "./providers/bridge";
 import { hasLSPSupport } from "./languages";
 import { LspEvents, EditorEvents } from "@core/events";
 
@@ -254,10 +254,10 @@ export type {
   LspMessageType,
 } from "./types";
 export { DEFAULT_LSP_CONFIG } from "./types";
-export { CustomLspClient } from "./v1-custom-client";
-export { BuiltinLspClient } from "./v2-builtin-client";
-export { NativeLspClient } from "./v3-native-client";
-export { LspProviderBridge } from "./provider-bridge";
+export { CustomLspClient } from "./clients/v1-custom";
+export { BuiltinLspClient } from "./clients/v2-builtin";
+export { NativeLspClient } from "./clients/v3-native";
+export { LspProviderBridge } from "./providers/bridge";
 export { LspConnectionManager } from "./connection";
 export { hasLSPSupport, buildLSPWebSocketUrl, LSP_LANGUAGES } from "./languages";
 export { LSP_METHODS } from "./protocol";

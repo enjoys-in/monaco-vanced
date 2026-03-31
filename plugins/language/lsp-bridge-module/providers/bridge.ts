@@ -3,7 +3,7 @@
 
 import type * as monacoNs from "monaco-editor";
 import type { IDisposable } from "@core/types";
-import type { CustomLspClient } from "./v1-custom-client";
+import type { CustomLspClient } from "../clients/v1-custom";
 
 type ProviderFactory = (
   rpcClient: CustomLspClient,
