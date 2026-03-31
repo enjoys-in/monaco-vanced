@@ -37,6 +37,7 @@ is the only shared runtime. Everything else communicates through events.
   13. filesystem-advanced.txt             666   Pending     Strategy Pattern handlers, lifecycle hooks, FS context menu system
   14. plugin-lifecycle.txt                323   ✅ Done     Mount lifecycle (onReady/onFailed), universal operation callbacks
   15. webview-triggers.txt                706   Pending     WebviewPanel API, lazy registration, 8 trigger mechanisms
+                                                            + File preview system (markdown, image, audio, video, PDF, font, HTML, JSON, CSV)
   16. custom-context-enginge.txt          365   Pending     Context Engine — CDN language packs, 25 providers, Dexie storage
   17. custom-plugins.txt                  246   ✅ Done     Plugin system TypeScript interfaces — PluginContext, MonacoPlugin
 

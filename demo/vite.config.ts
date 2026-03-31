@@ -9,7 +9,7 @@ export default defineConfig({
     alias: {
       "@core": resolve(__dirname, "../core"),
       "@plugins": resolve(__dirname, "../plugins"),
-      "monaco-vanced": resolve(__dirname, "../src/index.ts"),
+      "@enjoys/monaco-vanced": resolve(__dirname, "../src/index.ts"),
     },
   },
   server: {
