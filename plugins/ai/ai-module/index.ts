@@ -84,6 +84,37 @@ export function createAIPlugin(
       ctx = pluginCtx;
       orchestrator.wireDefaults(ctx);
 
+      // ── Register AI commands (palette + editor context menu) ──
+      ctx.addAction({
+        id: "ai.explain",
+        label: "AI: Explain Code",
+        keybindings: [],
+        precondition: "editorHasSelection",
+        contextMenuGroupId: "3_ai",
+        contextMenuOrder: 1,
+        run: () => { ctx?.emit("ai:explain", {}); },
+      });
+
+      ctx.addAction({
+        id: "ai.generate",
+        label: "AI: Generate Code",
+        keybindings: [],
+        precondition: "editorTextFocus",
+        contextMenuGroupId: "3_ai",
+        contextMenuOrder: 2,
+        run: () => { ctx?.emit("ai:generate", {}); },
+      });
+
+      ctx.addAction({
+        id: "ai.fix",
+        label: "AI: Fix Code",
+        keybindings: [],
+        precondition: "editorHasSelection",
+        contextMenuGroupId: "3_ai",
+        contextMenuOrder: 3,
+        run: () => { ctx?.emit("ai:fix", {}); },
+      });
+
       // Listen for chat requests from other plugins
       ctx.addDisposable(
         ctx.on("ai:chat-request", async (data) => {

@@ -6,7 +6,7 @@ import { CommandRegistry } from "./registry";
 import { CommandRouter } from "./router";
 import { CommandPalette } from "./palette";
 
-export type { Command, CommandConfig, CommandModuleAPI, CommandHistoryEntry } from "./types";
+export type { Command, CommandConfig, CommandModuleAPI, CommandHistoryEntry, ExecutionContext, ActionDefinition } from "./types";
 export { CommandRegistry } from "./registry";
 export { CommandRouter } from "./router";
 export { CommandPalette } from "./palette";
@@ -48,6 +48,22 @@ export function createCommandPlugin(config: CommandConfig = {}): {
 
     getHistory(): CommandHistoryEntry[] {
       return router.getHistory();
+    },
+
+    enable(id: string): void {
+      registry.enable(id);
+    },
+
+    disable(id: string): void {
+      registry.disable(id);
+    },
+
+    isEnabled(id: string): boolean {
+      return registry.isEnabled(id);
+    },
+
+    bindToEditor(editor: unknown): IDisposable {
+      return palette.bindToEditor(editor);
     },
 
     onBeforeExecute(handler: (data?: unknown) => void): IDisposable {
@@ -94,6 +110,7 @@ export function createCommandPlugin(config: CommandConfig = {}): {
     onDispose() {
       disposables.forEach((d) => d.dispose());
       disposables.length = 0;
+      palette.dispose();
       registry.clear();
       ctx = null;
     },

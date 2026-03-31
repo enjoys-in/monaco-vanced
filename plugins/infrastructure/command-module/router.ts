@@ -56,7 +56,8 @@ export class CommandRouter {
     }
 
     // Execute command
-    await cmd.handler(...args);
+    const handler = cmd.handler ?? cmd.run;
+    await handler?.(undefined, ...args);
 
     // Track history
     this.history.unshift({ id, args, timestamp: Date.now() });

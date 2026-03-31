@@ -73,6 +73,14 @@ export function evaluateCondition(
     }
   }
 
+  // Scheme filter
+  if (condition.schemes && condition.schemes.length > 0) {
+    const currentScheme = evalContext.scheme as string | undefined;
+    if (!currentScheme || !condition.schemes.includes(currentScheme)) {
+      return false;
+    }
+  }
+
   // Selection check
   if (condition.hasSelection !== undefined) {
     const hasSelection = Boolean(evalContext.hasSelection);

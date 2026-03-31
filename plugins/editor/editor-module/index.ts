@@ -25,6 +25,9 @@ export function createEditorPlugin(config?: EditorConfig): MonacoPlugin {
       const { monaco, editor } = ctx;
       modelManager = new ModelManager(monaco, ctx);
 
+      // Bind all registered commands to this editor instance
+      ctx.emit("command:bind-editor", { editor });
+
       // Listen for file:read → create model
       ctx.on(FileEvents.Read, (payload) => {
         const { path, data } = payload as { path: string; data: string };
@@ -55,6 +58,14 @@ export function createEditorPlugin(config?: EditorConfig): MonacoPlugin {
           modelManager.dispose(path);
         });
       }
+
+      // Re-bind commands when a new editor instance is created (split/tab)
+      ctx.on(EditorEvents.Ready, (payload) => {
+        const { instance } = payload as { instance: unknown };
+        if (instance && instance !== editor) {
+          ctx.emit("command:bind-editor", { editor: instance });
+        }
+      });
 
       ctx.emit(EditorEvents.Ready, { instance: editor });
     },

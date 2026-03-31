@@ -96,6 +96,37 @@ export function createGitPlugin(
 
     onMount(pluginCtx: PluginContext): void {
       ctx = pluginCtx;
+
+      // ── Register Git commands (palette + editor context menu) ──
+      ctx.addAction({
+        id: "git.stage",
+        label: "Git: Stage File",
+        keybindings: [],
+        precondition: "gitRepo",
+        contextMenuGroupId: "4_git",
+        contextMenuOrder: 1,
+        run: () => { ctx?.emit("git:stage-current", {}); },
+      });
+
+      ctx.addAction({
+        id: "git.diff",
+        label: "Git: Show Diff",
+        keybindings: [],
+        precondition: "gitRepo",
+        contextMenuGroupId: "4_git",
+        contextMenuOrder: 2,
+        run: () => { ctx?.emit("git:diff-current", {}); },
+      });
+
+      ctx.addAction({
+        id: "git.blame",
+        label: "Git: Show Blame",
+        keybindings: [],
+        precondition: "gitRepo",
+        contextMenuGroupId: "4_git",
+        contextMenuOrder: 3,
+        run: () => { ctx?.emit("git:blame-current", {}); },
+      });
     },
 
     onDispose(): void {

@@ -4,4 +4,6 @@ export enum ContextMenuEvents {
   Dismiss = "context-menu:dismiss",
   Register = "context-menu:register",
   Unregister = "context-menu:unregister",
+  CommandExecuted = "context-menu:command-executed",
+  CommandFailed = "context-menu:command-failed",
 }
