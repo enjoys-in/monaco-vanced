@@ -7,7 +7,9 @@ export class ThemeRegistry {
 
   /** Register a theme */
   register(theme: ThemeDefinition): void {
-    this.themes.set(theme.id, theme);
+    const key = theme.id ?? theme.name;
+    if (!key) return;
+    this.themes.set(key, theme);
   }
 
   /** Get a theme by ID */

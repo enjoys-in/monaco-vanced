@@ -20,6 +20,7 @@ interface MountOptions {
   titleCenterEl?: HTMLElement;
   iconApi?: ExplorerIconAPI;
   fsApi?: MockFsAPI;
+  themeApi?: { apply(id: string): Promise<void>; getIndex(): { id: string; file: string }[]; getThemes(): { id: string; name: string; type: string; colors: Record<string, string> }[]; getCurrent(): string };
 }
 
 let settingsRoot: Root | null = null;
@@ -29,7 +30,7 @@ let breadcrumbRoot: Root | null = null;
 
 export function mountReactComponents({
   settingsEl, welcomeEl, eventBus, recentFiles,
-  tabListEl, breadcrumbEl, titleCenterEl, iconApi, fsApi,
+  tabListEl, breadcrumbEl, titleCenterEl, iconApi, fsApi, themeApi,
 }: MountOptions) {
   const emit = (ev: string, payload: unknown) => eventBus.emit(ev, payload);
 
@@ -39,7 +40,7 @@ export function mountReactComponents({
   }
   settingsRoot.render(
     <ThemeProvider eventBus={eventBus}>
-      <SettingsPanel emit={emit} />
+      <SettingsPanel emit={emit} themeApi={themeApi} />
     </ThemeProvider>,
   );
 

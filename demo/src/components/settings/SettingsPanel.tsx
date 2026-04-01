@@ -1,6 +1,6 @@
 // ── React Settings — collapsible sidebar + theme-aware ───────
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useTheme } from "../theme";
 import { SearchInput, TabPill, CollapsibleSection } from "../shared";
 import { SettingsEvents, ThemeEvents } from "@enjoys/monaco-vanced/core/events";
@@ -12,12 +12,13 @@ import {
 } from "./settings-data";
 
 type Emit = (ev: string, payload: unknown) => void;
+type ThemeAPI = { apply(id: string): Promise<void>; getIndex(): { id: string; file: string }[]; getThemes(): { id: string; name: string; type: string; colors: Record<string, string> }[]; getCurrent(): string };
 
 // ══════════════════════════════════════════════════════════════
 // Entry point
 // ══════════════════════════════════════════════════════════════
 
-export function SettingsPanel({ emit }: { emit: Emit }) {
+export function SettingsPanel({ emit, themeApi }: { emit: Emit; themeApi?: ThemeAPI }) {
   const { tokens: t } = useTheme();
   const [search, setSearch] = useState("");
   const [activeCat, setActiveCat] = useState("commonly-used");
@@ -88,7 +89,7 @@ export function SettingsPanel({ emit }: { emit: Emit }) {
           ) : activeCat === "plugins" ? (
             <PluginsConfig emit={emit} />
           ) : activeCat === "themes" ? (
-            <ThemesConfig emit={emit} />
+            <ThemesConfig emit={emit} themeApi={themeApi} />
           ) : activeCat === "keybindings" ? (
             <KeybindingsConfig />
           ) : (
@@ -485,17 +486,63 @@ function PluginCard({ plugin, emit }: { plugin: PluginInfo; emit: Emit }) {
 // Themes Config
 // ══════════════════════════════════════════════════════════════
 
-function ThemesConfig({ emit }: { emit: Emit }) {
+const LIGHT_KEYWORDS = /light|solarized-light|github-light|min-light|quiet-light|ayu-light/i;
+
+function cdnEntryToThemeInfo(entry: { id: string; file: string }): ThemeInfo {
+  const isLight = LIGHT_KEYWORDS.test(entry.id);
+  return {
+    id: entry.id,
+    name: entry.id.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+    type: isLight ? "light" : "dark",
+    colors: isLight
+      ? { bg: "#ffffff", fg: "#333333", accent: "#0366d6", sidebar: "#f6f8fa" }
+      : { bg: "#1e1e1e", fg: "#cccccc", accent: "#007acc", sidebar: "#252526" },
+    remote: true,
+  };
+}
+
+function ThemesConfig({ emit, themeApi }: { emit: Emit; themeApi?: ThemeAPI }) {
   const { tokens: t, themeName } = useTheme();
   const [filter, setFilter] = useState<"all" | "dark" | "light" | "contrast">("all");
+  const [cdnThemes, setCdnThemes] = useState<ThemeInfo[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const filtered = filter === "all" ? THEMES : THEMES.filter((th) => th.type === filter);
+  useEffect(() => {
+    if (!themeApi) return;
+    const index = themeApi.getIndex();
+    if (index.length > 0) {
+      const builtinIds = new Set(THEMES.map((t) => t.id));
+      setCdnThemes(index.filter((e) => !builtinIds.has(e.id)).map(cdnEntryToThemeInfo));
+    }
+  }, [themeApi]);
+
+  const allThemes = useMemo(() => [...THEMES, ...cdnThemes], [cdnThemes]);
+  const filtered = filter === "all" ? allThemes : allThemes.filter((th) => th.type === filter);
+
+  const handleApply = useCallback(async (theme: ThemeInfo) => {
+    if (themeApi) {
+      setLoading(true);
+      try {
+        await themeApi.apply(theme.id);
+      } catch {
+        // Fallback to event-based flow
+        const monacoTheme = theme.type === "light" ? "vs" : theme.type === "contrast" ? "hc-black" : "vs-dark";
+        emit(ThemeEvents.Changed, { name: theme.name, type: theme.type, monacoTheme });
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      const monacoTheme = theme.type === "light" ? "vs" : theme.type === "contrast" ? "hc-black" : "vs-dark";
+      emit(ThemeEvents.Changed, { name: theme.name, type: theme.type, monacoTheme });
+    }
+  }, [themeApi, emit]);
 
   return (
     <div>
       <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>Color Themes</div>
       <div style={{ fontSize: 12, color: t.fgDim, marginBottom: 20 }}>
-        Select a color theme. {THEMES.length} available.
+        Select a color theme. {allThemes.length} available{cdnThemes.length > 0 ? ` (${THEMES.length} builtin + ${cdnThemes.length} from CDN)` : ""}.
+        {loading && <span style={{ marginLeft: 8, color: t.accent }}>Loading theme…</span>}
       </div>
       <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
         {(["all", "dark", "light", "contrast"] as const).map((f) => (
@@ -504,23 +551,20 @@ function ThemesConfig({ emit }: { emit: Emit }) {
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
         {filtered.map((theme) => (
-          <ThemeCard key={theme.name} theme={theme} active={theme.name === themeName} emit={emit} />
+          <ThemeCard key={theme.id} theme={theme} active={theme.name === themeName || theme.id === themeName} onApply={handleApply} />
         ))}
       </div>
     </div>
   );
 }
 
-function ThemeCard({ theme, active, emit }: { theme: ThemeInfo; active: boolean; emit: Emit }) {
+function ThemeCard({ theme, active, onApply }: { theme: ThemeInfo; active: boolean; onApply: (t: ThemeInfo) => void }) {
   const { tokens: t } = useTheme();
   const [hovered, setHovered] = useState(false);
 
   return (
     <div
-      onClick={() => {
-        const monacoTheme = theme.type === "light" ? "vs" : theme.type === "contrast" ? "hc-black" : "vs-dark";
-        emit(ThemeEvents.Changed, { name: theme.name, type: theme.type, monacoTheme });
-      }}
+      onClick={() => onApply(theme)}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
@@ -544,12 +588,17 @@ function ThemeCard({ theme, active, emit }: { theme: ThemeInfo; active: boolean;
       {/* Label */}
       <div style={{ padding: "8px 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <span style={{ fontSize: 12, fontWeight: 500 }}>{theme.name}</span>
-        <span style={{
-          fontSize: 10, padding: "2px 6px", borderRadius: 3,
-          background: "rgba(255,255,255,0.06)", color: t.fgDim,
-        }}>
-          {theme.type}
-        </span>
+        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+          {theme.remote && (
+            <span style={{ fontSize: 9, padding: "1px 4px", borderRadius: 3, background: `${t.accent}30`, color: t.accent }}>CDN</span>
+          )}
+          <span style={{
+            fontSize: 10, padding: "2px 6px", borderRadius: 3,
+            background: "rgba(255,255,255,0.06)", color: t.fgDim,
+          }}>
+            {theme.type}
+          </span>
+        </div>
       </div>
     </div>
   );

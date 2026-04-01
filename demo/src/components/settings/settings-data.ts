@@ -25,9 +25,11 @@ export interface PluginInfo {
 }
 
 export interface ThemeInfo {
+  id: string;
   name: string;
   type: "dark" | "light" | "contrast";
   colors: { bg: string; fg: string; accent: string; sidebar: string };
+  remote?: boolean;
 }
 
 export interface KeybindingInfo {
@@ -182,6 +184,7 @@ export const THEMES: ThemeInfo[] = BUILTIN_THEME_NAMES.map((name) => {
   const def = THEME_DEFS[name];
   const c = def.colors;
   return {
+    id: def.id ?? name,
     name: def.name,
     type: def.type === "light" || def.type === "hc-light" ? "light" : def.type === "hc" ? "contrast" : "dark",
     colors: {

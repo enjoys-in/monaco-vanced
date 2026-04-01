@@ -362,6 +362,7 @@ async function bootstrap() {
     titleCenterEl,
     iconApi,
     fsApi: mockFs,
+    themeApi,
   });
 
   // Pre-create all models so file switching is instant
@@ -497,12 +498,12 @@ async function bootstrap() {
   eventBus.on(ThemeEvents.Changed, (payload: unknown) => {
     const p = payload as { name?: string; themeId?: string; monacoTheme?: string };
     const themeKey = p.name ?? p.themeId ?? "";
+    // Re-register any newly loaded themes from the plugin (CDN themes)
+    registerThemes(themeApi.getThemes());
     const def = THEME_DEFS[themeKey];
     const monacoTheme = p.monacoTheme ?? (def?.type === "light" ? "vs" : def?.type === "hc" ? "hc-black" : "vs-dark");
     monaco.editor.setTheme(monacoTheme);
     switchTheme(themeKey);
-    // Re-register any newly loaded themes from the plugin
-    registerThemes(themeApi.getThemes());
   });
 
   // ── Wire language detection → Monaco model language ───────
