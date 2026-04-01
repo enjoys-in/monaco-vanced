@@ -123,6 +123,11 @@ export function buildShell(root: HTMLElement): DOMRefs {
     style: `display:none;flex-direction:column;flex:1;overflow:hidden;background:${C.editorBg};`,
   });
 
+  // Welcome page (shown when no files are open)
+  const welcomePage = el("div", {
+    style: `display:none;flex-direction:column;flex:1;overflow:hidden;background:${C.editorBg};`,
+  });
+
   // ── Bottom Panel ───────────────────────────────────────────
   const bottomPanel = el("div", {
     class: "vsc-bottom-panel",
@@ -140,7 +145,7 @@ export function buildShell(root: HTMLElement): DOMRefs {
   });
   bottomPanel.append(bottomPanelHeader, bottomPanelContent);
 
-  editorPanel.append(tabBar, breadcrumbBar, editorContainer, settingsWebview, bottomPanel);
+  editorPanel.append(tabBar, breadcrumbBar, editorContainer, settingsWebview, welcomePage, bottomPanel);
   mainArea.append(activityBar, sidebarContainer, editorPanel);
 
   // ── Status Bar ─────────────────────────────────────────────
@@ -182,7 +187,7 @@ export function buildShell(root: HTMLElement): DOMRefs {
     root, titleBar, titleText, titleCenter: titleCenterLabel, titleActions, titleMenuBar,
     activityBar: activityTop, activityBottom,
     sidebarContainer, sidebarHeader: sidebarHeaderLabel, sidebarToolbar, sidebarContent,
-    tabBar, tabList, tabActions, editorContainer, settingsWebview, breadcrumbBar,
+    tabBar, tabList, tabActions, editorContainer, settingsWebview, welcomePage, breadcrumbBar,
     bottomPanel, bottomPanelTabs, bottomPanelContent, bottomPanelActions,
     statusBar, statusLeft, statusRight,
     sidebarBackdrop, toastContainer, contextMenuEl, commandPalette, commandInput, commandList,

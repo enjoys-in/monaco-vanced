@@ -1066,6 +1066,7 @@ export function wireSettingsWebview(
     isOpen = true;
     container.style.display = "flex";
     dom.editorContainer.style.display = "none";
+    dom.welcomePage.style.display = "none";
     // Open a "Settings" tab
     eventBus.emit("tab:open-special", { uri: SETTINGS_URI, label: "Settings" });
   }

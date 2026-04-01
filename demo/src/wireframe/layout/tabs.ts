@@ -64,6 +64,7 @@ export function wireTabs(
         dom.breadcrumbBar.innerHTML = "";
         dom.titleCenter.textContent = "Monaco Vanced";
         document.title = "Monaco Vanced";
+        eventBus.emit("welcome:show", {});
       }
     }
   }

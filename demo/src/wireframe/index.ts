@@ -16,6 +16,7 @@ import { wireTitleBar, wireStatusBar } from "./layout/bars";
 import { wireNotifications } from "./panels/notifications";
 import { wireContextMenu, wireCommandPalette, wireBottomPanel } from "./panels/overlays";
 import { wireSettingsWebview } from "./panels/settings-webview";
+import { wireWelcomePage } from "./panels/welcome-page";
 
 export type { WireframeAPIs, VirtualFile } from "./types";
 
@@ -46,6 +47,7 @@ export function mountWireframe(
   wireContextMenu(dom, apis, on);
   wireCommandPalette(dom, apis, on);
   wireSettingsWebview(dom, apis, eventBus, on);
+  wireWelcomePage(dom, eventBus, on, files);
   wireResizeHandle(dom);
 
   return {
