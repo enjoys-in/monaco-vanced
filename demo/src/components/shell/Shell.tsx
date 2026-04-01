@@ -78,7 +78,7 @@ const S = {
   } as CSSProperties,
 
   tabList: {
-    display: "flex", flex: 1, overflowX: "auto", overflowY: "hidden", alignItems: "stretch",
+    display: "flex", flex: 1, height: "100%", overflowX: "auto", overflowY: "hidden", alignItems: "stretch",
   } as CSSProperties,
 
   tabActions: { display: "flex", alignItems: "center", padding: "0 8px", gap: 4 } as CSSProperties,
