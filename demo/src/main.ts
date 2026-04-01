@@ -524,14 +524,14 @@ async function bootstrap() {
 
   statusbarApi.register({ id: "branch", label: "$(git-branch) main", alignment: "left", priority: 100, tooltip: "main (Git Branch) — Click to Checkout" });
   statusbarApi.register({ id: "sync", label: "$(sync) 0↓ 0↑", alignment: "left", priority: 95, tooltip: "Synchronize Changes — 0 pending pull, 0 pending push" });
-  statusbarApi.register({ id: "errors", label: "$(error) 0  $(warning) 0", alignment: "left", priority: 90, tooltip: "No Problems — Click to Toggle Problems Panel" });
-  statusbarApi.register({ id: "line-col", label: "Ln 1, Col 1", alignment: "right", priority: 100, tooltip: "Go to Line/Column" });
+  statusbarApi.register({ id: "errors", label: "$(error) 0  $(warning) 0", alignment: "left", priority: 90, tooltip: "No Problems — Click to Toggle Problems Panel", visible: false });
+  statusbarApi.register({ id: "line-col", label: "Ln 1, Col 1", alignment: "right", priority: 100, tooltip: "Go to Line/Column", visible: false });
   statusbarApi.register({ id: "selection", label: "", alignment: "right", priority: 95, visible: false, tooltip: "Characters Selected" });
-  statusbarApi.register({ id: "spaces", label: "Spaces: 2", alignment: "right", priority: 80, tooltip: "Select Indentation — Spaces: 2" });
-  statusbarApi.register({ id: "encoding", label: "UTF-8", alignment: "right", priority: 75, tooltip: "Select Encoding" });
-  statusbarApi.register({ id: "eol", label: "LF", alignment: "right", priority: 70, tooltip: "Select End of Line Sequence" });
-  statusbarApi.register({ id: "language", label: "TypeScript React", alignment: "right", priority: 65, tooltip: "Select Language Mode — TypeScript React" });
-  statusbarApi.register({ id: "prettier", label: "$(check) Prettier", alignment: "right", priority: 50, tooltip: "Prettier — Formatter (Default)" });
+  statusbarApi.register({ id: "spaces", label: "Spaces: 2", alignment: "right", priority: 80, tooltip: "Select Indentation — Spaces: 2", visible: false });
+  statusbarApi.register({ id: "encoding", label: "UTF-8", alignment: "right", priority: 75, tooltip: "Select Encoding", visible: false });
+  statusbarApi.register({ id: "eol", label: "LF", alignment: "right", priority: 70, tooltip: "Select End of Line Sequence", visible: false });
+  statusbarApi.register({ id: "language", label: "TypeScript React", alignment: "right", priority: 65, tooltip: "Select Language Mode — TypeScript React", visible: false });
+  statusbarApi.register({ id: "prettier", label: "$(check) Prettier", alignment: "right", priority: 50, tooltip: "Prettier — Formatter (Default)", visible: false });
   statusbarApi.register({ id: "feedback", label: "$(feedback)", alignment: "right", priority: 10, tooltip: "Tweet Feedback" });
   statusbarApi.register({ id: "bell", label: "$(bell)", alignment: "right", priority: 5, tooltip: "No Notifications — Click to Show" });
 
@@ -596,7 +596,15 @@ async function bootstrap() {
     document.title = `${fileName} — Monaco Vanced`;
   }
 
-  ide.editor.onDidChangeModel(() => { updateModelMeta(); });
+  // File-specific status items to show/hide based on active model
+  const FILE_STATUS_IDS = ["errors", "line-col", "spaces", "encoding", "eol", "language", "prettier"];
+
+  ide.editor.onDidChangeModel(() => {
+    const hasModel = !!ide.editor.getModel();
+    for (const id of FILE_STATUS_IDS) statusbarApi.update(id, { visible: hasModel });
+    if (!hasModel) statusbarApi.update("selection", { visible: false });
+    updateModelMeta();
+  });
   // Also update on language change within the same model
   monaco.editor.onDidChangeModelLanguage(() => { updateModelMeta(); });
 
