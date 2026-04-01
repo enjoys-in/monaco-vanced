@@ -2,6 +2,7 @@
 
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
 import type { WireframeAPIs, VirtualFile } from "./types";
+import type { MockFsAPI } from "../mock-fs";
 import { buildShell } from "./shell";
 import { wireActivityBar } from "./activity-bar";
 import { wireSidebar, wireResizeHandle } from "./sidebar";
@@ -18,6 +19,7 @@ export function mountWireframe(
   apis: WireframeAPIs,
   eventBus: InstanceType<typeof EventBus>,
   files: VirtualFile[],
+  mockFs?: MockFsAPI,
 ): { editorContainer: HTMLElement; destroy: () => void } {
   const dom = buildShell(root);
   const disposers: (() => void)[] = [];
@@ -27,7 +29,7 @@ export function mountWireframe(
   };
 
   wireActivityBar(dom, apis, eventBus, on);
-  wireSidebar(dom, apis, eventBus, on, files);
+  wireSidebar(dom, apis, eventBus, on, files, mockFs);
   wireTabs(dom, eventBus, on, files);
   wireTitleBar(dom, apis, eventBus, on);
   wireStatusBar(dom, apis, on);

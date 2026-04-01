@@ -22,6 +22,7 @@ export function createNotificationPlugin(config: NotificationConfig = {}): {
   const disposables: IDisposable[] = [];
   let ctx: PluginContext | null = null;
   let emitting = false;
+  let dismissing = false;
 
   queue.setDismissHandler((id) => {
     ctx?.emit(NotificationEvents.Dismiss, { id });
@@ -59,13 +60,19 @@ export function createNotificationPlugin(config: NotificationConfig = {}): {
     },
 
     dismiss(id: string): void {
+      if (dismissing) return;
       queue.dismiss(id);
+      dismissing = true;
       ctx?.emit(NotificationEvents.Dismiss, { id });
+      dismissing = false;
     },
 
     dismissAll(): void {
+      if (dismissing) return;
       queue.dismissAll();
+      dismissing = true;
       ctx?.emit(NotificationEvents.Dismiss, { all: true });
+      dismissing = false;
     },
 
     getActive(): Notification[] {
@@ -126,6 +133,7 @@ export function createNotificationPlugin(config: NotificationConfig = {}): {
 
       disposables.push(
         ctx.on(NotificationEvents.Dismiss, (data?: unknown) => {
+          if (dismissing) return;
           const d = data as { id?: string; all?: boolean } | undefined;
           if (d?.all) api.dismissAll();
           else if (d?.id) api.dismiss(d.id);

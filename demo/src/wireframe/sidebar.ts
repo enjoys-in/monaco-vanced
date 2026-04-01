@@ -5,14 +5,8 @@ import { SidebarEvents, FileEvents } from "@enjoys/monaco-vanced/core/events";
 import type { DOMRefs, WireframeAPIs, OnHandler, VirtualFile } from "./types";
 import { C } from "./types";
 import { el, fileIconSvg, getExt } from "./utils";
-
-// ── Explorer tree node type ─────────────────────────────────
-interface TreeNode {
-  name: string;
-  uri?: string;
-  children?: TreeNode[];
-  expanded?: boolean;
-}
+import type { MockFsAPI } from "../mock-fs";
+import { Explorer } from "../explorer";
 
 // ── View title mapping ──────────────────────────────────────
 const VIEW_TITLES: Record<string, string> = {
@@ -154,13 +148,24 @@ export function wireSidebar(
   eventBus: EventBus,
   on: OnHandler,
   files: VirtualFile[],
+  mockFs?: MockFsAPI,
 ) {
   let activeViewId = "explorer";
-  let activeFileUri: string | null = null;
   const viewContainers: Record<string, HTMLElement> = {};
 
+  // ── Explorer instance (if mockFs is provided) ──────────
+  let explorer: Explorer | null = null;
+  if (mockFs) {
+    explorer = new Explorer({
+      fs: mockFs,
+      eventBus,
+      rootLabel: "MONACO-VANCED",
+      onNotify: (message, type) => apis.notification?.show({ type: type as "info" | "success" ?? "info", message, duration: 3000 }),
+    });
+  }
+
   function createViews() {
-    viewContainers.explorer = buildExplorerView(files);
+    viewContainers.explorer = explorer ? explorer.getElement() : buildFallbackExplorerView(files);
     viewContainers.search = buildSearchView();
     viewContainers.scm = buildScmView();
     viewContainers.debug = buildDebugView();
@@ -189,6 +194,7 @@ export function wireSidebar(
       explorer: [
         { title: "New File", svg: `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M12 3H8.5L7 1.5 6.5 1H2l-.5.5v12l.5.5h10l.5-.5V3.5L12 3zm-.5 9.5h-9v-11H6v2.5l.5.5H11.5v8zM7 3.5V2l3.5 3.5H8L7.5 5V3.5z"/></svg>` },
         { title: "New Folder", svg: `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M14 4H9l-1-2H2L1 3v10l1 1h12l1-1V5l-1-1zm0 9H2V3h5.5l1 2H14v8z"/></svg>` },
+        { title: "Refresh", svg: `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M13.45 5.78a6 6 0 10.87 4.22h-1.07a5 5 0 11-.72-3.53L11 8h4V4l-1.55 1.78z"/></svg>` },
         { title: "Collapse All", svg: `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M9 9H4v1h5V9zM9 4H4v1h5V4z"/><path d="M1 2.5l.5-.5h12l.5.5v10l-.5.5h-12l-.5-.5v-10zm1 0v10h12v-10H2z"/></svg>` },
       ],
       search: [
@@ -213,9 +219,16 @@ export function wireSidebar(
     btn.addEventListener("mouseleave", () => { btn.style.background = "transparent"; btn.style.color = C.fgDim; });
     btn.addEventListener("click", () => {
       if (viewId === "explorer") {
-        if (title === "New File") promptNewFile();
-        else if (title === "New Folder") promptNewFolder();
-        else if (title === "Collapse All") collapseAllFolders();
+        if (explorer) {
+          if (title === "New File") explorer.newFile();
+          else if (title === "New Folder") explorer.newFolder();
+          else if (title === "Refresh") explorer.refresh();
+          else if (title === "Collapse All") explorer.collapseAll();
+        } else {
+          if (title === "New File") promptNewFile();
+          else if (title === "New Folder") promptNewFolder();
+          else if (title === "Collapse All") collapseAllFolders();
+        }
       } else if (viewId === "search" && title === "Clear Results") {
         const searchInput = viewContainers.search?.querySelector("input") as HTMLInputElement | null;
         if (searchInput) { searchInput.value = ""; searchInput.dispatchEvent(new Event("input")); }
@@ -229,12 +242,11 @@ export function wireSidebar(
     if (!name?.trim()) return;
     const path = name.trim();
     const fileName = path.split("/").pop() ?? path;
-    // Add to files array
     const ext = fileName.includes(".") ? fileName.split(".").pop()!.toLowerCase() : "";
     const langMap: Record<string, string> = { ts: "typescript", tsx: "typescriptreact", js: "javascript", jsx: "javascriptreact", json: "json", css: "css", html: "html", md: "markdown" };
     const newFile: VirtualFile = { uri: path, name: fileName, language: langMap[ext] ?? "plaintext", content: "" };
     files.push(newFile);
-    rebuildExplorer();
+    rebuildFallbackExplorer();
     eventBus.emit(FileEvents.Open, { uri: path, label: fileName });
     apis.notification?.show({ type: "success", message: `Created ${path}`, duration: 3000 });
   }
@@ -242,10 +254,9 @@ export function wireSidebar(
   function promptNewFolder() {
     const name = prompt("Enter folder path (e.g. src/components):");
     if (!name?.trim()) return;
-    // Create a placeholder file so folder appears
     const placeholder = name.trim() + "/.gitkeep";
     files.push({ uri: placeholder, name: ".gitkeep", language: "plaintext", content: "" });
-    rebuildExplorer();
+    rebuildFallbackExplorer();
     apis.notification?.show({ type: "success", message: `Created folder ${name.trim()}`, duration: 3000 });
   }
 
@@ -253,32 +264,39 @@ export function wireSidebar(
     const explorerEl = viewContainers.explorer;
     if (!explorerEl) return;
     explorerEl.querySelectorAll("[style*='transform: rotate(90deg)']").forEach((chevron) => {
-      (chevron as HTMLElement).click(); // simulate click to toggle
+      (chevron as HTMLElement).click();
     });
   }
 
-  function rebuildExplorer() {
+  function rebuildFallbackExplorer() {
     const old = viewContainers.explorer;
-    viewContainers.explorer = buildExplorerView(files);
+    viewContainers.explorer = buildFallbackExplorerView(files);
     viewContainers.explorer.dataset.viewId = "explorer";
     viewContainers.explorer.style.display = activeViewId === "explorer" ? "" : "none";
     if (old?.parentNode) old.parentNode.replaceChild(viewContainers.explorer, old);
   }
 
   // ═══════════════════════════════════════════════════════════
-  // ── Explorer View ──────────────────────────────────────────
+  // ── Fallback Explorer (used when no MockFsAPI provided) ────
   // ═══════════════════════════════════════════════════════════
 
-  function buildExplorerView(fileList: VirtualFile[]): HTMLElement {
+  interface FallbackTreeNode {
+    name: string;
+    uri?: string;
+    children?: FallbackTreeNode[];
+    expanded?: boolean;
+  }
+
+  function buildFallbackExplorerView(fileList: VirtualFile[]): HTMLElement {
     const container = el("div", { style: "overflow-y:auto;overflow-x:hidden;height:100%;" });
-    const tree = buildTree(fileList);
-    const projectNode: TreeNode = { name: "MONACO-VANCED", children: tree, expanded: true };
-    container.appendChild(renderTree([projectNode], 0));
+    const tree = buildFallbackTree(fileList);
+    const projectNode: FallbackTreeNode = { name: "MONACO-VANCED", children: tree, expanded: true };
+    container.appendChild(renderFallbackTree([projectNode], 0));
     return container;
   }
 
-  function buildTree(fileList: VirtualFile[]): TreeNode[] {
-    const root: TreeNode = { name: "", children: [] };
+  function buildFallbackTree(fileList: VirtualFile[]): FallbackTreeNode[] {
+    const root: FallbackTreeNode = { name: "", children: [] };
     for (const f of fileList) {
       const parts = f.uri.split("/");
       let node = root;
@@ -295,18 +313,18 @@ export function wireSidebar(
     return root.children ?? [];
   }
 
-  function renderTree(nodes: TreeNode[], depth = 0): DocumentFragment {
+  function renderFallbackTree(nodes: FallbackTreeNode[], depth = 0): DocumentFragment {
     const frag = document.createDocumentFragment();
     const sorted = [...nodes].sort((a, b) => {
       if (a.children && !b.children) return -1;
       if (!a.children && b.children) return 1;
       return a.name.localeCompare(b.name);
     });
-    for (const node of sorted) frag.appendChild(node.children ? renderFolder(node, depth) : renderFile(node, depth));
+    for (const node of sorted) frag.appendChild(node.children ? renderFallbackFolder(node, depth) : renderFallbackFile(node, depth));
     return frag;
   }
 
-  function renderFolder(node: TreeNode, depth: number): HTMLElement {
+  function renderFallbackFolder(node: FallbackTreeNode, depth: number): HTMLElement {
     const wrapper = el("div");
     const row = el("div", { class: "vsc-file-item", style: `display:flex;align-items:center;height:22px;padding-left:${8 + depth * 16}px;cursor:pointer;user-select:none;` });
     const chevron = el("span", { style: `display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;transition:transform .12s ease;transform:rotate(${node.expanded ? "90deg" : "0"});color:${C.fgDim};` });
@@ -318,7 +336,7 @@ export function wireSidebar(
     const label = el("span", { style: `color:${C.fg};font-size:13px;` }, node.name);
     row.append(chevron, folderIcon, label);
     const childContainer = el("div", { style: node.expanded ? "" : "display:none;" });
-    childContainer.appendChild(renderTree(node.children ?? [], depth + 1));
+    childContainer.appendChild(renderFallbackTree(node.children ?? [], depth + 1));
     row.addEventListener("click", () => {
       node.expanded = !node.expanded;
       chevron.style.transform = `rotate(${node.expanded ? "90deg" : "0"})`;
@@ -329,7 +347,7 @@ export function wireSidebar(
     return wrapper;
   }
 
-  function renderFile(node: TreeNode, depth: number): HTMLElement {
+  function renderFallbackFile(node: FallbackTreeNode, depth: number): HTMLElement {
     const ext = getExt(node.name);
     const row = el("div", { class: "vsc-file-item", "data-uri": node.uri ?? "", style: `display:flex;align-items:center;height:22px;padding-left:${24 + depth * 16}px;cursor:pointer;user-select:none;` });
     const icon = el("span", { style: "margin-right:6px;display:inline-flex;align-items:center;" });
@@ -338,16 +356,6 @@ export function wireSidebar(
     row.append(icon, label);
     row.addEventListener("click", () => { if (node.uri) eventBus.emit(FileEvents.Open, { uri: node.uri, label: node.name }); });
     return row;
-  }
-
-  function setActiveFile(uri: string) {
-    activeFileUri = uri;
-    const explorerEl = viewContainers.explorer;
-    if (!explorerEl) return;
-    explorerEl.querySelectorAll(".vsc-file-item").forEach((e) => {
-      const item = e as HTMLElement;
-      item.dataset.active = item.dataset.uri === uri ? "true" : "false";
-    });
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -715,8 +723,20 @@ export function wireSidebar(
 
   on(SidebarEvents.ViewActivate, (p) => { const { viewId } = p as { viewId: string }; switchView(viewId); });
   on(SidebarEvents.Resize, (p) => { const { width } = p as { width: number }; dom.sidebarContainer.style.width = `${width}px`; });
-  on(FileEvents.Open, (p) => { const { uri } = p as { uri: string }; setActiveFile(uri); });
-  on("tab:switch", (p) => { const { uri } = p as { uri: string }; setActiveFile(uri); });
+
+  // Active file tracking — new Explorer handles it internally; fallback needs manual highlights
+  if (!explorer) {
+    const setActiveFile = (uri: string) => {
+      const explorerEl = viewContainers.explorer;
+      if (!explorerEl) return;
+      explorerEl.querySelectorAll(".vsc-file-item").forEach((e) => {
+        const item = e as HTMLElement;
+        item.dataset.active = item.dataset.uri === uri ? "true" : "false";
+      });
+    };
+    on(FileEvents.Open, (p) => { const { uri } = p as { uri: string }; setActiveFile(uri); });
+    on("tab:switch", (p) => { const { uri } = p as { uri: string }; setActiveFile(uri); });
+  }
 }
 
 export function wireResizeHandle(dom: DOMRefs) {

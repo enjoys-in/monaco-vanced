@@ -96,3 +96,13 @@
   .vsc-status-item { min-height: 28px !important; padding: 0 6px !important; }
   .vsc-menu-item { min-height: 32px !important; }
 }
+
+/* ── Explorer enhancements ─────────────────────────────────── */
+.explorer-item { transition: background .08s ease; }
+.explorer-item:hover { background: rgba(255,255,255,0.04); }
+.explorer-item[data-active="true"] { background: rgba(4,57,94,0.6); }
+.explorer-inline-input { box-sizing: border-box; }
+.explorer-inline-input:focus { box-shadow: 0 0 0 1px #007fd4; }
+.explorer-inline-row { background: rgba(255,255,255,0.02); }
+.explorer-context-menu { animation: fadeIn .08s ease; }
+.explorer-ctx-item { transition: background .08s ease; }

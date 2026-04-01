@@ -1,0 +1,180 @@
+// ── Explorer Context Menu — right-click actions ─────────────
+// Reusable, positioned near cursor, closes on outside click.
+
+import type { TreeNode } from "./ExplorerTypes";
+
+const C = {
+  bg: "#252526",
+  border: "#454545",
+  fg: "#cccccc",
+  fgDim: "#858585",
+  hover: "rgba(255,255,255,0.06)",
+  accent: "#007acc",
+  separator: "#3c3c3c",
+  shadow: "0 4px 16px rgba(0,0,0,.4)",
+};
+
+interface MenuOption {
+  label: string;
+  icon: string;
+  action: string;
+  separator?: boolean;
+  disabled?: boolean;
+}
+
+export type ContextMenuHandler = (action: string, node: TreeNode) => void;
+
+const FILE_MENU: MenuOption[] = [
+  { label: "Open File", icon: openIcon(), action: "open" },
+  { label: "Open to the Side", icon: splitIcon(), action: "openSide", separator: true },
+  { label: "Rename…", icon: renameIcon(), action: "rename" },
+  { label: "Delete", icon: deleteIcon(), action: "delete", separator: true },
+  { label: "Copy Path", icon: copyIcon(), action: "copyPath" },
+  { label: "Copy Relative Path", icon: copyIcon(), action: "copyRelPath" },
+];
+
+const FOLDER_MENU: MenuOption[] = [
+  { label: "New File…", icon: newFileIcon(), action: "newFile" },
+  { label: "New Folder…", icon: newFolderIcon(), action: "newFolder", separator: true },
+  { label: "Rename…", icon: renameIcon(), action: "rename" },
+  { label: "Delete", icon: deleteIcon(), action: "delete", separator: true },
+  { label: "Copy Path", icon: copyIcon(), action: "copyPath" },
+  { label: "Collapse Folder", icon: collapseIcon(), action: "collapse" },
+];
+
+export class ExplorerContextMenu {
+  private el: HTMLElement;
+  private currentNode: TreeNode | null = null;
+  private handler: ContextMenuHandler | null = null;
+  private closeListener: ((e: MouseEvent) => void) | null = null;
+  private keyListener: ((e: KeyboardEvent) => void) | null = null;
+
+  constructor() {
+    this.el = document.createElement("div");
+    this.el.className = "explorer-context-menu";
+    this.el.style.cssText = `
+      position:fixed;z-index:10000;display:none;
+      background:${C.bg};border:1px solid ${C.border};border-radius:6px;
+      box-shadow:${C.shadow};padding:4px 0;min-width:180px;
+      font-size:13px;font-family:inherit;
+    `;
+    document.body.appendChild(this.el);
+  }
+
+  setHandler(handler: ContextMenuHandler): void {
+    this.handler = handler;
+  }
+
+  show(e: MouseEvent, node: TreeNode): void {
+    this.currentNode = node;
+    this.el.innerHTML = "";
+
+    const items = node.isDirectory ? FOLDER_MENU : FILE_MENU;
+    for (const item of items) {
+      if (item.separator) {
+        this.el.appendChild(this.createSeparator());
+      }
+      this.el.appendChild(this.createItem(item));
+    }
+
+    // Position
+    this.el.style.display = "block";
+    const rect = this.el.getBoundingClientRect();
+    const x = Math.min(e.clientX, window.innerWidth - rect.width - 8);
+    const y = Math.min(e.clientY, window.innerHeight - rect.height - 8);
+    this.el.style.left = `${x}px`;
+    this.el.style.top = `${y}px`;
+
+    // Close on outside click / Escape
+    requestAnimationFrame(() => {
+      this.closeListener = (ev: MouseEvent) => {
+        if (!this.el.contains(ev.target as Node)) this.hide();
+      };
+      this.keyListener = (ev: KeyboardEvent) => {
+        if (ev.key === "Escape") this.hide();
+      };
+      document.addEventListener("mousedown", this.closeListener, { capture: true });
+      document.addEventListener("keydown", this.keyListener);
+    });
+  }
+
+  hide(): void {
+    this.el.style.display = "none";
+    this.el.innerHTML = "";
+    this.currentNode = null;
+    if (this.closeListener) {
+      document.removeEventListener("mousedown", this.closeListener, { capture: true });
+      this.closeListener = null;
+    }
+    if (this.keyListener) {
+      document.removeEventListener("keydown", this.keyListener);
+      this.keyListener = null;
+    }
+  }
+
+  private createItem(option: MenuOption): HTMLElement {
+    const row = document.createElement("div");
+    row.className = "explorer-ctx-item";
+    row.style.cssText = `display:flex;align-items:center;gap:8px;padding:4px 12px;cursor:pointer;color:${option.disabled ? C.fgDim : C.fg};border-radius:3px;margin:0 4px;`;
+    row.innerHTML = `<span style="display:inline-flex;align-items:center;color:${C.fgDim};width:16px;height:16px;">${option.icon}</span><span>${option.label}</span>`;
+
+    if (!option.disabled) {
+      row.addEventListener("mouseenter", () => { row.style.background = C.hover; row.style.color = "#fff"; });
+      row.addEventListener("mouseleave", () => { row.style.background = "transparent"; row.style.color = C.fg; });
+      row.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.hide();
+        if (this.currentNode && this.handler) {
+          this.handler(option.action, this.currentNode);
+        }
+      });
+    }
+
+    return row;
+  }
+
+  private createSeparator(): HTMLElement {
+    const sep = document.createElement("div");
+    sep.style.cssText = `height:1px;background:${C.separator};margin:4px 8px;`;
+    return sep;
+  }
+
+  dispose(): void {
+    this.hide();
+    this.el.remove();
+  }
+}
+
+// ── Icon SVGs ───────────────────────────────────────────────
+
+function openIcon(): string {
+  return `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3 1h6.5L13 4.5V14a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z"/></svg>`;
+}
+
+function splitIcon(): string {
+  return `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1 2h6v12H1V2zm8 0h6v12H9V2z"/></svg>`;
+}
+
+function newFileIcon(): string {
+  return `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M12 3H8.5L7 1.5 6.5 1H2l-.5.5v12l.5.5h10l.5-.5V3.5L12 3zm-.5 9.5h-9v-11H6v2.5l.5.5H11.5v8zM7 3.5V2l3.5 3.5H8L7.5 5V3.5z"/></svg>`;
+}
+
+function newFolderIcon(): string {
+  return `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M14 4H9l-1-2H2L1 3v10l1 1h12l1-1V5l-1-1zm0 9H2V3h5.5l1 2H14v8z"/></svg>`;
+}
+
+function renameIcon(): string {
+  return `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M13.23.71a1 1 0 00-1.42 0L3 9.5V13h3.5l8.8-8.8a1 1 0 000-1.42l-2.07-2.07zM5.79 12H4v-1.79l7.4-7.4 1.79 1.79-7.4 7.4z"/></svg>`;
+}
+
+function deleteIcon(): string {
+  return `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M10 3h3v1H3V3h3l1-1h2l1 1zM4 5v8c0 .6.4 1 1 1h6c.6 0 1-.4 1-1V5H4zm2 7V7h1v5H6zm3 0V7h1v5H9z"/></svg>`;
+}
+
+function copyIcon(): string {
+  return `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 4h8v8H4V4zm1 1v6h6V5H5zM2 2h8v1H3v7H2V2z"/></svg>`;
+}
+
+function collapseIcon(): string {
+  return `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M9 9H4v1h5V9zM9 4H4v1h5V4z"/><path d="M1 2.5l.5-.5h12l.5.5v10l-.5.5h-12l-.5-.5v-10zm1 0v10h12v-10H2z"/></svg>`;
+}

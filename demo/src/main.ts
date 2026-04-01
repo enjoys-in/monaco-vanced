@@ -267,7 +267,7 @@ async function bootstrap() {
   }
 
   // ── Mount Wireframe ──────────────────────────────────────
-  const { editorContainer } = mountWireframe(appRoot, apis, eventBus, DEMO_FILES);
+  const { editorContainer } = mountWireframe(appRoot, apis, eventBus, DEMO_FILES, mockFs);
 
   const defaultFile = DEMO_FILES.find((f) => f.uri === "src/app.tsx")
     ?? DEMO_FILES.find((f) => f.uri === "src/main.tsx")
@@ -306,6 +306,7 @@ async function bootstrap() {
     if (!model) return;
     const uri = model.uri.path.replace(/^\//, "");
     mockFs.writeFile(uri, model.getValue());
+    eventBus.emit("explorer:file-modified", { uri });
   });
 
   // ── Wire settings changes → Monaco editor options ────────
@@ -684,7 +685,7 @@ async function bootstrap() {
 
   // Register all actions with Monaco — appears in both palette + context menu
   for (const action of actions) {
-    ide.editor.addAction(action);
+    // ide.editor.addAction(action);
   }
 
   // Also register with command module for wireframe palette
