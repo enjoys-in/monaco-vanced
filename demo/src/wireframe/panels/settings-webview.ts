@@ -734,7 +734,7 @@ export function wireSettingsWebview(
 
     for (const [group, items] of groups) {
       const groupHeader = el("div", {
-        style: `font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:${C.fgDim};padding:16px 0 8px;border-bottom:1px solid ${C.separator ?? C.border};margin-bottom:8px;font-weight:600;`,
+        style: `font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:${C.fgDim};padding:16px 0 8px;border-bottom:1px solid ${C.separator};margin-bottom:8px;font-weight:600;`,
       }, group);
       parent.appendChild(groupHeader);
       renderSettingsItems(parent, items);
@@ -744,7 +744,7 @@ export function wireSettingsWebview(
   function renderSettingsItems(parent: HTMLElement, items: SettingDef[]) {
     for (const s of items) {
       const row = el("div", {
-        style: `padding:10px 0;border-bottom:1px solid ${C.border}22;`,
+        style: `padding:10px 0;border-bottom:1px solid color-mix(in srgb, ${C.border} 13%, transparent);`,
       });
 
       const labelRow = el("div", { style: "display:flex;align-items:baseline;gap:8px;margin-bottom:2px;" });
@@ -858,7 +858,7 @@ export function wireSettingsWebview(
 
       for (const p of filtered) {
         const card = el("div", {
-          style: `margin-bottom:12px;border:1px solid ${C.border};border-radius:6px;overflow:hidden;background:${C.cardBg ?? "#2d2d30"};`,
+          style: `margin-bottom:12px;border:1px solid ${C.border};border-radius:6px;overflow:hidden;background:${C.cardBg};`,
         });
 
         // Plugin header
@@ -877,7 +877,7 @@ export function wireSettingsWebview(
           el("span", { style: `font-size:11px;color:${C.fgDim};font-family:monospace;` }, p.id),
         );
         if (p.installed) {
-          const badge = el("span", { style: `font-size:10px;padding:1px 6px;border-radius:3px;background:${C.successGreen ?? "#4ec9b0"}22;color:${C.successGreen ?? "#4ec9b0"};` }, "Installed");
+          const badge = el("span", { style: `font-size:10px;padding:1px 6px;border-radius:3px;background:color-mix(in srgb, ${C.successGreen} 13%, transparent);color:${C.successGreen};` }, "Installed");
           titleRow.appendChild(badge);
         }
         info.append(titleRow, el("div", { style: `font-size:12px;color:${C.fgDim};margin-top:2px;` }, p.desc));
@@ -952,7 +952,7 @@ export function wireSettingsWebview(
       const filtered = themeFilter === "all" ? THEMES : THEMES.filter((t) => t.type === themeFilter);
       for (const theme of filtered) {
         const card = el("div", {
-          style: `cursor:pointer;border-radius:8px;overflow:hidden;border:2px solid ${theme.name === activeTheme ? C.accent : C.border};transition:border-color .15s;background:${C.cardBg ?? "#2d2d30"};`,
+          style: `cursor:pointer;border-radius:8px;overflow:hidden;border:2px solid ${theme.name === activeTheme ? C.accent : C.border};transition:border-color .15s;background:${C.cardBg};`,
         });
 
         // Preview
@@ -1040,7 +1040,7 @@ export function wireSettingsWebview(
         for (let i = 0; i < parts.length; i++) {
           if (i > 0) keySpan.appendChild(el("span", { style: `color:${C.fgDim};font-size:10px;` }, "+"));
           keySpan.appendChild(el("span", {
-            style: `display:inline-block;padding:2px 6px;background:${C.cardBg ?? "#2d2d30"};border:1px solid ${C.borderLight};border-radius:3px;font-size:11px;color:${C.fg};font-family:monospace;`,
+            style: `display:inline-block;padding:2px 6px;background:${C.cardBg};border:1px solid ${C.borderLight};border-radius:3px;font-size:11px;color:${C.fg};font-family:monospace;`,
           }, parts[i].trim()));
         }
         const whenSpan = el("span", { style: `width:120px;font-size:11px;color:${C.fgDim};` }, kb.when || "—");

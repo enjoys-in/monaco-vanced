@@ -32,7 +32,7 @@ export function buildSettingsRedirect(ctx: ViewContext): HTMLElement {
   ]) {
     const row = el("div", { class: "vsc-file-item", style: `display:flex;flex-direction:column;align-items:flex-start;padding:8px 12px;cursor:pointer;border-radius:6px;` });
     row.append(
-      el("span", { style: `font-size:13px;color:${C.textLink ?? C.accent};` }, label),
+      el("span", { style: `font-size:13px;color:${C.textLink};` }, label),
       el("span", { style: `font-size:11px;color:${C.fgDim};` }, desc),
     );
     row.addEventListener("click", () => {

@@ -98,7 +98,7 @@ export function buildShell(root: HTMLElement): DOMRefs {
 
   // Tab bar
   const tabBar = el("div", {
-    style: `display:flex;align-items:stretch;height:35px;min-height:35px;background:${C.tabInactiveBg};border-bottom:1px solid ${C.border};`,
+    style: `display:flex;align-items:stretch;height:38px;min-height:38px;background:${C.tabInactiveBg};border-bottom:1px solid ${C.border};`,
   });
   const tabList = el("div", {
     class: "vsc-tab-bar",

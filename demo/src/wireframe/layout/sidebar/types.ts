@@ -2,11 +2,13 @@
 
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
 import type { WireframeAPIs, VirtualFile } from "../../types";
+import type { ExplorerIconAPI } from "../../../explorer";
 
 export interface ViewContext {
   files: VirtualFile[];
   apis: WireframeAPIs;
   eventBus: InstanceType<typeof EventBus>;
+  iconApi?: ExplorerIconAPI;
 }
 
 // ── Plugin catalog — all 81 modules across 12 categories ────

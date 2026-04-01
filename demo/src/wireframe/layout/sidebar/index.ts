@@ -32,7 +32,7 @@ export function wireSidebar(
 ) {
   let activeViewId = "explorer";
   const viewContainers: Record<string, HTMLElement> = {};
-  const ctx: ViewContext = { files, apis, eventBus };
+  const ctx: ViewContext = { files, apis, eventBus, iconApi: extras?.iconApi };
 
   // ── Explorer instance (if mockFs is provided) ──────────
   let explorer: Explorer | null = null;

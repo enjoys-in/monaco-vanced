@@ -28,9 +28,9 @@ export function wireWelcomePage(
 
     // ── Logo / Brand ─────────────────────────────────────────
     const logo = el("div", {
-      style: `display:flex;align-items:center;justify-content:center;width:72px;height:72px;border-radius:16px;background:linear-gradient(135deg, ${C.accent}22, ${C.accent}08);margin-bottom:20px;`,
+      style: `display:flex;align-items:center;justify-content:center;width:72px;height:72px;border-radius:16px;background:linear-gradient(135deg, color-mix(in srgb, ${C.accent} 13%, transparent), color-mix(in srgb, ${C.accent} 3%, transparent));margin-bottom:20px;`,
     });
-    logo.innerHTML = `<svg width="40" height="40" viewBox="0 0 24 24" fill="${C.accent}"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>`;
+    logo.innerHTML = `<svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor" style="color:${C.accent}"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>`;
 
     const title = el("div", {
       style: `font-size:24px;font-weight:300;color:${C.fg};margin-bottom:4px;letter-spacing:-0.5px;`,

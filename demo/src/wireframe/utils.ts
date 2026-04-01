@@ -25,8 +25,16 @@ export function escapeHtml(s: string): string {
 export function langColor(ext: string): string {
   const map: Record<string, string> = {
     ts: "#3178c6", tsx: "#3178c6", js: "#f7df1e", jsx: "#f7df1e",
-    json: "#a9a9a9", css: "#563d7c", html: "#e44d26", md: "#ffffff",
-    py: "#3572a5", rs: "#dea584", go: "#00add8", yml: "#cb171e", yaml: "#cb171e",
+    json: "#a9a9a9", css: "#563d7c", scss: "#bf4080", less: "#1d365d",
+    html: "#e44d26", md: "#ffffff", py: "#3572a5", rs: "#dea584",
+    go: "#00add8", yml: "#cb171e", yaml: "#cb171e", toml: "#9c4121",
+    sql: "#e38c00", sh: "#89e051", bash: "#89e051", vue: "#41b883",
+    svelte: "#ff3e00", java: "#b07219", kt: "#a97bff", swift: "#f05138",
+    rb: "#cc342d", php: "#4f5d95", c: "#555555", cpp: "#f34b7d", h: "#555555",
+    xml: "#0060ac", svg: "#ffb13b", txt: C.fgDim, lock: "#6c6c6c",
+    gitignore: "#f05032", env: "#ecd53f", dockerfile: "#384d54",
+    png: "#a074c4", jpg: "#a074c4", gif: "#a074c4", webp: "#a074c4",
+    wasm: "#654ff0",
   };
   return map[ext] ?? C.fgDim;
 }
@@ -37,10 +45,23 @@ export function getExt(name: string): string {
   return dot >= 0 ? name.slice(dot + 1).toLowerCase() : "";
 }
 
-/** Simple file icon SVG based on extension */
+/** Language-specific icon glyph for common extensions */
+function langGlyph(ext: string): string | null {
+  const glyphs: Record<string, string> = {
+    ts: "TS", tsx: "TX", js: "JS", jsx: "JX", json: "{ }", css: "#", scss: "S#",
+    html: "<>", md: "M↓", py: "Py", rs: "Rs", go: "Go", yml: "Y", yaml: "Y",
+    sql: "SQ", sh: "$_", vue: "V", svelte: "S", java: "Jv", swift: "Sw",
+    rb: "Rb", php: "<?", c: "C", cpp: "C+", h: ".h", xml: "<>", toml: "⚙",
+    svg: "◇", lock: "🔒", txt: "Tx", env: ".e",
+  };
+  return glyphs[ext] ?? null;
+}
+
+/** Simple file icon SVG based on extension — color-coded with language glyph */
 export function fileIconSvg(ext: string): string {
   const color = langColor(ext);
-  return `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 1h6.5L13 4.5V14a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z" stroke="${color}" stroke-width="1" fill="none"/><path d="M9.5 1v3.5H13" stroke="${color}" stroke-width="1" fill="none"/><text x="4" y="12" font-size="5" fill="${color}" font-family="monospace">${ext.slice(0, 3)}</text></svg>`;
+  const glyph = langGlyph(ext) ?? ext.slice(0, 3);
+  return `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 1h6.5L13 4.5V14a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z" stroke="${color}" stroke-width="1" fill="none"/><path d="M9.5 1v3.5H13" stroke="${color}" stroke-width="1" fill="none"/><text x="4" y="12" font-size="5" fill="${color}" font-family="monospace" font-weight="600">${glyph.slice(0, 3)}</text></svg>`;
 }
 
 // ── CSS keyframes & global wireframe styles (injected once) ──
@@ -103,7 +124,7 @@ if (typeof document !== "undefined" && !document.getElementById("wireframe-anims
       transition: border-color .15s, box-shadow .15s;
       font-family: inherit;
     }
-    .vsc-input:focus { border-color: ${C.focusBorder}; box-shadow: 0 0 0 1px ${C.focusBorder}33; }
+    .vsc-input:focus { border-color: ${C.focusBorder}; box-shadow: 0 0 0 1px color-mix(in srgb, ${C.focusBorder} 20%, transparent); }
     .vsc-input::placeholder { color: ${C.fgDim}; }
 
     /* Modern buttons */

@@ -1,6 +1,9 @@
 import "./style.css";
 import * as monaco from "monaco-editor";
 
+// ── Theme CSS custom properties (must init before wireframe) ─
+import { initThemeVars, switchTheme } from "./components/theme";
+
 // ── Core ─────────────────────────────────────────────────────
 import { createMonacoIDE } from "@enjoys/monaco-vanced/core/facade";
 import { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
@@ -49,7 +52,7 @@ import { createTerminalPlugin } from "@enjoys/monaco-vanced/devtools/terminal-mo
 import { createDebugPlugin } from "@enjoys/monaco-vanced/devtools/debugger-module";
 
 // ── Events ───────────────────────────────────────────────────
-import { FileEvents, PanelEvents, SidebarEvents } from "@enjoys/monaco-vanced/core/events";
+import { FileEvents, PanelEvents, SidebarEvents, SettingsEvents, ThemeEvents, TabEvents } from "@enjoys/monaco-vanced/core/events";
 
 // ── Monaco Workers ────────────────────────────────────────────
 
@@ -61,13 +64,35 @@ import htmlWorker from "monaco-editor/esm/vs/language/html/html.worker?worker";
 
 self.MonacoEnvironment = {
   getWorker(_workerId: string, label: string) {
-    if (label === "typescript" || label === "javascript") return new tsWorker();
+    if (label === "typescript" || label === "javascript" || label === "typescriptreact" || label === "javascriptreact") return new tsWorker();
     if (label === "json") return new jsonWorker();
     if (label === "css" || label === "scss" || label === "less") return new cssWorker();
     if (label === "html" || label === "handlebars" || label === "razor") return new htmlWorker();
     return new editorWorker();
   },
 };
+
+// ── Configure TypeScript for JSX support ─────────────────────
+monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
+  target: monaco.languages.typescript.ScriptTarget.ESNext,
+  module: monaco.languages.typescript.ModuleKind.ESNext,
+  moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
+  jsx: monaco.languages.typescript.JsxEmit.ReactJSX,
+  strict: true,
+  esModuleInterop: true,
+  allowSyntheticDefaultImports: true,
+  allowJs: true,
+  noEmit: true,
+});
+
+monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
+  target: monaco.languages.typescript.ScriptTarget.ESNext,
+  module: monaco.languages.typescript.ModuleKind.ESNext,
+  jsx: monaco.languages.typescript.JsxEmit.ReactJSX,
+  allowJs: true,
+  allowSyntheticDefaultImports: true,
+  noEmit: true,
+});
 
 // ── Mock File System ─────────────────────────────────────────
 import { createMockFs, seedDemoProject, type MockFsAPI } from "./mock-fs";
@@ -254,6 +279,9 @@ async function bootstrap() {
   const appRoot = document.getElementById("app");
   if (!appRoot) throw new Error("Missing #app element");
 
+  // ── Initialize theme CSS custom properties (before wireframe) ─
+  initThemeVars();
+
   const eventBus = new EventBus();
 
   // ── Mock File System ─────────────────────────────────────
@@ -267,8 +295,21 @@ async function bootstrap() {
   }
 
   // ── Mount Wireframe ──────────────────────────────────────
-  const { editorContainer } = mountWireframe(appRoot, apis, eventBus, DEMO_FILES, mockFs, {
+  const { editorContainer, settingsEl, welcomeEl, tabListEl, breadcrumbEl, titleCenterEl } = mountWireframe(appRoot, apis, eventBus, DEMO_FILES, mockFs, {
     iconApi: iconApi,
+  }, { useReactPanels: true, useReactTabs: true });
+
+  // ── Mount React components (Settings + Welcome + Tabs + Breadcrumbs) ──
+  const { mountReactComponents } = await import("./components/mount");
+  mountReactComponents({
+    settingsEl,
+    welcomeEl,
+    eventBus,
+    recentFiles: DEMO_FILES.slice(0, 6).map((f) => ({ uri: f.uri, name: f.name })),
+    tabListEl,
+    breadcrumbEl,
+    titleCenterEl,
+    iconApi,
   });
 
   const defaultFile = DEMO_FILES.find((f) => f.uri === "src/app.tsx")
@@ -302,17 +343,36 @@ async function bootstrap() {
     openFileInEditor(uri, DEMO_FILES);
   });
 
-  // ── Wire editor content changes → mock FS ────────────────
+  // ── Wire editor content changes → mock FS + dirty tracking ──
+  const originalContents = new Map<string, string>();
+  for (const file of DEMO_FILES) originalContents.set(file.uri, file.content);
+
   ide.editor.onDidChangeModelContent(() => {
     const model = ide.editor.getModel();
     if (!model) return;
     const uri = model.uri.path.replace(/^\//, "");
-    mockFs.writeFile(uri, model.getValue());
+    const currentValue = model.getValue();
+    mockFs.writeFile(uri, currentValue);
     eventBus.emit(FileEvents.Modified, { uri });
+
+    // Track dirty state
+    const original = originalContents.get(uri);
+    const dirty = original !== undefined && original !== currentValue;
+    eventBus.emit(TabEvents.Dirty, { uri, dirty });
+  });
+
+  // ── On file save → mark clean ──────────────────────────────
+  eventBus.on(FileEvents.Save, (payload: unknown) => {
+    const { uri } = payload as { uri: string };
+    const model = models.get(uri);
+    if (model) {
+      originalContents.set(uri, model.getValue());
+      eventBus.emit(TabEvents.Dirty, { uri, dirty: false });
+    }
   });
 
   // ── Wire settings changes → Monaco editor options ────────
-  eventBus.on("settings:change", (payload: unknown) => {
+  eventBus.on(SettingsEvents.Change, (payload: unknown) => {
     const { id, value } = payload as { id: string; value: unknown };
     const optMap: Record<string, string> = {
       "editor.fontSize": "fontSize",
@@ -335,10 +395,11 @@ async function bootstrap() {
     }
   });
 
-  // ── Wire theme changes → Monaco ──────────────────────────
-  eventBus.on("theme:change", (payload: unknown) => {
-    const { monacoTheme } = payload as { name: string; type: string; monacoTheme: string };
+  // ── Wire theme changes → Monaco + wireframe CSS vars ──────
+  eventBus.on(ThemeEvents.Changed, (payload: unknown) => {
+    const { name, monacoTheme } = payload as { name: string; type: string; monacoTheme: string };
     monaco.editor.setTheme(monacoTheme);
+    switchTheme(name);
   });
 
   // ══════════════════════════════════════════════════════════
@@ -458,7 +519,121 @@ async function bootstrap() {
   // ══════════════════════════════════════════════════════════
 
   
+const actions: monaco.editor.IActionDescriptor[] = [
+   
+    {
+      id: "antigravity.toggleSidebar",
+      label: "Toggle Sidebar",
+      contextMenuGroupId: "z_commands",
+      contextMenuOrder: 2,
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyB],
+      run: () => { eventBus.emit(SidebarEvents.Toggle, {}); },
+    },
+    {
+      id: "antigravity.togglePanel",
+      label: "Toggle Panel",
+      contextMenuGroupId: "z_commands",
+      contextMenuOrder: 3,
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyJ],
+      run: () => { eventBus.emit(PanelEvents.BottomToggle, {}); },
+    },
+    {
+      id: "antigravity.openSettings",
+      label: "Open Settings",
+      contextMenuGroupId: "z_commands",
+      contextMenuOrder: 4,
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Comma],
+      run: () => { eventBus.emit(SettingsEvents.UIOpen, {}); },
+    },
 
+    // ── Palette-only (no contextMenuGroupId) ──────────────
+    {
+      id: "antigravity.find",
+      label: "Find",
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF],
+      run: (ed) => { ed.getAction("actions.find")?.run(); },
+    },
+    {
+      id: "antigravity.findReplace",
+      label: "Find and Replace",
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyH],
+      run: (ed) => { ed.getAction("editor.action.startFindReplaceAction")?.run(); },
+    },
+    {
+      id: "antigravity.selectAll",
+      label: "Select All",
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyA],
+      run: (ed) => { ed.getAction("editor.action.selectAll")?.run(); },
+    },
+    {
+      id: "antigravity.expandSelection",
+      label: "Expand Selection",
+      run: (ed) => { ed.getAction("editor.action.smartSelect.expand")?.run(); },
+    },
+ 
+    {
+      id: "antigravity.showSourceControl",
+      label: "Show Source Control",
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyG],
+      run: () => { eventBus.emit(SidebarEvents.ViewActivate, { viewId: "scm" }); },
+    },
+    {
+      id: "antigravity.showDebug",
+      label: "Show Run and Debug",
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyD],
+      run: () => { eventBus.emit(SidebarEvents.ViewActivate, { viewId: "debug" }); },
+    },
+    {
+      id: "antigravity.showExtensions",
+      label: "Show Extensions",
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyX],
+      run: () => { eventBus.emit(SidebarEvents.ViewActivate, { viewId: "extensions" }); },
+    },
+    // File
+    {
+      id: "antigravity.saveFile",
+      label: "Save File",
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS],
+      run: () => { notificationApi.show({ type: "success", message: "File saved.", duration: 2000 }); },
+    },
+    {
+      id: "antigravity.newFile",
+      label: "New File",
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyN],
+      run: () => { notificationApi.show({ type: "info", message: "Use Explorer > New File toolbar button.", duration: 3000 }); },
+    },
+    // Help
+    {
+      id: "antigravity.welcome",
+      label: "Welcome",
+      run: () => { notificationApi.show({ type: "info", message: "Welcome to Antigravity — Monaco Vanced IDE", duration: 4000 }); },
+    },
+    {
+      id: "antigravity.about",
+      label: "About",
+      run: () => { notificationApi.show({ type: "info", message: "Monaco Vanced v0.2.0 — Plugin-based IDE Architecture", duration: 4000 }); },
+    },
+    // Language
+    {
+      id: "antigravity.changeLanguageMode",
+      label: "Change Language Mode",
+      run: () => { notificationApi.show({ type: "info", message: "Language mode selection coming soon.", duration: 3000 }); },
+    },
+  ];
+
+  // Register all actions with Monaco — appears in both palette + context menu
+  for (const action of actions) {
+    ide.editor.addAction(action);
+  }
+
+  // Also register with command module for wireframe palette
+  for (const action of actions) {
+    commandApi.register({
+      id: action.id,
+      label: action.label,
+      handler: () => action.run(ide.editor, undefined as never),
+    });
+  }
   // ══════════════════════════════════════════════════════════
   // Open default file + welcome notification
   // ══════════════════════════════════════════════════════════
