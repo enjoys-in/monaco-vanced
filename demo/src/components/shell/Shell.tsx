@@ -172,8 +172,9 @@ export const Shell = forwardRef<ShellHandle, {
   statusbarApi?: StatusBarProps["statusbarApi"];
   contextMenuApi?: { dismiss(): void };
   aiApi?: AiChatProps["aiApi"];
+  indexerApi?: AiChatProps["indexerApi"];
   files?: { uri: string; name: string }[];
-}>(function Shell({ rootEl, eventBus, authApi, commandApi, statusbarApi, contextMenuApi, aiApi, files }, ref) {
+}>(function Shell({ rootEl, eventBus, authApi, commandApi, statusbarApi, contextMenuApi, aiApi, indexerApi, files }, ref) {
   const [chatVisible, setChatVisible] = useState(false);
 
   // Listen for copilot toggle from activity bar or command
@@ -288,6 +289,7 @@ export const Shell = forwardRef<ShellHandle, {
           <AiChat
             eventBus={eventBus}
             aiApi={aiApi}
+            indexerApi={indexerApi}
             visible={chatVisible}
             onClose={() => setChatVisible(false)}
             files={files}

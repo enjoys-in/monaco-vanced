@@ -12,6 +12,15 @@ interface ChatMessage {
   timestamp: number;
   action?: "explain" | "generate" | "fix";
   attachedFiles?: string[];
+  attachedSymbols?: AttachedSymbol[];
+  attachedSelection?: { text: string; file: string; startLine: number; endLine: number };
+}
+
+interface AttachedSymbol {
+  name: string;
+  kind: string;
+  file: string;
+  line: number;
 }
 
 export interface AiChatProps {
@@ -25,9 +34,14 @@ export interface AiChatProps {
     abort(): void;
     getStatus(): string;
   };
+  indexerApi?: {
+    query(q: { name?: string; kind?: string; file?: string }): { name: string; kind: string; path: string; line: number; column: number }[];
+    getFileSymbols(path: string): { name: string; kind: string; path: string; line: number; column: number }[];
+    isReady(): boolean;
+  };
   visible: boolean;
   onClose: () => void;
-  files?: { uri: string; name: string }[];
+  files?: { uri: string; name: string; content?: string }[];
 }
 
 // ── Sparkle icon SVG ─────────────────────────────────────────
@@ -39,6 +53,30 @@ const ClearIcon = `<svg width="16" height="16" viewBox="0 0 16 16" fill="current
 const AttachIcon = `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M11.006 3.73l-4.97 4.97a1.496 1.496 0 002.117 2.117l5.678-5.677a2.992 2.992 0 00-4.232-4.232L3.92 6.587a4.487 4.487 0 006.348 6.348l.007-.007 4.97-4.97-.707-.707-4.97 4.97-.007.007a3.488 3.488 0 01-4.934-4.934l5.678-5.678a1.992 1.992 0 112.818 2.818L7.454 11.11a.496.496 0 01-.703-.703l4.97-4.97-.707-.707z"/></svg>`;
 const FileIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M13.71 4.29l-3-3L10 1H4L3 2v12l1 1h8l1-1V5l-.29-.71zM13 14H4V2h5v4h4v8z"/></svg>`;
 const AtIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 107 7 1 1 0 00-2 0 5 5 0 11-5-5 3 3 0 013 3v1a1 1 0 01-2 0V7a1 1 0 012 0 3 3 0 11-3-3 5 5 0 015 5v1a3 3 0 01-6 0V7a5 5 0 00-5 5 7 7 0 007 7z"/></svg>`;
+const SymbolIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M11.5 1h-7L3 2.5v11l1.5 1.5h7l1.5-1.5v-11L11.5 1zM11 13H5V3h6v10z"/><path d="M7 5h2v1H7V5zm0 2h3v1H7V7zm0 2h3v1H7V9z"/></svg>`;
+const SelectionIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2h12v1H2V2zm0 3h12v1H2V5zm0 3h8v1H2V8zm0 3h10v1H2v-1z"/></svg>`;
+const HashIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M3.5 2L2.5 8h3l-.5 3h-2l-.2 1h2l-.3 2h1l.3-2h2l-.3 2h1l.3-2h2l.2-1h-2l.5-3h2l.2-1h-2L7.7 2h-1L6.2 7h-2L4.5 2h-1zm3.2 5l-.5 3h-2l.5-3h2z"/></svg>`;
+
+// ── Symbol kind → icon color ─────────────────────────────────
+function symbolKindColor(kind: string): string {
+  const map: Record<string, string> = {
+    function: "#dcdcaa", method: "#dcdcaa", class: "#4ec9b0",
+    interface: "#4ec9b0", variable: "#9cdcfe", constant: "#4fc1ff",
+    enum: "#b5cea8", property: "#9cdcfe", type: "#4ec9b0",
+    module: "#c586c0", namespace: "#c586c0", import: "#c586c0",
+  };
+  return map[kind.toLowerCase()] || "#d4d4d4";
+}
+
+// ── Symbol kind → short label ────────────────────────────────
+function symbolKindLabel(kind: string): string {
+  const map: Record<string, string> = {
+    function: "fn", method: "fn", class: "class", interface: "iface",
+    variable: "var", constant: "const", enum: "enum", property: "prop",
+    type: "type", module: "mod", namespace: "ns", import: "imp",
+  };
+  return map[kind.toLowerCase()] || kind.slice(0, 4);
+}
 
 // ── File extension → color mapping ───────────────────────────
 function fileColor(name: string): string {
@@ -77,14 +115,17 @@ function renderContent(text: string): string {
 }
 
 // ── Component ────────────────────────────────────────────────
-export function AiChat({ eventBus, aiApi, visible, onClose, files = [] }: AiChatProps) {
+export function AiChat({ eventBus, aiApi, indexerApi, visible, onClose, files = [] }: AiChatProps) {
   const { tokens: t } = useTheme();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [panelWidth, setPanelWidth] = useState(380);
   const [attachedFiles, setAttachedFiles] = useState<string[]>([]);
+  const [attachedSymbols, setAttachedSymbols] = useState<AttachedSymbol[]>([]);
+  const [attachedSelection, setAttachedSelection] = useState<ChatMessage["attachedSelection"] | null>(null);
   const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionMode, setMentionMode] = useState<"file" | "symbol">("file");
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionIdx, setMentionIdx] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -121,6 +162,24 @@ export function AiChat({ eventBus, aiApi, visible, onClose, files = [] }: AiChat
     ? files.filter((f) => f.uri.toLowerCase().includes(mentionQuery.toLowerCase()) || f.name.toLowerCase().includes(mentionQuery.toLowerCase())).slice(0, 8)
     : files.slice(0, 8);
 
+  // ── Symbol mention filtering ─────────────────────────────
+  const filteredSymbols = (() => {
+    if (!indexerApi?.isReady()) return [];
+    if (mentionQuery) {
+      return indexerApi.query({ name: mentionQuery }).slice(0, 10);
+    }
+    // Show symbols from current file
+    const model = (window as Record<string, unknown>).editor as { getModel(): { uri: { path: string } } | null } | undefined;
+    const currentPath = model?.getModel()?.uri.path?.replace(/^\/+/, "") ?? "";
+    if (currentPath) return indexerApi.getFileSymbols(currentPath).slice(0, 10);
+    return [];
+  })();
+
+  // Unified filtered list for active mention mode
+  const mentionItems = mentionMode === "file"
+    ? filteredFiles.map((f) => ({ id: f.uri, label: f.uri, secondary: f.name, kind: "file" as const, color: fileColor(f.name) }))
+    : filteredSymbols.map((s) => ({ id: `${s.path}:${s.name}:${s.line}`, label: s.name, secondary: `${symbolKindLabel(s.kind)} — ${s.path}:${s.line}`, kind: "symbol" as const, color: symbolKindColor(s.kind), _sym: s }));
+
   const addFileAttachment = useCallback((uri: string) => {
     setAttachedFiles((prev) => prev.includes(uri) ? prev : [...prev, uri]);
     // Remove the @query from input
@@ -134,8 +193,33 @@ export function AiChat({ eventBus, aiApi, visible, onClose, files = [] }: AiChat
     inputRef.current?.focus();
   }, []);
 
+  const addSymbolAttachment = useCallback((sym: { name: string; kind: string; path: string; line: number }) => {
+    setAttachedSymbols((prev) => {
+      const key = `${sym.path}:${sym.name}:${sym.line}`;
+      if (prev.some((s) => `${s.file}:${s.name}:${s.line}` === key)) return prev;
+      return [...prev, { name: sym.name, kind: sym.kind, file: sym.path, line: sym.line }];
+    });
+    setInput((prev) => {
+      const hashIdx = prev.lastIndexOf("#");
+      return hashIdx >= 0 ? prev.slice(0, hashIdx) : prev;
+    });
+    setMentionOpen(false);
+    setMentionQuery("");
+    setMentionIdx(0);
+    inputRef.current?.focus();
+  }, []);
+
+  const addSelectionAttachment = useCallback(() => {
+    const sel = getEditorSelectionDetail();
+    if (sel) setAttachedSelection(sel);
+  }, []);
+
   const removeAttachment = useCallback((uri: string) => {
     setAttachedFiles((prev) => prev.filter((f) => f !== uri));
+  }, []);
+
+  const removeSymbolAttachment = useCallback((key: string) => {
+    setAttachedSymbols((prev) => prev.filter((s) => `${s.file}:${s.name}:${s.line}` !== key));
   }, []);
 
   // Auto-scroll on new messages
@@ -155,10 +239,19 @@ export function AiChat({ eventBus, aiApi, visible, onClose, files = [] }: AiChat
     if (!text.trim() || isStreaming) return;
 
     const currentAttached = [...attachedFiles];
-    const userMsg: ChatMessage = { id: nextId(), role: "user", content: text.trim(), timestamp: Date.now(), action, attachedFiles: currentAttached.length > 0 ? currentAttached : undefined };
+    const currentSymbols = [...attachedSymbols];
+    const currentSelection = attachedSelection;
+    const userMsg: ChatMessage = {
+      id: nextId(), role: "user", content: text.trim(), timestamp: Date.now(), action,
+      attachedFiles: currentAttached.length > 0 ? currentAttached : undefined,
+      attachedSymbols: currentSymbols.length > 0 ? currentSymbols : undefined,
+      attachedSelection: currentSelection ?? undefined,
+    };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setAttachedFiles([]);
+    setAttachedSymbols([]);
+    setAttachedSelection(null);
     setIsStreaming(true);
 
     // Add a placeholder for assistant
@@ -172,14 +265,28 @@ export function AiChat({ eventBus, aiApi, visible, onClose, files = [] }: AiChat
       if (currentAttached.length > 0) {
         const fileSnippets = currentAttached.map((uri) => {
           const file = files.find((f) => f.uri === uri);
-          return file ? `File: ${file.uri}` : null;
+          if (!file) return null;
+          const content = file.content ?? (getFileContent(uri) || "");
+          const preview = content.split("\n").slice(0, 50).join("\n");
+          return `--- File: ${file.uri} ---\n${preview}${content.split("\n").length > 50 ? "\n... (truncated)" : ""}`;
         }).filter(Boolean);
-        fileContext = `\n\nReferenced files:\n${fileSnippets.join("\n")}`;
+        fileContext = `\n\nAttached files:\n${fileSnippets.join("\n\n")}`;
+      }
+      // Build symbol context
+      let symbolContext = "";
+      if (currentSymbols.length > 0) {
+        const symDescriptions = currentSymbols.map((s) => `${s.kind} ${s.name} (${s.file}:${s.line})`);
+        symbolContext = `\n\nReferenced symbols:\n${symDescriptions.join("\n")}`;
+      }
+      // Build selection context
+      let selectionContext = "";
+      if (currentSelection) {
+        selectionContext = `\n\nSelected code (${currentSelection.file} L${currentSelection.startLine}-${currentSelection.endLine}):\n\`\`\`\n${currentSelection.text}\n\`\`\``;
       }
       const res = await aiApi.chat([
         { role: "system", content: "You are a helpful AI coding assistant embedded in Monaco Vanced IDE." },
         ...messages.slice(-10).map((m) => ({ role: m.role, content: m.content })),
-        { role: "user", content: `${prefix}${text.trim()}${fileContext}` },
+        { role: "user", content: `${prefix}${text.trim()}${fileContext}${symbolContext}${selectionContext}` },
       ]);
       setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, content: res.content, timestamp: Date.now() } : m)));
     } catch {
@@ -187,7 +294,7 @@ export function AiChat({ eventBus, aiApi, visible, onClose, files = [] }: AiChat
     } finally {
       setIsStreaming(false);
     }
-  }, [aiApi, isStreaming, messages, attachedFiles, files]);
+  }, [aiApi, isStreaming, messages, attachedFiles, attachedSymbols, attachedSelection, files]);
 
   // Listen for context menu AI actions
   useEffect(() => {
@@ -235,7 +342,7 @@ export function AiChat({ eventBus, aiApi, visible, onClose, files = [] }: AiChat
     if (mentionOpen) {
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setMentionIdx((i) => Math.min(i + 1, filteredFiles.length - 1));
+        setMentionIdx((i) => Math.min(i + 1, mentionItems.length - 1));
         return;
       }
       if (e.key === "ArrowUp") {
@@ -245,7 +352,11 @@ export function AiChat({ eventBus, aiApi, visible, onClose, files = [] }: AiChat
       }
       if (e.key === "Enter" || e.key === "Tab") {
         e.preventDefault();
-        if (filteredFiles[mentionIdx]) addFileAttachment(filteredFiles[mentionIdx].uri);
+        const item = mentionItems[mentionIdx];
+        if (item) {
+          if (item.kind === "file") addFileAttachment(item.id);
+          else if (item.kind === "symbol" && "_sym" in item) addSymbolAttachment((item as unknown as { _sym: { name: string; kind: string; path: string; line: number } })._sym);
+        }
         return;
       }
       if (e.key === "Escape") {
@@ -263,21 +374,33 @@ export function AiChat({ eventBus, aiApi, visible, onClose, files = [] }: AiChat
   const handleInputChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setInput(val);
-    // Detect @ mention
+
+    // Detect # symbol mention (takes priority if cursor is after #)
+    const hashIdx = val.lastIndexOf("#");
     const atIdx = val.lastIndexOf("@");
+
+    if (hashIdx >= 0 && hashIdx > atIdx) {
+      const afterHash = val.slice(hashIdx + 1);
+      if (!afterHash.includes("\n") && indexerApi?.isReady()) {
+        setMentionOpen(true);
+        setMentionMode("symbol");
+        setMentionQuery(afterHash);
+        setMentionIdx(0);
+        return;
+      }
+    }
+    // Detect @ file mention
     if (atIdx >= 0) {
       const afterAt = val.slice(atIdx + 1);
-      // Only open if no space before the query part (simple heuristic)
       if (!afterAt.includes("\n")) {
         setMentionOpen(true);
+        setMentionMode("file");
         setMentionQuery(afterAt);
         setMentionIdx(0);
-      } else {
-        setMentionOpen(false);
+        return;
       }
-    } else {
-      setMentionOpen(false);
     }
+    setMentionOpen(false);
   };
 
   const clearChat = () => {
@@ -435,7 +558,7 @@ export function AiChat({ eventBus, aiApi, visible, onClose, files = [] }: AiChat
             <div style={S.emptyTitle}>How can I help you?</div>
             <div style={S.emptySubtitle}>
               Ask me about your code, or use the suggestions below to get started.
-              <br />Type <strong>@</strong> to attach a file as context.
+              <br />Type <strong>@</strong> to attach file, <strong>#</strong> to reference symbol.
             </div>
             <div style={S.suggestions}>
               {SUGGESTIONS.map((s) => (
@@ -457,9 +580,9 @@ export function AiChat({ eventBus, aiApi, visible, onClose, files = [] }: AiChat
             msg.role === "user" ? (
               <div key={msg.id} style={S.userMsg}>
                 {/* Attached file chips on user message */}
-                {msg.attachedFiles && msg.attachedFiles.length > 0 && (
+                {((msg.attachedFiles && msg.attachedFiles.length > 0) || (msg.attachedSymbols && msg.attachedSymbols.length > 0) || msg.attachedSelection) && (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 4, justifyContent: "flex-end" }}>
-                    {msg.attachedFiles.map((uri) => {
+                    {msg.attachedFiles?.map((uri) => {
                       const name = uri.split("/").pop() ?? uri;
                       return (
                         <span key={uri} style={{
@@ -472,6 +595,26 @@ export function AiChat({ eventBus, aiApi, visible, onClose, files = [] }: AiChat
                         </span>
                       );
                     })}
+                    {msg.attachedSymbols?.map((sym) => (
+                      <span key={`${sym.file}:${sym.name}:${sym.line}`} style={{
+                        display: "inline-flex", alignItems: "center", gap: 3,
+                        padding: "2px 6px", borderRadius: 4, fontSize: 11,
+                        background: "rgba(255,255,255,0.1)", color: t.fgDim,
+                      }}>
+                        <span style={{ color: symbolKindColor(sym.kind), fontWeight: 600, fontSize: 10 }}>{symbolKindLabel(sym.kind)}</span>
+                        <span style={{ color: symbolKindColor(sym.kind) }}>{sym.name}</span>
+                      </span>
+                    ))}
+                    {msg.attachedSelection && (
+                      <span style={{
+                        display: "inline-flex", alignItems: "center", gap: 3,
+                        padding: "2px 6px", borderRadius: 4, fontSize: 11,
+                        background: "rgba(255,255,255,0.1)", color: t.fgDim,
+                      }}>
+                        <span dangerouslySetInnerHTML={{ __html: SelectionIcon }} style={{ color: "#569cd6" }} />
+                        <span>L{msg.attachedSelection.startLine}-{msg.attachedSelection.endLine}</span>
+                      </span>
+                    )}
                   </div>
                 )}
                 <div style={S.userBubble}>{msg.content}</div>
@@ -508,7 +651,7 @@ export function AiChat({ eventBus, aiApi, visible, onClose, files = [] }: AiChat
         )}
 
         {/* Attached files chips */}
-        {attachedFiles.length > 0 && (
+        {(attachedFiles.length > 0 || attachedSymbols.length > 0 || attachedSelection) && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 6 }}>
             {attachedFiles.map((uri) => {
               const name = uri.split("/").pop() ?? uri;
@@ -528,30 +671,70 @@ export function AiChat({ eventBus, aiApi, visible, onClose, files = [] }: AiChat
                 </span>
               );
             })}
+            {attachedSymbols.map((sym) => {
+              const key = `${sym.file}:${sym.name}:${sym.line}`;
+              return (
+                <span key={key} style={{
+                  display: "inline-flex", alignItems: "center", gap: 4,
+                  padding: "3px 8px", borderRadius: 4, fontSize: 12,
+                  background: t.cardBg, border: `1px solid ${t.border}`, color: t.fg,
+                }}>
+                  <span dangerouslySetInnerHTML={{ __html: SymbolIcon }} style={{ color: symbolKindColor(sym.kind), flexShrink: 0 }} />
+                  <span style={{ color: symbolKindColor(sym.kind), fontWeight: 500 }}>{sym.name}</span>
+                  <span style={{ fontSize: 10, color: t.fgDim }}>{symbolKindLabel(sym.kind)}</span>
+                  <span
+                    style={{ cursor: "pointer", color: t.fgDim, marginLeft: 2, fontSize: 14, lineHeight: 1 }}
+                    onClick={() => removeSymbolAttachment(key)}
+                    title="Remove"
+                  >×</span>
+                </span>
+              );
+            })}
+            {attachedSelection && (
+              <span style={{
+                display: "inline-flex", alignItems: "center", gap: 4,
+                padding: "3px 8px", borderRadius: 4, fontSize: 12,
+                background: t.cardBg, border: `1px solid ${t.border}`, color: t.fg,
+              }}>
+                <span dangerouslySetInnerHTML={{ __html: SelectionIcon }} style={{ color: "#569cd6", flexShrink: 0 }} />
+                <span style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {attachedSelection.file.split("/").pop()} L{attachedSelection.startLine}-{attachedSelection.endLine}
+                </span>
+                <span
+                  style={{ cursor: "pointer", color: t.fgDim, marginLeft: 2, fontSize: 14, lineHeight: 1 }}
+                  onClick={() => setAttachedSelection(null)}
+                  title="Remove"
+                >×</span>
+              </span>
+            )}
           </div>
         )}
 
         {/* Input row with mention dropdown */}
         <div style={{ position: "relative" }}>
-          {/* @ Mention dropdown */}
-          {mentionOpen && filteredFiles.length > 0 && (
+          {/* Unified mention dropdown (@ files, # symbols) */}
+          {mentionOpen && mentionItems.length > 0 && (
             <div
               ref={mentionRef}
               style={{
                 position: "absolute", bottom: "100%", left: 0, right: 0,
                 background: t.menuBg, border: `1px solid ${t.border}`,
                 borderRadius: 6, boxShadow: "0 -4px 16px rgba(0,0,0,0.4)",
-                maxHeight: 200, overflowY: "auto", zIndex: 10,
+                maxHeight: 220, overflowY: "auto", zIndex: 10,
                 marginBottom: 4,
               }}
             >
-              <div style={{ padding: "4px 8px", fontSize: 11, color: t.fgDim, borderBottom: `1px solid ${t.border}` }}>
-                Attach file as context
+              <div style={{ padding: "4px 8px", fontSize: 11, color: t.fgDim, borderBottom: `1px solid ${t.border}`, display: "flex", alignItems: "center", gap: 4 }}>
+                <span dangerouslySetInnerHTML={{ __html: mentionMode === "file" ? FileIcon : HashIcon }} style={{ color: t.fgDim }} />
+                {mentionMode === "file" ? "Attach file as context" : "Reference a symbol"}
               </div>
-              {filteredFiles.map((f, i) => (
+              {mentionItems.map((item, i) => (
                 <div
-                  key={f.uri}
-                  onClick={() => addFileAttachment(f.uri)}
+                  key={item.id}
+                  onClick={() => {
+                    if (item.kind === "file") addFileAttachment(item.id);
+                    else if (item.kind === "symbol" && "_sym" in item) addSymbolAttachment((item as unknown as { _sym: { name: string; kind: string; path: string; line: number } })._sym);
+                  }}
                   onMouseEnter={() => setMentionIdx(i)}
                   style={{
                     display: "flex", alignItems: "center", gap: 6,
@@ -560,9 +743,16 @@ export function AiChat({ eventBus, aiApi, visible, onClose, files = [] }: AiChat
                     color: t.fg,
                   }}
                 >
-                  <span dangerouslySetInnerHTML={{ __html: FileIcon }} style={{ color: fileColor(f.name), flexShrink: 0 }} />
-                  <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.uri}</span>
-                  {attachedFiles.includes(f.uri) && (
+                  {item.kind === "file" ? (
+                    <span dangerouslySetInnerHTML={{ __html: FileIcon }} style={{ color: item.color, flexShrink: 0 }} />
+                  ) : (
+                    <span dangerouslySetInnerHTML={{ __html: SymbolIcon }} style={{ color: item.color, flexShrink: 0 }} />
+                  )}
+                  <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <span style={{ color: item.kind === "symbol" ? item.color : t.fg }}>{item.label}</span>
+                    {item.secondary && <span style={{ color: t.fgDim, fontSize: 11, marginLeft: 6 }}>{item.secondary}</span>}
+                  </span>
+                  {item.kind === "file" && attachedFiles.includes(item.id) && (
                     <span style={{ fontSize: 10, color: t.accent }}>✓</span>
                   )}
                 </div>
@@ -574,18 +764,36 @@ export function AiChat({ eventBus, aiApi, visible, onClose, files = [] }: AiChat
             <button
               title="Attach file (@)"
               style={{ ...S.iconBtn, flexShrink: 0 }}
-              onClick={() => { setMentionOpen(!mentionOpen); setMentionQuery(""); inputRef.current?.focus(); }}
+              onClick={() => { setMentionOpen(!mentionOpen); setMentionMode("file"); setMentionQuery(""); inputRef.current?.focus(); }}
               onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = t.hover; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
               dangerouslySetInnerHTML={{ __html: AttachIcon }}
             />
+            <button
+              title="Attach selection"
+              style={{ ...S.iconBtn, flexShrink: 0 }}
+              onClick={addSelectionAttachment}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = t.hover; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+              dangerouslySetInnerHTML={{ __html: SelectionIcon }}
+            />
+            {indexerApi && (
+              <button
+                title="Reference symbol (#)"
+                style={{ ...S.iconBtn, flexShrink: 0 }}
+                onClick={() => { setMentionOpen(!mentionOpen); setMentionMode("symbol"); setMentionQuery(""); inputRef.current?.focus(); }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = t.hover; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                dangerouslySetInnerHTML={{ __html: HashIcon }}
+              />
+            )}
             <textarea
               ref={inputRef}
               style={S.textarea}
               value={input}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              placeholder="Ask Copilot… (@ to attach file)"
+              placeholder="Ask Copilot… (@ file, # symbol)"
               rows={1}
               onInput={(e) => {
                 const el = e.currentTarget;
@@ -618,4 +826,34 @@ function getEditorSelection(): string {
   const sel = editor.getSelection();
   if (!model || !sel || sel.isEmpty()) return "";
   return model.getValueInRange(sel);
+}
+
+// ── Helper: get editor selection with detail ────────────────
+function getEditorSelectionDetail(): ChatMessage["attachedSelection"] | null {
+  const editor = (window as Record<string, unknown>).editor as {
+    getModel(): { getValueInRange(r: unknown): string; uri: { path: string } } | null;
+    getSelection(): { isEmpty(): boolean; startLineNumber: number; startColumn: number; endLineNumber: number; endColumn: number } | null;
+  } | undefined;
+  if (!editor) return null;
+  const model = editor.getModel();
+  const sel = editor.getSelection();
+  if (!model || !sel || sel.isEmpty()) return null;
+  return {
+    text: model.getValueInRange(sel),
+    file: model.uri.path.replace(/^\/+/, ""),
+    startLine: sel.startLineNumber,
+    endLine: sel.endLineNumber,
+  };
+}
+
+// ── Helper: get file content from Monaco models ─────────────
+function getFileContent(uri: string): string | null {
+  const monaco = (window as Record<string, unknown>).monaco as {
+    Uri: { parse(s: string): unknown };
+    editor: { getModel(uri: unknown): { getValue(): string } | null };
+  } | undefined;
+  if (!monaco) return null;
+  const monacoUri = monaco.Uri.parse(`file:///${uri}`);
+  const model = monaco.editor.getModel(monacoUri);
+  return model ? model.getValue() : null;
 }

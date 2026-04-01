@@ -24,6 +24,7 @@ export interface SidebarExtras {
   authApi?: import("@enjoys/monaco-vanced/infrastructure/auth-module").AuthModuleAPI;
   marketplaceApi?: import("@enjoys/monaco-vanced/extensions/marketplace-module").MarketplaceModuleAPI;
   aiApi?: { chat(messages: { role: string; content: string }[], opts?: Record<string, unknown>): Promise<{ content: string; metadata?: Record<string, unknown> }>; abort(): void; getStatus(): string };
+  indexerApi?: { query(q: { name?: string; kind?: string; file?: string }): { name: string; kind: string; path: string; line: number; column: number }[]; getFileSymbols(path: string): { name: string; kind: string; path: string; line: number; column: number }[]; isReady(): boolean };
 }
 
 export function wireSidebar(

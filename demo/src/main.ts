@@ -138,6 +138,7 @@ import {
   DecorationEvents, SnippetEvents, ProfilerEvents, TaskEvents, TestEvents,
   CrashEvents, SecurityEvents, AuditEvents, CollabEvents, ReviewEvents,
   NotebookEvents, GraphEvents, PredictEvents, PerformanceEvents, AiEvents,
+  IndexSymbolEvents, LspEvents, ContextEngineEvents,
 } from "@enjoys/monaco-vanced/core/events";
 
 // ── Builtin theme definitions for registration ───────────────
@@ -501,6 +502,7 @@ async function bootstrap() {
     authApi: authApi,
     marketplaceApi: marketplaceApi,
     aiApi: aiApi,
+    indexerApi: indexerApi,
   });
 
   const defaultFile = DEMO_FILES.find((f) => f.uri === "src/app.tsx")
@@ -1586,6 +1588,80 @@ const actions: monaco.editor.IActionDescriptor[] = [
 
   // ── 32. Worker — expose API for dev console ───────────────
   (window as Record<string, unknown>).__workerApi = workerApi;
+
+  // ── 33. Indexer — index all demo files for symbol search ──
+  for (const file of DEMO_FILES) {
+    indexerApi.indexFile(file.uri, file.content, file.language).catch(() => {});
+  }
+  // Re-index on file save
+  eventBus.on(FileEvents.Save, (p: unknown) => {
+    const { uri, content } = p as { uri: string; content?: string };
+    if (content) {
+      const file = DEMO_FILES.find((f) => f.uri === uri);
+      indexerApi.indexFile(uri, content, file?.language ?? "plaintext").catch(() => {});
+    }
+  });
+  // Log indexer events
+  eventBus.on(IndexSymbolEvents.Ready, () => {
+    console.log("[indexer] Symbol index ready");
+    statusbarApi.register({ id: "indexer-ready", label: "$(symbol-class) Indexed", alignment: "right", priority: 5, tooltip: "Symbol index ready" });
+  });
+  eventBus.on(IndexSymbolEvents.FileDone, (p: unknown) => {
+    const { path, symbolCount } = p as { path: string; symbolCount: number };
+    if (symbolCount > 0) console.log(`[indexer] ${path}: ${symbolCount} symbols`);
+  });
+
+  // ── 34. Context Engine — register demo languages ──────────
+  contextEngineApi.registerLanguage("typescript", "TypeScript");
+  contextEngineApi.registerLanguage("javascript", "JavaScript");
+  contextEngineApi.registerLanguage("css", "CSS");
+  contextEngineApi.registerLanguage("html", "HTML");
+  contextEngineApi.registerLanguage("json", "JSON");
+  contextEngineApi.registerLanguage("markdown", "Markdown");
+  // Register editor context as provider data
+  contextEngineApi.registerProviderData("typescript", "symbols", {
+    source: "indexer",
+    getSymbols: () => indexerApi.isReady() ? indexerApi.query({}) : [],
+  });
+  contextEngineApi.registerProviderData("typescript", "editor", {
+    source: "monaco",
+    getModel: () => ide.editor.getModel(),
+    getSelection: () => ide.editor.getSelection(),
+  });
+  eventBus.on(ContextEngineEvents.LanguageRegistered, (p: unknown) => {
+    const { id, name } = p as { id: string; name: string };
+    console.log(`[context-engine] Registered: ${name} (${id})`);
+  });
+  eventBus.on(ContextEngineEvents.ProviderLoaded, (p: unknown) => {
+    const { language, provider } = p as { language: string; provider: string };
+    console.log(`[context-engine] Provider loaded: ${provider} for ${language}`);
+  });
+
+  // ── 35. LSP Bridge — monitor connection status ────────────
+  eventBus.on(LspEvents.Connected, (p: unknown) => {
+    const { languageId } = p as { languageId?: string };
+    console.log(`[lsp] Connected${languageId ? ` (${languageId})` : ""}`);
+    statusbarApi.register({ id: "lsp-status", label: "$(plug) LSP", alignment: "right", priority: 4, tooltip: `LSP connected${languageId ? `: ${languageId}` : ""}` });
+  });
+  eventBus.on(LspEvents.Disconnected, () => {
+    console.log("[lsp] Disconnected");
+    statusbarApi.remove("lsp-status");
+  });
+  eventBus.on(LspEvents.Reconnecting, () => {
+    statusbarApi.update("lsp-status", { label: "$(loading~spin) LSP" });
+  });
+  eventBus.on(LspEvents.Failed, (p: unknown) => {
+    const { error } = p as { error?: string };
+    console.warn(`[lsp] Connection failed: ${error ?? "unknown"}`);
+    statusbarApi.update("lsp-status", { label: "$(error) LSP" });
+    setTimeout(() => statusbarApi.remove("lsp-status"), 5000);
+  });
+  eventBus.on(LspEvents.Diagnostics, (p: unknown) => {
+    const { uri, diagnostics } = p as { uri: string; diagnostics: { severity: number; message: string; range: { start: { line: number; character: number }; end: { line: number; character: number } } }[] };
+    if (diagnostics.length > 0) {
+      console.log(`[lsp] ${diagnostics.length} diagnostics for ${uri}`);
+    }
+  });
 
   // ── Expose all module APIs for dev console ────────────────
   (window as Record<string, unknown>).__apis = {
