@@ -57,11 +57,16 @@ function langGlyph(ext: string): string | null {
   return glyphs[ext] ?? null;
 }
 
-/** Simple file icon SVG based on extension — color-coded with language glyph */
+/** Simple file icon SVG based on extension — color-coded with language glyph (memoized) */
+const _iconSvgCache = new Map<string, string>();
 export function fileIconSvg(ext: string): string {
+  const cached = _iconSvgCache.get(ext);
+  if (cached) return cached;
   const color = langColor(ext);
   const glyph = langGlyph(ext) ?? ext.slice(0, 3);
-  return `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 1h6.5L13 4.5V14a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z" stroke="${color}" stroke-width="1" fill="none"/><path d="M9.5 1v3.5H13" stroke="${color}" stroke-width="1" fill="none"/><text x="4" y="12" font-size="5" fill="${color}" font-family="monospace" font-weight="600">${glyph.slice(0, 3)}</text></svg>`;
+  const svg = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 1h6.5L13 4.5V14a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z" stroke="${color}" stroke-width="1" fill="none"/><path d="M9.5 1v3.5H13" stroke="${color}" stroke-width="1" fill="none"/><text x="4" y="12" font-size="5" fill="${color}" font-family="monospace" font-weight="600">${glyph.slice(0, 3)}</text></svg>`;
+  _iconSvgCache.set(ext, svg);
+  return svg;
 }
 
 // ── CSS keyframes & global wireframe styles (injected once) ──

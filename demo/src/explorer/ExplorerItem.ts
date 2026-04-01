@@ -20,12 +20,18 @@ function folderClosedSvg(color: string): string {
   return `<svg width="16" height="16" viewBox="0 0 16 16" fill="${color}"><path d="M14.5 3H7.71l-.85-.85L6.51 2h-5l-.5.5v11l.5.5h13l.5-.5v-10L14.5 3zm-.51 8.49V13H2V3h4.29l.85.85.36.15h6.49v7.49z"/></svg>`;
 }
 
+const _fileIconCache = new Map<string, string>();
+
 function fileIconSvg(ext: string): string {
+  const cached = _fileIconCache.get(ext);
+  if (cached) return cached;
   const color = getExtColor(ext);
   // Extension-specific icons
   const special = getSpecialFileIcon(ext);
-  if (special) return special;
-  return `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 1h6.5L13 4.5V14a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z" stroke="${color}" stroke-width="1" fill="none"/><path d="M9.5 1v3.5H13" stroke="${color}" stroke-width="1" fill="none"/><text x="4" y="12" font-size="5" fill="${color}" font-family="monospace">${ext.slice(0, 3)}</text></svg>`;
+  if (special) { _fileIconCache.set(ext, special); return special; }
+  const svg = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 1h6.5L13 4.5V14a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z" stroke="${color}" stroke-width="1" fill="none"/><path d="M9.5 1v3.5H13" stroke="${color}" stroke-width="1" fill="none"/><text x="4" y="12" font-size="5" fill="${color}" font-family="monospace">${ext.slice(0, 3)}</text></svg>`;
+  _fileIconCache.set(ext, svg);
+  return svg;
 }
 
 function getSpecialFileIcon(ext: string): string | null {

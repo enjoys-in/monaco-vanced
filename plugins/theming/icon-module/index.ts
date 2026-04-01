@@ -23,6 +23,34 @@ export function createIconPlugin(config: IconConfig = {}): {
   let activeThemeId: string | null = null;
   let ctx: PluginContext | null = null;
 
+  // ── Blob URL cache — serves icons from memory after first fetch ──
+  const blobUrlCache = new Map<string, string>();
+  const pendingFetches = new Set<string>();
+
+  /** Fetch SVG → cache → create blob URL (background, fire-and-forget) */
+  function warmBlobUrl(cdnUrl: string): void {
+    if (blobUrlCache.has(cdnUrl) || pendingFetches.has(cdnUrl)) return;
+    pendingFetches.add(cdnUrl);
+
+    void svgCache.get(cdnUrl).then(async (cached) => {
+      let svg = cached;
+      if (!svg) {
+        try {
+          const r = await fetch(cdnUrl);
+          if (!r.ok) { pendingFetches.delete(cdnUrl); return; }
+          svg = await r.text();
+          void svgCache.set(cdnUrl, svg);
+        } catch {
+          pendingFetches.delete(cdnUrl);
+          return;
+        }
+      }
+      const blob = new Blob([svg], { type: "image/svg+xml" });
+      blobUrlCache.set(cdnUrl, URL.createObjectURL(blob));
+      pendingFetches.delete(cdnUrl);
+    });
+  }
+
   function getActiveTheme(): IconTheme | undefined {
     return activeThemeId ? themes.get(activeThemeId) : undefined;
   }
@@ -40,18 +68,14 @@ export function createIconPlugin(config: IconConfig = {}): {
           if (fromFolder) return fromFolder;
         }
       }
-      // Primary: use vscode-icons-js resolver
-      const url = vsIcons.resolve(filename, isDirectory, isOpen);
-      // Trigger background caching
-      void svgCache.get(url).then((cached) => {
-        if (!cached) {
-          void fetch(url)
-            .then((r) => r.text())
-            .then((svg) => svgCache.set(url, svg))
-            .catch(() => {});
-        }
-      });
-      return url;
+      // Primary: use vscode-icons-js resolver → CDN URL
+      const cdnUrl = vsIcons.resolve(filename, isDirectory, isOpen);
+      // Return blob URL from cache if available (instant, no network)
+      const blobUrl = blobUrlCache.get(cdnUrl);
+      if (blobUrl) return blobUrl;
+      // First hit: trigger background fetch → blob URL cache
+      warmBlobUrl(cdnUrl);
+      return cdnUrl;
     },
 
     getCodicon(name: string): string {
@@ -59,7 +83,11 @@ export function createIconPlugin(config: IconConfig = {}): {
     },
 
     getCodiconUrl(name: string): string {
-      return codicons.svgUrl(name);
+      const cdnUrl = codicons.svgUrl(name);
+      const blobUrl = blobUrlCache.get(cdnUrl);
+      if (blobUrl) return blobUrl;
+      warmBlobUrl(cdnUrl);
+      return cdnUrl;
     },
 
     registerTheme(theme: IconTheme) {
@@ -120,9 +148,28 @@ export function createIconPlugin(config: IconConfig = {}): {
       });
 
       ctx.emit(IconEvents.Ready, {});
+
+      // Preload common file/folder icon SVGs into blob URL cache
+      const commonFiles = [
+        "file.ts", "file.tsx", "file.js", "file.jsx", "file.json", "file.css", "file.scss",
+        "file.html", "file.md", "file.py", "file.rs", "file.go", "file.yaml", "file.toml",
+        "file.svg", "file.png", "file.txt", "file.sh", "file.sql", "file.xml", "file.graphql",
+        "package.json", "tsconfig.json", ".gitignore", "README.md", "Dockerfile", ".env",
+        "vite.config.ts", "vitest.config.ts", "eslint.config.mjs", "tailwind.config.ts",
+      ];
+      const commonFolders = ["src", "lib", "node_modules", "dist", "public", "components", "pages", "api", "hooks", "utils", "styles", "tests", "assets"];
+      for (const f of commonFiles) warmBlobUrl(vsIcons.resolve(f, false));
+      for (const d of commonFolders) {
+        warmBlobUrl(vsIcons.resolve(d, true, false));
+        warmBlobUrl(vsIcons.resolve(d, true, true));
+      }
     },
 
     onDispose() {
+      // Revoke blob URLs to free memory
+      for (const url of blobUrlCache.values()) URL.revokeObjectURL(url);
+      blobUrlCache.clear();
+      pendingFetches.clear();
       themes.clear();
       activeThemeId = null;
       ctx = null;
