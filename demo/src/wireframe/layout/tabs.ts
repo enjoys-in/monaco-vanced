@@ -125,6 +125,62 @@ export function wireTabs(
     });
   });
 
+  // ── File renamed → update tab label, uri key, icon ─────────
+  on(FileEvents.Renamed, (p) => {
+    const { oldUri, newUri } = p as { oldUri: string; newUri: string };
+    const entry = openTabs.get(oldUri);
+    if (!entry) return;
+
+    // Update map key
+    openTabs.delete(oldUri);
+    const newLabel = newUri.split("/").pop() ?? newUri;
+    entry.label = newLabel;
+    entry.el.setAttribute("data-uri", newUri);
+    openTabs.set(newUri, entry);
+
+    // Update label text
+    const labelSpan = entry.el.querySelector("span:nth-child(2)") as HTMLElement;
+    if (labelSpan) labelSpan.textContent = newLabel;
+
+    // Update file icon
+    const iconSpan = entry.el.querySelector("span:first-child") as HTMLElement;
+    if (iconSpan) iconSpan.innerHTML = fileIconSvg(getExt(newLabel));
+
+    // Rewire click to emit new uri
+    entry.el.onclick = () => eventBus.emit(FileEvents.Open, { uri: newUri, label: newLabel });
+
+    // If this was the active tab, update breadcrumb + title
+    if (activeTabUri === oldUri) {
+      activeTabUri = newUri;
+      updateBreadcrumb(newUri);
+      dom.titleCenter.textContent = newLabel;
+      document.title = `${newLabel} — Monaco Vanced`;
+    }
+
+    // Update the fileMap too
+    fileMap.delete(oldUri);
+    fileMap.set(newUri, { uri: newUri, name: newLabel, language: "", content: "" });
+  });
+
+  // ── File deleted → mark tab red + strikethrough, then close ─
+  on(FileEvents.Deleted, (p) => {
+    const { uri } = p as { uri: string };
+    const entry = openTabs.get(uri);
+    if (!entry) return;
+
+    // Visual: red tint + strikethrough
+    const labelSpan = entry.el.querySelector("span:nth-child(2)") as HTMLElement;
+    if (labelSpan) {
+      labelSpan.style.textDecoration = "line-through";
+      labelSpan.style.color = C.errorRed;
+      labelSpan.style.opacity = "0.7";
+    }
+    entry.el.style.borderTop = `1px solid ${C.errorRed}`;
+
+    // Auto-close after a short delay so user sees the feedback
+    setTimeout(() => closeTab(uri), 1500);
+  });
+
   // ── Special tabs (Settings, Welcome, etc.) ─────────────────
   on("tab:open-special", (p) => {
     const { uri, label } = p as { uri: string; label: string };

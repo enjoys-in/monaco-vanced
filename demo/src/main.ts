@@ -345,22 +345,25 @@ async function bootstrap() {
   // Status Bar — fully dynamic
   // ══════════════════════════════════════════════════════════
 
-  statusbarApi.register({ id: "branch", label: "$(git-branch) main", alignment: "left", priority: 100 });
-  statusbarApi.register({ id: "sync", label: "$(sync) 0↓ 0↑", alignment: "left", priority: 95, tooltip: "Synchronize Changes" });
-  statusbarApi.register({ id: "errors", label: "$(error) 0  $(warning) 0", alignment: "left", priority: 90, tooltip: "No Problems" });
-  statusbarApi.register({ id: "line-col", label: "Ln 1, Col 1", alignment: "right", priority: 100 });
-  statusbarApi.register({ id: "selection", label: "", alignment: "right", priority: 95, visible: false });
-  statusbarApi.register({ id: "spaces", label: "Spaces: 2", alignment: "right", priority: 80, tooltip: "Select Indentation" });
-  statusbarApi.register({ id: "encoding", label: "UTF-8", alignment: "right", priority: 75 });
-  statusbarApi.register({ id: "eol", label: "LF", alignment: "right", priority: 70 });
-  statusbarApi.register({ id: "language", label: "TypeScript React", alignment: "right", priority: 65 });
-  statusbarApi.register({ id: "prettier", label: "$(check) Prettier", alignment: "right", priority: 50 });
-  statusbarApi.register({ id: "feedback", label: "$(feedback)", alignment: "right", priority: 10, tooltip: "Submit Feedback" });
-  statusbarApi.register({ id: "bell", label: "$(bell)", alignment: "right", priority: 5, tooltip: "No Notifications" });
+  statusbarApi.register({ id: "branch", label: "$(git-branch) main", alignment: "left", priority: 100, tooltip: "main (Git Branch) — Click to Checkout" });
+  statusbarApi.register({ id: "sync", label: "$(sync) 0↓ 0↑", alignment: "left", priority: 95, tooltip: "Synchronize Changes — 0 pending pull, 0 pending push" });
+  statusbarApi.register({ id: "errors", label: "$(error) 0  $(warning) 0", alignment: "left", priority: 90, tooltip: "No Problems — Click to Toggle Problems Panel" });
+  statusbarApi.register({ id: "line-col", label: "Ln 1, Col 1", alignment: "right", priority: 100, tooltip: "Go to Line/Column" });
+  statusbarApi.register({ id: "selection", label: "", alignment: "right", priority: 95, visible: false, tooltip: "Characters Selected" });
+  statusbarApi.register({ id: "spaces", label: "Spaces: 2", alignment: "right", priority: 80, tooltip: "Select Indentation — Spaces: 2" });
+  statusbarApi.register({ id: "encoding", label: "UTF-8", alignment: "right", priority: 75, tooltip: "Select Encoding" });
+  statusbarApi.register({ id: "eol", label: "LF", alignment: "right", priority: 70, tooltip: "Select End of Line Sequence" });
+  statusbarApi.register({ id: "language", label: "TypeScript React", alignment: "right", priority: 65, tooltip: "Select Language Mode — TypeScript React" });
+  statusbarApi.register({ id: "prettier", label: "$(check) Prettier", alignment: "right", priority: 50, tooltip: "Prettier — Formatter (Default)" });
+  statusbarApi.register({ id: "feedback", label: "$(feedback)", alignment: "right", priority: 10, tooltip: "Tweet Feedback" });
+  statusbarApi.register({ id: "bell", label: "$(bell)", alignment: "right", priority: 5, tooltip: "No Notifications — Click to Show" });
 
   // ── Track cursor position ────────────────────────────────
   ide.editor.onDidChangeCursorPosition((e) => {
-    statusbarApi.update("line-col", { label: `Ln ${e.position.lineNumber}, Col ${e.position.column}` });
+    statusbarApi.update("line-col", {
+      label: `Ln ${e.position.lineNumber}, Col ${e.position.column}`,
+      tooltip: `Go to Line/Column — Line ${e.position.lineNumber}, Column ${e.position.column}`,
+    });
   });
 
   // ── Track selection ──────────────────────────────────────
@@ -374,6 +377,7 @@ async function bootstrap() {
       statusbarApi.update("selection", {
         label: lines > 0 ? `${lines + 1} lines, ${text.length} chars selected` : `${text.length} selected`,
         visible: true,
+        tooltip: lines > 0 ? `${lines + 1} Lines, ${text.length} Characters Selected` : `${text.length} Characters Selected`,
       });
     }
   });
@@ -393,11 +397,13 @@ async function bootstrap() {
     if (!model) return;
 
     // Language
-    statusbarApi.update("language", { label: LANG_NAMES[model.getLanguageId()] ?? model.getLanguageId() });
+    const langName = LANG_NAMES[model.getLanguageId()] ?? model.getLanguageId();
+    statusbarApi.update("language", { label: langName, tooltip: `Select Language Mode — ${langName}` });
 
     // EOL
     const eolSeq = model.getEOL();
-    statusbarApi.update("eol", { label: eolSeq === "\r\n" ? "CRLF" : "LF" });
+    const eolLabel = eolSeq === "\r\n" ? "CRLF" : "LF";
+    statusbarApi.update("eol", { label: eolLabel, tooltip: `Select End of Line Sequence — ${eolLabel}` });
 
     // Encoding (always UTF-8 in browser Monaco)
     statusbarApi.update("encoding", { label: "UTF-8" });
@@ -405,7 +411,7 @@ async function bootstrap() {
     // Tab size / indentation
     const opts = model.getOptions();
     const indentLabel = opts.insertSpaces ? `Spaces: ${opts.tabSize}` : `Tab Size: ${opts.tabSize}`;
-    statusbarApi.update("spaces", { label: indentLabel, tooltip: "Select Indentation" });
+    statusbarApi.update("spaces", { label: indentLabel, tooltip: `Select Indentation — ${indentLabel}` });
 
     // Title
     const filePath = model.uri.path.replace(/^\//, "");
