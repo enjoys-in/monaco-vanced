@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
-import { TabEvents, FileEvents, LayoutEvents, SidebarEvents } from "@enjoys/monaco-vanced/core/events";
+import { TabEvents, FileEvents, LayoutEvents, SidebarEvents, WelcomeEvents } from "@enjoys/monaco-vanced/core/events";
 import { useTheme } from "../theme";
 import { Tab } from "./Tab";
 import { TabContextMenu, type MenuItemDef } from "./TabContextMenu";
@@ -44,11 +44,11 @@ export function TabBar({ eventBus, iconApi, onActiveChange }: TabBarProps) {
 
   useEffect(() => {
     const tab = tabs.find((t) => t.uri === activeUri);
-    const label = tab?.label ?? "Antigravity";
+    const label = tab?.label ?? "Monaco Vanced";
     onActiveChange?.(activeUri, label);
     document.title = activeUri
-      ? `${label} — Antigravity — Monaco Vanced`
-      : "Antigravity — Monaco Vanced";
+      ? `${label} — Monaco Vanced`
+      : "Monaco Vanced";
   }, [activeUri, tabs, onActiveChange]);
 
   // ── Actions ────────────────────────────────────────────────
@@ -77,11 +77,11 @@ export function TabBar({ eventBus, iconApi, onActiveChange }: TabBarProps) {
           const i = Math.min(idx, next.length - 1);
           const t = next[i];
           setActiveUri(t.uri);
-          if (t.isSpecial) eventBus.emit("tab:switch-special", { uri: t.uri, label: t.label });
+          if (t.isSpecial) eventBus.emit(TabEvents.SwitchSpecial, { uri: t.uri, label: t.label });
           else eventBus.emit(FileEvents.Open, { uri: t.uri, label: t.label });
         } else {
           setActiveUri(null);
-          eventBus.emit("welcome:show", {});
+          eventBus.emit(WelcomeEvents.Show, {});
         }
       }
     },
@@ -116,7 +116,7 @@ export function TabBar({ eventBus, iconApi, onActiveChange }: TabBarProps) {
     setTabs(next);
     if (next.length === 0) {
       setActiveUri(null);
-      eventBus.emit("welcome:show", {});
+      eventBus.emit(WelcomeEvents.Show, {});
     } else if (!next.some((t) => t.uri === activeRef.current)) {
       setActiveUri(next[next.length - 1].uri);
     }
@@ -125,7 +125,7 @@ export function TabBar({ eventBus, iconApi, onActiveChange }: TabBarProps) {
   const closeAll = useCallback(() => {
     setTabs([]);
     setActiveUri(null);
-    eventBus.emit("welcome:show", {});
+    eventBus.emit(WelcomeEvents.Show, {});
   }, [eventBus]);
 
   const togglePin = useCallback(
@@ -157,6 +157,10 @@ export function TabBar({ eventBus, iconApi, onActiveChange }: TabBarProps) {
         const { uri } = p as { uri: string };
         closeTab(uri);
       }],
+      [TabEvents.CloseActive, () => {
+        const uri = activeRef.current;
+        if (uri) closeTab(uri);
+      }],
       [TabEvents.Dirty, (p) => {
         const { uri, dirty } = p as { uri: string; dirty: boolean };
         setTabs((prev) => prev.map((t) => (t.uri === uri ? { ...t, dirty } : t)));
@@ -179,11 +183,11 @@ export function TabBar({ eventBus, iconApi, onActiveChange }: TabBarProps) {
         setTabs((prev) => prev.map((t) => (t.uri === uri ? { ...t, deleted: true } : t)));
         setTimeout(() => closeTab(uri), 1500);
       }],
-      ["tab:open-special", (p) => {
+      [TabEvents.OpenSpecial, (p) => {
         const { uri, label } = p as { uri: string; label: string };
         openTab(uri, label, true);
       }],
-      ["tab:switch-special", (p) => {
+      [TabEvents.SwitchSpecial, (p) => {
         const { uri } = p as { uri: string };
         activateTab(uri);
       }],
@@ -246,7 +250,7 @@ export function TabBar({ eventBus, iconApi, onActiveChange }: TabBarProps) {
             onClick={() => {
               if (tab.uri === activeUri) return;
               if (tab.isSpecial) {
-                eventBus.emit("tab:switch-special", { uri: tab.uri, label: tab.label });
+                eventBus.emit(TabEvents.SwitchSpecial, { uri: tab.uri, label: tab.label });
               } else {
                 eventBus.emit(FileEvents.Open, { uri: tab.uri, label: tab.label });
               }

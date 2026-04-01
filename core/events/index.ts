@@ -65,4 +65,5 @@ export * from "./ui.events";
 export * from "./virtualize.events";
 export * from "./vsix.events";
 export * from "./webview.events";
+export * from "./welcome.events";
 export * from "./worker.events";

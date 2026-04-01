@@ -1,8 +1,8 @@
-// ── React Welcome Page — Antigravity branded ─────────────────
+// ── React Welcome Page — Monaco Vanced branded ───────────────
 
 import { useState } from "react";
 import { useTheme } from "../theme";
-import { CommandEvents, FileEvents, NotificationEvents, SettingsEvents, SidebarEvents } from "@enjoys/monaco-vanced/core/events";
+import { CommandEvents, DialogEvents, FileEvents, NotificationEvents, SettingsEvents, SidebarEvents } from "@enjoys/monaco-vanced/core/events";
 
 type Emit = (ev: string, payload: unknown) => void;
 
@@ -13,6 +13,30 @@ interface FileInfo {
 
 export function WelcomePage({ emit, recentFiles }: { emit: Emit; recentFiles: FileInfo[] }) {
   const { tokens: t } = useTheme();
+
+  const showAboutDialog = () => {
+    emit(NotificationEvents.Show, { type: "info", message: "Monaco Vanced IDE — v3.0 — Plugin-based Architecture", duration: 4000 });
+    emit("dialog:show", {
+      title: "About Monaco Vanced",
+      body: "Monaco Vanced IDE v3.0\n\nA plugin-based editor built on Monaco Editor with full theming, extensions, filesystem, and language support.\n\nPowered by Bun + Vite 8 + React 19.",
+      type: "confirm",
+      actions: [{ id: "ok", label: "OK", primary: true }],
+    });
+  };
+
+  const showDocsDialog = () => {
+    emit(NotificationEvents.Show, { type: "info", message: "Opening documentation…", duration: 2000 });
+    emit("dialog:show", {
+      title: "Documentation",
+      body: "Monaco Vanced documentation is available at:\n\nhttps://github.com/AkashMondal/monaco-vanced\n\nIncludes guides for plugin development, theming, filesystem adapters, and extension authoring.",
+      type: "confirm",
+      actions: [{ id: "ok", label: "OK", primary: true }],
+    });
+  };
+
+  const showWelcomeNotif = () => {
+    emit(NotificationEvents.Show, { type: "info", message: "Welcome to Monaco Vanced IDE! Explore the sidebar, open files, and try the command palette.", duration: 5000 });
+  };
 
   return (
     <div style={{
@@ -33,13 +57,13 @@ export function WelcomePage({ emit, recentFiles }: { emit: Emit; recentFiles: Fi
       </div>
 
       <div style={{ fontSize: 24, fontWeight: 300, marginBottom: 4, letterSpacing: "-0.5px" }}>
-        Antigravity
+        Monaco Vanced
       </div>
       <div style={{ fontSize: 13, color: t.fgDim, marginBottom: 32 }}>
-        Monaco Vanced IDE — v3.0
+        Plugin-based IDE — v3.0
       </div>
 
-      <div style={{ width: "100%", maxWidth: 620 }}>
+      <div style={{ width: "100%", maxWidth: 680 }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
           {/* Left column */}
           <div>
@@ -47,9 +71,25 @@ export function WelcomePage({ emit, recentFiles }: { emit: Emit; recentFiles: Fi
               <ActionRow icon="file" label="New File…" shortcut="Ctrl+N"
                 onClick={() => emit(CommandEvents.Execute, { id: "workbench.action.files.newUntitledFile" })} />
               <ActionRow icon="folder" label="Open Folder…" shortcut="Ctrl+K Ctrl+O"
-                onClick={() => emit(NotificationEvents.Show, { type: "info", message: "Open Folder: Not available in browser demo", duration: 3000 })} />
+                onClick={() => {
+                  emit(NotificationEvents.Show, { type: "info", message: "Open Folder: Not available in browser demo", duration: 3000 });
+                  emit("dialog:show", {
+                    title: "Open Folder",
+                    body: "The Open Folder feature is not available in the browser demo. In a desktop environment, this would open a native file picker.",
+                    type: "confirm",
+                    actions: [{ id: "ok", label: "OK", primary: true }],
+                  });
+                }} />
               <ActionRow icon="clone" label="Clone Repository…"
-                onClick={() => emit(NotificationEvents.Show, { type: "info", message: "Clone: Not available in browser demo", duration: 3000 })} />
+                onClick={() => {
+                  emit(NotificationEvents.Show, { type: "info", message: "Clone: Not available in browser demo", duration: 3000 });
+                  emit("dialog:show", {
+                    title: "Clone Repository",
+                    body: "Git clone is not available in the browser demo. This feature requires a backend Git service.",
+                    type: "confirm",
+                    actions: [{ id: "ok", label: "OK", primary: true }],
+                  });
+                }} />
             </Section>
 
             <Section title="Recent">
@@ -77,6 +117,15 @@ export function WelcomePage({ emit, recentFiles }: { emit: Emit; recentFiles: Fi
                 onClick={() => emit(SidebarEvents.ViewActivate, { viewId: "extensions" })} />
               <ActionRow icon="keyboard" label="Keyboard Shortcuts"
                 onClick={() => emit(SettingsEvents.UIOpen, { category: "keybindings" })} />
+            </Section>
+
+            <Section title="Learn">
+              <ActionRow icon="book" label="Welcome"
+                onClick={showWelcomeNotif} />
+              <ActionRow icon="docs" label="Documentation"
+                onClick={showDocsDialog} />
+              <ActionRow icon="info" label="About"
+                onClick={showAboutDialog} />
             </Section>
           </div>
         </div>
@@ -165,6 +214,9 @@ function WelcomeIcon({ name }: { name: string }) {
     "settings": <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M9.1 4.4L8.6 2H7.4l-.5 2.4-.7.3-2-1.3-.9.8 1.3 2-.3.7-2.4.5v1.2l2.4.5.3.7-1.3 2 .8.8 2-1.3.7.3.5 2.4h1.2l.5-2.4.7-.3 2 1.3.9-.8-1.3-2 .3-.7 2.4-.5V6.8l-2.4-.5-.3-.7 1.3-2-.8-.8-2 1.3-.7-.3zM8 10a2 2 0 110-4 2 2 0 010 4z"/></svg>,
     "extensions": <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M13.5 1.5L15 0h-4.5L9 1.5V6l1.5 1.5H15L16.5 6V1.5h-3zm-9 0L6 0H1.5L0 1.5V6l1.5 1.5H6L7.5 6V1.5h-3zm0 9L6 9H1.5L0 10.5V15l1.5 1.5H6L7.5 15V10.5h-3zm9 0L15 9h-4.5L9 10.5V15l1.5 1.5H15L16.5 15V10.5h-3z"/></svg>,
     "keyboard": <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M14 3H2a1 1 0 00-1 1v8a1 1 0 001 1h12a1 1 0 001-1V4a1 1 0 00-1-1zm0 9H2V4h12v8zM3 5h2v2H3V5zm3 0h2v2H6V5zm3 0h2v2H9V5zm3 0h1v2h-1V5zM3 8h1v2H3V8zm2 0h6v2H5V8zm7 0h1v2h-1V8z"/></svg>,
+    "book": <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M14.5 2H9l-1 1-1-1H1.5l-.5.5v10l.5.5H7l1 1 1-1h5.5l.5-.5v-10l-.5-.5zM7 12H2V3h5v9zm7 0H9V3h5v9z"/></svg>,
+    "docs": <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3 1h10l.5.5v13l-.5.5H3l-.5-.5v-13L3 1zm1 1v11h8V2H4zm1 2h6v1H5V4zm0 2h6v1H5V6zm0 2h4v1H5V8z"/></svg>,
+    "info": <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 13A6 6 0 118 2a6 6 0 010 12zm-.75-9.5h1.5v1.5h-1.5V4.5zm0 3h1.5V12h-1.5V7.5z"/></svg>,
   };
   return icons[name] ?? icons["file"];
 }

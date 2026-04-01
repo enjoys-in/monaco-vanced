@@ -1,10 +1,11 @@
 // ── Activity bar — icon strip on the far left ──────────────
 
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
-import { SidebarEvents } from "@enjoys/monaco-vanced/core/events";
+import { SidebarEvents, SettingsEvents, AuthEvents, NotificationEvents } from "@enjoys/monaco-vanced/core/events";
 import type { DOMRefs, WireframeAPIs, OnHandler } from "../types";
 import { C } from "../types";
 import { el } from "../utils";
+import type { SidebarExtras } from "./sidebar/index";
 
 // VS Code codicon-style SVG icons (16×16 viewBox)
 const ICONS: { id: string; label: string; svg: string }[] = [
@@ -25,8 +26,12 @@ export function wireActivityBar(
   apis: WireframeAPIs,
   eventBus: EventBus,
   on: OnHandler,
+  extras?: SidebarExtras,
 ) {
   let activeId = "explorer";
+  const authApi = extras?.authApi;
+
+  // ── Auth state from real auth plugin ───────────────────────
 
   // Create top buttons
   ICONS.forEach(({ id, label, svg }) => {
@@ -37,6 +42,127 @@ export function wireActivityBar(
   BOTTOM_ICONS.forEach(({ id, label, svg }) => {
     dom.activityBottom.appendChild(makeBtn(id, label, svg));
   });
+
+  // ── Accounts popup ─────────────────────────────────────────
+  let accountsPopup: HTMLElement | null = null;
+
+  function showAccountsPopup(anchor: HTMLElement) {
+    closeAccountsPopup();
+    const rect = anchor.getBoundingClientRect();
+    const popup = el("div", {
+      class: "vsc-accounts-popup",
+      style: `position:fixed;left:${rect.right + 6}px;bottom:${window.innerHeight - rect.bottom}px;width:280px;background:${C.menuBg};border:1px solid ${C.border};border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.4);z-index:9999;padding:8px 0;font-size:13px;`,
+    });
+
+    const isLoggedIn = authApi?.isAuthenticated() ?? false;
+    const session = authApi?.getSession();
+    const user = session?.user;
+
+    if (isLoggedIn && user) {
+      // Logged-in view with real session data
+      const avatar = el("div", {
+        style: `display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid ${C.border};`,
+      });
+      const avatarCircle = el("div", {
+        style: `width:32px;height:32px;border-radius:50%;background:${C.accent};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:600;font-size:14px;flex-shrink:0;`,
+      }, (user.name || "U").charAt(0).toUpperCase());
+      const info = el("div", { style: "flex:1;min-width:0;" });
+      info.appendChild(el("div", { style: `color:${C.fg};font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;` }, user.name || "User"));
+      info.appendChild(el("div", { style: `color:${C.fgDim};font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;` }, user.email || ""));
+      avatar.append(avatarCircle, info);
+      popup.appendChild(avatar);
+
+      // Sync toggle
+      const syncRow = el("div", { style: `display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-bottom:1px solid ${C.border};` });
+      const syncLabel = el("div", { style: `color:${C.fg};font-size:12px;` }, "Settings Sync");
+      const syncToggle = el("div", {
+        style: `width:34px;height:18px;border-radius:9px;cursor:pointer;position:relative;transition:background .2s;background:${localStorage.getItem("monaco-vanced-sync") === "true" ? C.accent : C.inputBorder};`,
+      });
+      const syncKnob = el("div", {
+        style: `width:14px;height:14px;border-radius:50%;background:#fff;position:absolute;top:2px;transition:left .2s;left:${localStorage.getItem("monaco-vanced-sync") === "true" ? "18px" : "2px"};`,
+      });
+      syncToggle.appendChild(syncKnob);
+      syncToggle.addEventListener("click", () => {
+        const isOn = localStorage.getItem("monaco-vanced-sync") === "true";
+        localStorage.setItem("monaco-vanced-sync", String(!isOn));
+        syncToggle.style.background = !isOn ? C.accent : C.inputBorder;
+        syncKnob.style.left = !isOn ? "18px" : "2px";
+        eventBus.emit(NotificationEvents.Show, { type: "info", message: !isOn ? "Settings Sync enabled" : "Settings Sync disabled", duration: 3000 });
+      });
+      syncRow.append(syncLabel, syncToggle);
+      popup.appendChild(syncRow);
+
+      // Account actions
+      popup.appendChild(makePopupItem("Manage Account", () => {
+        closeAccountsPopup();
+        eventBus.emit(NotificationEvents.Show, { type: "info", message: "Opening account management...", duration: 3000 });
+      }));
+
+      popup.appendChild(makePopupItem("Sign Out", () => {
+        closeAccountsPopup();
+        authApi?.logout();
+        eventBus.emit(NotificationEvents.Show, { type: "info", message: "Signed out successfully.", duration: 3000 });
+      }));
+    } else {
+      // Not logged in — offer real OAuth sign-in
+      const hint = el("div", {
+        style: `padding:10px 14px;color:${C.fgDim};font-size:12px;border-bottom:1px solid ${C.border};`,
+      }, "Sign in to sync settings & extensions");
+      popup.appendChild(hint);
+
+      popup.appendChild(makePopupItem("Sign in with GitHub", () => {
+        closeAccountsPopup();
+        if (authApi) {
+          authApi.login("github").catch((err: Error) => {
+            eventBus.emit(NotificationEvents.Show, { type: "error", message: `Sign-in failed: ${err.message}`, duration: 5000 });
+          });
+          eventBus.emit(NotificationEvents.Show, { type: "info", message: "Opening GitHub sign-in...", duration: 3000 });
+        } else {
+          eventBus.emit(NotificationEvents.Show, { type: "error", message: "Auth module not available.", duration: 3000 });
+        }
+      }));
+
+      popup.appendChild(makePopupItem("Sign in with Google", () => {
+        closeAccountsPopup();
+        if (authApi) {
+          authApi.login("google").catch((err: Error) => {
+            eventBus.emit(NotificationEvents.Show, { type: "error", message: `Sign-in failed: ${err.message}`, duration: 5000 });
+          });
+          eventBus.emit(NotificationEvents.Show, { type: "info", message: "Opening Google sign-in...", duration: 3000 });
+        } else {
+          eventBus.emit(NotificationEvents.Show, { type: "error", message: "Auth module not available.", duration: 3000 });
+        }
+      }));
+    }
+
+    document.body.appendChild(popup);
+    accountsPopup = popup;
+
+    // Close on outside click
+    const onClickOutside = (e: MouseEvent) => {
+      if (popup.contains(e.target as Node) || anchor.contains(e.target as Node)) return;
+      closeAccountsPopup();
+      document.removeEventListener("mousedown", onClickOutside);
+    };
+    setTimeout(() => document.addEventListener("mousedown", onClickOutside), 0);
+  }
+
+  function closeAccountsPopup() {
+    if (accountsPopup) {
+      accountsPopup.remove();
+      accountsPopup = null;
+    }
+  }
+
+  function makePopupItem(label: string, action: () => void): HTMLElement {
+    const item = el("div", {
+      style: `padding:6px 14px;cursor:pointer;color:${C.fg};transition:background .1s;`,
+    }, label);
+    item.addEventListener("mouseenter", () => { item.style.background = C.listHover; });
+    item.addEventListener("mouseleave", () => { item.style.background = "transparent"; });
+    item.addEventListener("click", action);
+    return item;
+  }
 
   function makeBtn(id: string, label: string, svg: string): HTMLElement {
     const isTop = ICONS.some((i) => i.id === id);
@@ -53,7 +179,11 @@ export function wireActivityBar(
     btn.addEventListener("click", () => {
       if (id === "settings-gear") {
         // Open settings webview directly instead of sidebar
-        eventBus.emit("settings:ui-open", {});
+        eventBus.emit(SettingsEvents.UIOpen, {});
+        return;
+      }
+      if (id === "accounts") {
+        showAccountsPopup(btn);
         return;
       }
       if (isTop || id === "accounts") {

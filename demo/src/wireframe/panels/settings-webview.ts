@@ -5,7 +5,7 @@
 // Themes, Keybindings, and more.
 
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
-import { FileEvents, SidebarEvents } from "@enjoys/monaco-vanced/core/events";
+import { FileEvents, SidebarEvents, SettingsEvents, ThemeEvents, TabEvents } from "@enjoys/monaco-vanced/core/events";
 import type { DOMRefs, WireframeAPIs, OnHandler } from "../types";
 import { C } from "../types";
 import { el } from "../utils";
@@ -764,7 +764,7 @@ export function wireSettingsWebview(
         cb.addEventListener("change", () => {
           s.value = String(cb.checked);
           label.textContent = cb.checked ? "Enabled" : "Disabled";
-          eventBus.emit("settings:change", { id: s.id, value: cb.checked });
+          eventBus.emit(SettingsEvents.Change, { id: s.id, value: cb.checked });
         });
         wrap.append(cb, label);
         row.appendChild(wrap);
@@ -780,14 +780,14 @@ export function wireSettingsWebview(
         }
         sel.addEventListener("change", () => {
           s.value = sel.value;
-          eventBus.emit("settings:change", { id: s.id, value: sel.value });
+          eventBus.emit(SettingsEvents.Change, { id: s.id, value: sel.value });
         });
         row.appendChild(sel);
       } else if (s.type === "color") {
         const inp = el("input", { type: "color", value: s.value, style: "width:40px;height:28px;border:none;cursor:pointer;" }) as HTMLInputElement;
         inp.addEventListener("change", () => {
           s.value = inp.value;
-          eventBus.emit("settings:change", { id: s.id, value: inp.value });
+          eventBus.emit(SettingsEvents.Change, { id: s.id, value: inp.value });
         });
         row.appendChild(inp);
       } else {
@@ -799,7 +799,7 @@ export function wireSettingsWebview(
         }) as HTMLInputElement;
         inp.addEventListener("change", () => {
           s.value = inp.value;
-          eventBus.emit("settings:change", { id: s.id, value: s.type === "number" ? Number(inp.value) : inp.value });
+          eventBus.emit(SettingsEvents.Change, { id: s.id, value: s.type === "number" ? Number(inp.value) : inp.value });
         });
         row.appendChild(inp);
       }
@@ -980,7 +980,7 @@ export function wireSettingsWebview(
           activeTheme = theme.name;
           renderThemes();
           const monacoTheme = theme.type === "light" ? "vs" : theme.type === "contrast" ? "hc-black" : "vs-dark";
-          eventBus.emit("theme:change", { name: theme.name, type: theme.type, monacoTheme });
+          eventBus.emit(ThemeEvents.Changed, { name: theme.name, type: theme.type, monacoTheme });
           apis.notification?.show({ type: "success", message: `Theme changed to ${theme.name}`, duration: 2000 });
         });
         card.addEventListener("mouseenter", () => {
@@ -1068,7 +1068,7 @@ export function wireSettingsWebview(
     dom.editorContainer.style.display = "none";
     dom.welcomePage.style.display = "none";
     // Open a "Settings" tab
-    eventBus.emit("tab:open-special", { uri: SETTINGS_URI, label: "Settings" });
+    eventBus.emit(TabEvents.OpenSpecial, { uri: SETTINGS_URI, label: "Settings" });
   }
 
   function closeSettings() {
@@ -1079,7 +1079,7 @@ export function wireSettingsWebview(
   }
 
   // ── Event listeners ────────────────────────────────────────
-  on("settings:ui-open", () => {
+  on(SettingsEvents.UIOpen, () => {
     openSettings();
   });
 
@@ -1092,7 +1092,7 @@ export function wireSettingsWebview(
   });
 
   // When settings tab is re-clicked
-  on("tab:switch-special", (p) => {
+  on(TabEvents.SwitchSpecial, (p) => {
     const { uri } = p as { uri: string };
     if (uri === SETTINGS_URI) {
       openSettings();

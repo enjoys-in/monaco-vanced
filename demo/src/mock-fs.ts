@@ -187,7 +187,7 @@ export function createMockFs(eventBus: EventBus): MockFsAPI {
 
 export function seedDemoProject(fs: MockFsAPI) {
   fs.writeFile("package.json", JSON.stringify({
-    name: "antigravity",
+    name: "monaco-vanced-demo",
     version: "0.1.0",
     private: true,
     scripts: {
@@ -196,12 +196,16 @@ export function seedDemoProject(fs: MockFsAPI) {
       preview: "vite preview",
       lint: "eslint src/",
       test: "vitest run",
+      "db:migrate": "prisma migrate dev",
+      "db:seed": "tsx prisma/seed.ts",
     },
     dependencies: {
       react: "^19.0.0",
       "react-dom": "^19.0.0",
       "react-router": "^7.0.0",
       zustand: "^5.0.0",
+      "@tanstack/react-query": "^5.0.0",
+      zod: "^3.23.0",
     },
     devDependencies: {
       typescript: "^6.0.0",
@@ -210,6 +214,7 @@ export function seedDemoProject(fs: MockFsAPI) {
       "@types/react": "^19.0.0",
       "@types/react-dom": "^19.0.0",
       tailwindcss: "^4.0.0",
+      tsx: "^4.0.0",
     },
   }, null, 2));
 
@@ -227,7 +232,7 @@ export function seedDemoProject(fs: MockFsAPI) {
     include: ["src"],
   }, null, 2));
 
-  fs.writeFile("README.md", `# Antigravity
+  fs.writeFile("README.md", `# Monaco Vanced Demo
 
 A modern web application built with React 19 + TypeScript.
 
@@ -238,13 +243,40 @@ bun install
 bun run dev
 \`\`\`
 
-## Architecture
+## Project Structure
 
-- **src/app.tsx** — Root application component
-- **src/store/** — Zustand state management
-- **src/components/** — Reusable UI components
-- **src/hooks/** — Custom React hooks
-- **src/lib/** — Shared utilities
+\`\`\`
+src/
+├── app.tsx              # Root application component
+├── main.tsx             # Entry point
+├── types.ts             # Shared TypeScript types
+├── components/          # Reusable UI components
+│   ├── layout.tsx
+│   ├── button.tsx
+│   └── card.tsx
+├── pages/               # Route-level pages
+│   ├── home.tsx
+│   ├── dashboard.tsx
+│   └── settings.tsx
+├── store/               # Zustand state management
+│   ├── theme.ts
+│   └── auth.ts
+├── db/                  # Database schema & queries
+│   ├── schema.ts
+│   └── queries.ts
+├── services/            # External API integrations
+│   ├── api-client.ts
+│   └── auth-service.ts
+├── lib/                 # Shared utilities
+│   ├── cn.ts
+│   ├── format.ts
+│   └── validators.ts
+├── hooks/               # Custom React hooks
+│   ├── use-debounce.ts
+│   └── use-media-query.ts
+└── styles/              # Global styles
+    └── global.css
+\`\`\`
 
 ## Features
 
@@ -252,6 +284,8 @@ bun run dev
 - 🎨 Tailwind CSS v4 for styling
 - 📦 Zustand for state management
 - 🧪 Vitest for unit testing
+- 🗃️ Type-safe database layer
+- 🔐 Auth with session management
 `);
 
   fs.writeFile(".gitignore", `node_modules/
@@ -262,7 +296,8 @@ dist/
 `);
 
   fs.writeFile(".env", `VITE_API_URL=http://localhost:3000
-VITE_APP_NAME=Antigravity
+VITE_APP_NAME=MonacoVanced
+DATABASE_URL=file:./data.db
 `);
 
   fs.writeFile("vite.config.ts", `import { defineConfig } from "vite";
@@ -284,7 +319,7 @@ export default defineConfig({
 });
 `);
 
-  // ── src/ ─────────────────────────────────────────────────
+  // ── src/ entry ───────────────────────────────────────────
 
   fs.writeFile("src/main.tsx", `import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -360,7 +395,207 @@ export interface ApiResponse<T> {
 export type Theme = "light" | "dark" | "system";
 `);
 
-  // ── src/store/ ───────────────────────────────────────────
+  // ── src/db/ — Database schema & queries ──────────────────
+
+  fs.writeFile("src/db/schema.ts", `import { z } from "zod";
+
+// ── Zod schemas as source of truth for DB types ─────────
+
+export const UserSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1).max(100),
+  email: z.string().email(),
+  avatar: z.string().url().optional(),
+  role: z.enum(["admin", "editor", "viewer"]),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+});
+
+export const ProjectSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1).max(200),
+  description: z.string().max(2000).default(""),
+  ownerId: z.string().uuid(),
+  status: z.enum(["active", "archived", "draft"]),
+  tags: z.array(z.string()),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+});
+
+export const SessionSchema = z.object({
+  id: z.string().uuid(),
+  userId: z.string().uuid(),
+  token: z.string(),
+  expiresAt: z.coerce.date(),
+  createdAt: z.coerce.date(),
+});
+
+export type DBUser = z.infer<typeof UserSchema>;
+export type DBProject = z.infer<typeof ProjectSchema>;
+export type DBSession = z.infer<typeof SessionSchema>;
+`);
+
+  fs.writeFile("src/db/queries.ts", `import type { DBUser, DBProject } from "./schema";
+
+// ── In-memory store (replace with actual DB in production) ──
+
+const users = new Map<string, DBUser>();
+const projects = new Map<string, DBProject>();
+
+export const db = {
+  users: {
+    findById(id: string): DBUser | undefined {
+      return users.get(id);
+    },
+    findByEmail(email: string): DBUser | undefined {
+      return [...users.values()].find((u) => u.email === email);
+    },
+    create(user: DBUser): DBUser {
+      users.set(user.id, user);
+      return user;
+    },
+    update(id: string, data: Partial<DBUser>): DBUser | undefined {
+      const existing = users.get(id);
+      if (!existing) return undefined;
+      const updated = { ...existing, ...data, updatedAt: new Date() };
+      users.set(id, updated);
+      return updated;
+    },
+    delete(id: string): boolean {
+      return users.delete(id);
+    },
+    list(): DBUser[] {
+      return [...users.values()];
+    },
+  },
+
+  projects: {
+    findById(id: string): DBProject | undefined {
+      return projects.get(id);
+    },
+    findByOwner(ownerId: string): DBProject[] {
+      return [...projects.values()].filter((p) => p.ownerId === ownerId);
+    },
+    create(project: DBProject): DBProject {
+      projects.set(project.id, project);
+      return project;
+    },
+    update(id: string, data: Partial<DBProject>): DBProject | undefined {
+      const existing = projects.get(id);
+      if (!existing) return undefined;
+      const updated = { ...existing, ...data, updatedAt: new Date() };
+      projects.set(id, updated);
+      return updated;
+    },
+    delete(id: string): boolean {
+      return projects.delete(id);
+    },
+    list(filters?: { status?: string; ownerId?: string }): DBProject[] {
+      let result = [...projects.values()];
+      if (filters?.status) result = result.filter((p) => p.status === filters.status);
+      if (filters?.ownerId) result = result.filter((p) => p.ownerId === filters.ownerId);
+      return result;
+    },
+  },
+};
+`);
+
+  // ── src/services/ — External API integrations ────────────
+
+  fs.writeFile("src/services/api-client.ts", `const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+
+interface RequestOptions extends RequestInit {
+  params?: Record<string, string>;
+}
+
+class ApiClient {
+  private baseUrl: string;
+  private token: string | null = null;
+
+  constructor(baseUrl: string) {
+    this.baseUrl = baseUrl;
+  }
+
+  setToken(token: string | null) {
+    this.token = token;
+  }
+
+  async request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+    const { params, ...init } = options;
+    const url = new URL(path, this.baseUrl);
+    if (params) {
+      for (const [key, value] of Object.entries(params)) {
+        url.searchParams.set(key, value);
+      }
+    }
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(init.headers as Record<string, string>),
+    };
+    if (this.token) headers.Authorization = \`Bearer \${this.token}\`;
+
+    const response = await fetch(url.toString(), { ...init, headers });
+    if (!response.ok) {
+      throw new Error(\`API Error: \${response.status} \${response.statusText}\`);
+    }
+    return response.json();
+  }
+
+  get<T>(path: string, params?: Record<string, string>) {
+    return this.request<T>(path, { method: "GET", params });
+  }
+
+  post<T>(path: string, body: unknown) {
+    return this.request<T>(path, { method: "POST", body: JSON.stringify(body) });
+  }
+
+  put<T>(path: string, body: unknown) {
+    return this.request<T>(path, { method: "PUT", body: JSON.stringify(body) });
+  }
+
+  delete<T>(path: string) {
+    return this.request<T>(path, { method: "DELETE" });
+  }
+}
+
+export const api = new ApiClient(BASE_URL);
+`);
+
+  fs.writeFile("src/services/auth-service.ts", `import { api } from "./api-client";
+import type { User } from "../types";
+
+interface LoginResponse {
+  user: User;
+  token: string;
+  expiresAt: string;
+}
+
+export const authService = {
+  async login(email: string, password: string): Promise<LoginResponse> {
+    return api.post<LoginResponse>("/auth/login", { email, password });
+  },
+
+  async register(name: string, email: string, password: string): Promise<LoginResponse> {
+    return api.post<LoginResponse>("/auth/register", { name, email, password });
+  },
+
+  async me(): Promise<User> {
+    return api.get<User>("/auth/me");
+  },
+
+  async logout(): Promise<void> {
+    await api.post("/auth/logout", {});
+    api.setToken(null);
+  },
+
+  async refresh(refreshToken: string): Promise<{ token: string; expiresAt: string }> {
+    return api.post("/auth/refresh", { refreshToken });
+  },
+};
+`);
+
+  // ── src/store/ — State management ────────────────────────
 
   fs.writeFile("src/store/theme.ts", `import { create } from "zustand";
 import { persist } from "zustand/middleware";
@@ -388,42 +623,103 @@ export const useThemeStore = create<ThemeState>()(
 `);
 
   fs.writeFile("src/store/auth.ts", `import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import type { User } from "../types";
+import { authService } from "../services/auth-service";
+import { api } from "../services/api-client";
 
 interface AuthState {
   user: User | null;
   token: string | null;
   isLoading: boolean;
+  error: string | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   setUser: (user: User) => void;
+  clearError: () => void;
 }
 
-export const useAuthStore = create<AuthState>()((set) => ({
-  user: null,
-  token: null,
-  isLoading: false,
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
+      user: null,
+      token: null,
+      isLoading: false,
+      error: null,
 
-  login: async (email: string, _password: string) => {
-    set({ isLoading: true });
-    // Mock API call
-    await new Promise((r) => setTimeout(r, 800));
-    const user: User = {
-      id: "usr_1",
-      name: "Developer",
-      email,
-      role: "admin",
-      createdAt: new Date(),
-    };
-    set({ user, token: "mock-jwt-token", isLoading: false });
+      login: async (email: string, password: string) => {
+        set({ isLoading: true, error: null });
+        try {
+          const { user, token } = await authService.login(email, password);
+          api.setToken(token);
+          set({ user, token, isLoading: false });
+        } catch (err) {
+          set({ error: (err as Error).message, isLoading: false });
+        }
+      },
+
+      logout: () => {
+        authService.logout().catch(() => {});
+        set({ user: null, token: null });
+      },
+
+      setUser: (user) => set({ user }),
+      clearError: () => set({ error: null }),
+    }),
+    {
+      name: "auth-storage",
+      partialize: (state) => ({ token: state.token }),
+    }
+  )
+);
+`);
+
+  fs.writeFile("src/store/projects.ts", `import { create } from "zustand";
+import type { Project } from "../types";
+import { api } from "../services/api-client";
+
+interface ProjectsState {
+  projects: Project[];
+  isLoading: boolean;
+  error: string | null;
+  fetchProjects: () => Promise<void>;
+  createProject: (data: Pick<Project, "name" | "description" | "tags">) => Promise<void>;
+  deleteProject: (id: string) => Promise<void>;
+}
+
+export const useProjectsStore = create<ProjectsState>()((set, get) => ({
+  projects: [],
+  isLoading: false,
+  error: null,
+
+  fetchProjects: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const { data } = await api.get<{ data: Project[] }>("/projects");
+      set({ projects: data, isLoading: false });
+    } catch (err) {
+      set({ error: (err as Error).message, isLoading: false });
+    }
   },
 
-  logout: () => set({ user: null, token: null }),
-  setUser: (user) => set({ user }),
+  createProject: async (data) => {
+    set({ isLoading: true });
+    try {
+      const project = await api.post<Project>("/projects", data);
+      set({ projects: [...get().projects, project], isLoading: false });
+    } catch (err) {
+      set({ error: (err as Error).message, isLoading: false });
+    }
+  },
+
+  deleteProject: async (id: string) => {
+    await api.delete(\`/projects/\${id}\`);
+    set({ projects: get().projects.filter((p) => p.id !== id) });
+  },
 }));
 `);
 
-  // ── src/components/ ──────────────────────────────────────
+  // ── src/components/ — UI Components ──────────────────────
 
   fs.writeFile("src/components/layout.tsx", `import { Outlet, Link, useLocation } from "react-router";
 
@@ -439,7 +735,7 @@ export function Layout() {
   return (
     <div className="flex h-screen bg-gray-900 text-gray-100">
       <aside className="w-64 border-r border-gray-800 p-4">
-        <h1 className="text-xl font-bold mb-8">Antigravity</h1>
+        <h1 className="text-xl font-bold mb-8">Monaco Vanced</h1>
         <nav className="space-y-1">
           {NAV_ITEMS.map((item) => (
             <Link
@@ -522,7 +818,7 @@ export function Card({ title, description, children, className = "" }: CardProps
 }
 `);
 
-  // ── src/pages/ ───────────────────────────────────────────
+  // ── src/pages/ — Route-level pages ───────────────────────
 
   fs.writeFile("src/pages/home.tsx", `import { Card } from "../components/card";
 import { Button } from "../components/button";
@@ -538,7 +834,7 @@ export function Home() {
   return (
     <div>
       <div className="mb-8">
-        <h2 className="text-3xl font-bold text-white">Welcome to Antigravity</h2>
+        <h2 className="text-3xl font-bold text-white">Welcome to Monaco Vanced</h2>
         <p className="mt-2 text-gray-400">A modern full-stack development platform.</p>
       </div>
       <div className="grid grid-cols-2 gap-4 mb-8">
@@ -553,13 +849,18 @@ export function Home() {
 `);
 
   fs.writeFile("src/pages/dashboard.tsx", `import { Card } from "../components/card";
+import { useProjectsStore } from "../store/projects";
+import { useAuthStore } from "../store/auth";
 
 export function Dashboard() {
+  const user = useAuthStore((s) => s.user);
+  const projects = useProjectsStore((s) => s.projects);
+
   return (
     <div>
       <h2 className="text-2xl font-bold text-white mb-6">Dashboard</h2>
       <div className="grid grid-cols-3 gap-4 mb-6">
-        <Card title="Projects" description="12 active projects" />
+        <Card title="Projects" description={\`\${projects.length} active projects\`} />
         <Card title="Deployments" description="48 this week" />
         <Card title="Team" description="8 members" />
       </div>
@@ -569,6 +870,7 @@ export function Dashboard() {
           <li>• Merged PR #142 — Fix auth flow</li>
           <li>• Created branch feature/payments</li>
           <li>• Updated CI pipeline — added e2e tests</li>
+          {user && <li>• Logged in as {user.name}</li>}
         </ul>
       </Card>
     </div>
@@ -577,6 +879,7 @@ export function Dashboard() {
 `);
 
   fs.writeFile("src/pages/settings.tsx", `import { useThemeStore } from "../store/theme";
+import { useAuthStore } from "../store/auth";
 import { Button } from "../components/button";
 import type { Theme } from "../types";
 
@@ -588,6 +891,7 @@ const THEMES: { value: Theme; label: string }[] = [
 
 export function Settings() {
   const { theme, setTheme } = useThemeStore();
+  const { user, logout } = useAuthStore();
 
   return (
     <div>
@@ -609,7 +913,16 @@ export function Settings() {
         </div>
         <div>
           <h3 className="text-sm font-medium text-gray-400 mb-3">Account</h3>
-          <p className="text-sm text-gray-500">Signed in as developer@example.com</p>
+          {user ? (
+            <div className="space-y-2">
+              <p className="text-sm text-gray-300">Signed in as {user.email}</p>
+              <Button variant="danger" size="sm" onClick={logout}>
+                Sign Out
+              </Button>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500">Not signed in</p>
+          )}
         </div>
       </div>
     </div>
@@ -617,7 +930,7 @@ export function Settings() {
 }
 `);
 
-  // ── src/hooks/ ───────────────────────────────────────────
+  // ── src/hooks/ — Custom React hooks ──────────────────────
 
   fs.writeFile("src/hooks/use-debounce.ts", `import { useState, useEffect } from "react";
 
@@ -650,67 +963,7 @@ export function useMediaQuery(query: string): boolean {
 }
 `);
 
-  // ── src/lib/ ─────────────────────────────────────────────
-
-  fs.writeFile("src/lib/api.ts", `const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
-
-interface RequestOptions extends RequestInit {
-  params?: Record<string, string>;
-}
-
-class ApiClient {
-  private baseUrl: string;
-  private token: string | null = null;
-
-  constructor(baseUrl: string) {
-    this.baseUrl = baseUrl;
-  }
-
-  setToken(token: string | null) {
-    this.token = token;
-  }
-
-  async request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-    const { params, ...init } = options;
-    const url = new URL(path, this.baseUrl);
-    if (params) {
-      for (const [key, value] of Object.entries(params)) {
-        url.searchParams.set(key, value);
-      }
-    }
-
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      ...(init.headers as Record<string, string>),
-    };
-    if (this.token) headers.Authorization = \`Bearer \${this.token}\`;
-
-    const response = await fetch(url.toString(), { ...init, headers });
-    if (!response.ok) {
-      throw new Error(\`API Error: \${response.status} \${response.statusText}\`);
-    }
-    return response.json();
-  }
-
-  get<T>(path: string, params?: Record<string, string>) {
-    return this.request<T>(path, { method: "GET", params });
-  }
-
-  post<T>(path: string, body: unknown) {
-    return this.request<T>(path, { method: "POST", body: JSON.stringify(body) });
-  }
-
-  put<T>(path: string, body: unknown) {
-    return this.request<T>(path, { method: "PUT", body: JSON.stringify(body) });
-  }
-
-  delete<T>(path: string) {
-    return this.request<T>(path, { method: "DELETE" });
-  }
-}
-
-export const api = new ApiClient(BASE_URL);
-`);
+  // ── src/lib/ — Shared utilities ──────────────────────────
 
   fs.writeFile("src/lib/cn.ts", `type ClassValue = string | number | boolean | null | undefined | ClassValue[];
 
@@ -750,6 +1003,30 @@ export function formatBytes(bytes: number): string {
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return \`\${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} \${sizes[i]}\`;
 }
+`);
+
+  fs.writeFile("src/lib/validators.ts", `import { z } from "zod";
+
+export const emailSchema = z.string().email("Invalid email address");
+export const passwordSchema = z.string().min(8, "Password must be at least 8 characters");
+
+export const loginSchema = z.object({
+  email: emailSchema,
+  password: passwordSchema,
+});
+
+export const registerSchema = z.object({
+  name: z.string().min(1, "Name is required").max(100),
+  email: emailSchema,
+  password: passwordSchema,
+  confirmPassword: z.string(),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
+});
+
+export type LoginInput = z.infer<typeof loginSchema>;
+export type RegisterInput = z.infer<typeof registerSchema>;
 `);
 
   // ── src/styles/ ──────────────────────────────────────────

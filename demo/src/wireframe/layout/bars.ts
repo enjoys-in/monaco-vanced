@@ -2,7 +2,7 @@
 
 import type { StatusbarItem } from "@enjoys/monaco-vanced/layout/statusbar-module";
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
-import { StatusbarEvents, HeaderEvents, TitlebarEvents, PanelEvents, FileEvents, SidebarEvents, ContextMenuEvents } from "@enjoys/monaco-vanced/core/events";
+import { StatusbarEvents, HeaderEvents, TitlebarEvents, PanelEvents, FileEvents, SidebarEvents, ContextMenuEvents, TabEvents, SettingsEvents } from "@enjoys/monaco-vanced/core/events";
 import type { DOMRefs, WireframeAPIs, OnHandler } from "../types";
 import { C } from "../types";
 import { el } from "../utils";
@@ -170,7 +170,7 @@ export function wireTitleBar(dom: DOMRefs, apis: WireframeAPIs, eventBus: EventB
       case "workbench.action.toggleSidebar": bus.emit(SidebarEvents.Toggle, {}); break;
       case "workbench.action.togglePanel": bus.emit(PanelEvents.BottomToggle, {}); break;
       case "workbench.action.quickOpen": bus.emit(HeaderEvents.CommandOpen, {}); break;
-      case "tab.close": bus.emit("tab:close-active", {}); break;
+      case "tab.close": bus.emit(TabEvents.CloseActive, {}); break;
       case "file.new":
         api.notification?.show({ type: "info", message: "New File: Use the Explorer toolbar to create files.", duration: 3000 });
         break;
@@ -181,7 +181,7 @@ export function wireTitleBar(dom: DOMRefs, apis: WireframeAPIs, eventBus: EventB
         api.notification?.show({ type: "success", message: "All files saved.", duration: 2000 });
         break;
       case "help.welcome":
-        api.notification?.show({ type: "info", message: "Welcome to Antigravity — Monaco Vanced IDE", duration: 4000 });
+        api.notification?.show({ type: "info", message: "Welcome to Monaco Vanced IDE", duration: 4000 });
         break;
       case "help.docs":
         api.notification?.show({ type: "info", message: "Documentation: https://github.com/AkashMondal/monaco-vanced", duration: 5000 });
@@ -209,7 +209,7 @@ export function wireTitleBar(dom: DOMRefs, apis: WireframeAPIs, eventBus: EventB
     const state = p as { fileName?: string; filePath?: string; isDirty?: boolean };
     const parts: string[] = [];
     if (state.fileName) parts.push(state.isDirty ? `● ${state.fileName}` : state.fileName);
-    parts.push("— Antigravity");
+    parts.push("— Monaco Vanced");
     dom.titleCenter.textContent = parts.join(" ");
     document.title = parts.join(" ");
   });
@@ -225,7 +225,7 @@ export function wireTitleBar(dom: DOMRefs, apis: WireframeAPIs, eventBus: EventB
       switch (btn.dataset.action) {
         case "togglePanel": eventBus.emit(PanelEvents.BottomToggle, {}); break;
         case "toggleSidebar": eventBus.emit(SidebarEvents.Toggle, {}); break;
-        case "openSettings": eventBus.emit("settings:ui-open", {}); break;
+        case "openSettings": eventBus.emit(SettingsEvents.UIOpen, {}); break;
         case "commandPalette": eventBus.emit(HeaderEvents.CommandOpen, {}); break;
       }
     });

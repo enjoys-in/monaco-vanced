@@ -9,6 +9,10 @@ export interface ViewContext {
   apis: WireframeAPIs;
   eventBus: InstanceType<typeof EventBus>;
   iconApi?: ExplorerIconAPI;
+  extensionApi?: import("@enjoys/monaco-vanced/extensions/extension-module").ExtensionModuleAPI;
+  vsixApi?: import("@enjoys/monaco-vanced/extensions/vsix-module").VSIXModuleAPI;
+  authApi?: import("@enjoys/monaco-vanced/infrastructure/auth-module").AuthModuleAPI;
+  marketplaceApi?: import("@enjoys/monaco-vanced/extensions/marketplace-module").MarketplaceModuleAPI;
 }
 
 // ── Plugin catalog — all 81 modules across 12 categories ────

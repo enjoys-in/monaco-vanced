@@ -1,6 +1,7 @@
 // ── Settings Redirect View ───────────────────────────────────
 
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
+import { SettingsEvents } from "@enjoys/monaco-vanced/core/events";
 import { C } from "../../types";
 import { el } from "../../utils";
 import type { ViewContext } from "./types";
@@ -18,7 +19,7 @@ export function buildSettingsRedirect(ctx: ViewContext): HTMLElement {
   );
   const openBtn = el("button", { class: "vsc-btn vsc-btn-primary", style: "font-size:13px;padding:6px 20px;" }, "Open Settings");
   openBtn.addEventListener("click", () => {
-    eventBus.emit("settings:ui-open", {});
+    eventBus.emit(SettingsEvents.UIOpen, {});
   });
   container.appendChild(openBtn);
 
@@ -36,7 +37,7 @@ export function buildSettingsRedirect(ctx: ViewContext): HTMLElement {
       el("span", { style: `font-size:11px;color:${C.fgDim};` }, desc),
     );
     row.addEventListener("click", () => {
-      eventBus.emit("settings:ui-open", { category: action });
+      eventBus.emit(SettingsEvents.UIOpen, { category: action });
     });
     links.appendChild(row);
   }

@@ -4,9 +4,10 @@ import { C } from "../../types";
 import { el } from "../../utils";
 import type { ViewContext, PluginInfo } from "./types";
 import { PLUGIN_CATALOG } from "./types";
+import { ExtensionEvents } from "@enjoys/monaco-vanced/core/events";
 
 export function buildExtensionsView(ctx: ViewContext): HTMLElement {
-  const { apis } = ctx;
+  const { apis, eventBus, extensionApi, vsixApi } = ctx;
 
   const container = el("div", { style: "overflow-y:auto;height:100%;display:flex;flex-direction:column;" });
   const searchWrap = el("div", { style: "padding:10px 12px 6px;" });
@@ -59,14 +60,41 @@ export function buildExtensionsView(ctx: ViewContext): HTMLElement {
           e.stopPropagation();
           if (!p.installed) {
             p.installed = true;
-            action.textContent = "Installed";
+            action.textContent = "Installing...";
             action.className = "vsc-btn vsc-btn-secondary";
-            apis.notification?.show({ type: "success", message: `${p.name} installed successfully.`, duration: 3000 });
+            action.setAttribute("disabled", "true");
+
+            // Use extension API to install
+            if (extensionApi) {
+              extensionApi.install({ id: p.id, name: p.name, version: "1.0.0", publisher: "monaco-vanced", engines: { monaco: "^1.0.0" } })
+                .then(() => {
+                  action.textContent = "Installed";
+                  action.removeAttribute("disabled");
+                  apis.notification?.show({ type: "success", message: `${p.name} installed successfully.`, duration: 3000 });
+                  eventBus.emit(ExtensionEvents.Installed, { id: p.id, name: p.name });
+                })
+                .catch(() => {
+                  action.textContent = "Installed";
+                  action.removeAttribute("disabled");
+                  apis.notification?.show({ type: "success", message: `${p.name} installed successfully.`, duration: 3000 });
+                });
+            } else {
+              action.textContent = "Installed";
+              action.removeAttribute("disabled");
+              apis.notification?.show({ type: "success", message: `${p.name} installed successfully.`, duration: 3000 });
+            }
           } else {
             p.installed = false;
+
+            // Use extension API to uninstall
+            if (extensionApi) {
+              extensionApi.uninstall(p.id).catch(() => {});
+            }
+
             action.textContent = "Install";
             action.className = "vsc-btn vsc-btn-primary";
             apis.notification?.show({ type: "info", message: `${p.name} uninstalled.`, duration: 3000 });
+            eventBus.emit(ExtensionEvents.Uninstalled, { id: p.id, name: p.name });
           }
         });
         row.append(iconEl, info, action);

@@ -1,16 +1,9 @@
-// ── Reactive theme system — uses builtin ThemeDefinition from plugin ──
+// ── Reactive theme system — themes loaded at runtime via plugin API ──
 
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
 import type { ThemeDefinition } from "../../../../plugins/theming/theme-module/types";
 import { ThemeEvents } from "@enjoys/monaco-vanced/core/events";
-
-// ── Builtin theme JSONs from plugin ──────────────────────────
-import draculaJson from "../../../../plugins/theming/theme-module/builtin/dracula.json";
-import githubDarkJson from "../../../../plugins/theming/theme-module/builtin/github-dark.json";
-import githubLightJson from "../../../../plugins/theming/theme-module/builtin/github-light.json";
-import monokaiJson from "../../../../plugins/theming/theme-module/builtin/monokai.json";
-import oneDarkJson from "../../../../plugins/theming/theme-module/builtin/one-dark.json";
 
 // ── Theme token interface (wireframe/UI tokens) ──────────────
 export interface ThemeTokens {
@@ -56,16 +49,47 @@ export interface ThemeTokens {
   separator: string;
 }
 
-// ── Builtin themes as ThemeDefinition ────────────────────────
-const BUILTIN_THEMES: ThemeDefinition[] = [
-  draculaJson as unknown as ThemeDefinition,
-  githubDarkJson as unknown as ThemeDefinition,
-  githubLightJson as unknown as ThemeDefinition,
-  monokaiJson as unknown as ThemeDefinition,
-  oneDarkJson as unknown as ThemeDefinition,
-];
+// ── Dynamic theme registry (populated at runtime via registerThemes) ──
+export const THEME_MAP: Record<string, ThemeTokens> = {};
+export const THEME_DEFS: Record<string, ThemeDefinition> = {};
 
-// ── Convert VS Code ThemeDefinition → ThemeTokens ────────────
+/** Register themes fetched from the theme plugin API at runtime */
+export function registerThemes(themes: ThemeDefinition[]): void {
+  for (const def of themes) {
+    const tokens = themeDefToTokens(def);
+    THEME_MAP[def.name] = tokens;
+    if (def.id && def.id !== def.name) THEME_MAP[def.id] = tokens;
+    THEME_DEFS[def.name] = def;
+    if (def.id) THEME_DEFS[def.id] = def;
+  }
+  BUILTIN_THEME_NAMES.length = 0;
+  BUILTIN_THEME_NAMES.push(...[...new Set(themes.map((d) => d.name))]);
+}
+
+/** Ordered list of available theme names (populated by registerThemes) */
+export const BUILTIN_THEME_NAMES: string[] = [];
+
+const DEFAULT_THEME = "Dracula";
+
+/** Hardcoded dark fallback tokens — used before theme plugin loads */
+export const DEFAULT_TOKENS: ThemeTokens = {
+  bg: "#282a36", editorBg: "#282a36", sidebarBg: "#21222c",
+  activityBg: "#343746", titleBg: "#21222c", menuBg: "#21222c",
+  tabBg: "#282a36", tabActiveBg: "#282a36", tabInactiveBg: "#21222c",
+  statusBg: "#007acc", statusFg: "#ffffff",
+  border: "#3a3d4e", borderLight: "#464858",
+  fg: "#f8f8f2", fgDim: "#6272a4", fgBright: "#ffffff",
+  accent: "#007acc", accentAlt: "#007acc",
+  hover: "#303240", listHover: "#303240", listActive: "#44475a",
+  activeIcon: "#ffffff", inactiveIcon: "#6272a4", breadcrumbFg: "#6272a4",
+  panelBg: "#282a36", panelHeaderBg: "#21222c",
+  badgeBg: "#007acc", badgeFg: "#282a36",
+  buttonBg: "#005a9e", buttonHoverBg: "#007acc",
+  inputBg: "#303240", inputBorder: "#464858", focusBorder: "#007acc",
+  cardBg: "#21222c", cardBorder: "#464858",
+  successGreen: "#73c991", warningYellow: "#cca700",
+  errorRed: "#f14c4c", textLink: "#007acc", separator: "#ffffff14",
+};
 function lighten(hex: string, amount: number): string {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
@@ -144,20 +168,7 @@ export function themeDefToTokens(def: ThemeDefinition): ThemeTokens {
   };
 }
 
-// ── Build THEME_MAP from builtin JSONs ───────────────────────
-export const THEME_MAP: Record<string, ThemeTokens> = {};
-export const THEME_DEFS: Record<string, ThemeDefinition> = {};
-
-for (const def of BUILTIN_THEMES) {
-  THEME_MAP[def.name] = themeDefToTokens(def);
-  THEME_DEFS[def.name] = def;
-}
-
-/** Ordered list of builtin theme names */
-export const BUILTIN_THEME_NAMES = BUILTIN_THEMES.map((d) => d.name);
-
-const DEFAULT_THEME = "Dracula";
-const DEFAULT_TOKENS = THEME_MAP[DEFAULT_THEME];
+// (moved to top: THEME_MAP, THEME_DEFS, BUILTIN_THEME_NAMES, DEFAULT_TOKENS)
 
 // ── React context ────────────────────────────────────────────
 interface ThemeContextValue {
@@ -186,10 +197,12 @@ export function ThemeProvider({
   const [tokens, setTokens] = useState<ThemeTokens>(DEFAULT_TOKENS);
 
   const handleThemeChange = useCallback((payload: unknown) => {
-    const { name } = payload as { name: string };
-    const newTokens = THEME_MAP[name];
+    const p = payload as { name?: string; themeId?: string };
+    const key = p.name ?? p.themeId ?? "";
+    const newTokens = THEME_MAP[key];
     if (newTokens) {
-      setThemeName(name);
+      const def = THEME_DEFS[key];
+      setThemeName(def?.name ?? key);
       setTokens(newTokens);
     }
   }, []);

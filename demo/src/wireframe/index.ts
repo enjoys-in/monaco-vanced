@@ -4,7 +4,7 @@ import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
 import type { WireframeAPIs, VirtualFile } from "./types";
 import type { MockFsAPI } from "../mock-fs";
 import type { SidebarExtras } from "./layout/sidebar/index";
-import { FileEvents, SettingsEvents, TabEvents } from "@enjoys/monaco-vanced/core/events";
+import { FileEvents, SettingsEvents, TabEvents, WelcomeEvents } from "@enjoys/monaco-vanced/core/events";
 
 // Layout
 import { buildShell } from "./layout/shell";
@@ -44,7 +44,7 @@ function wireReactPanelVisibility(
     dom.tabBar.style.display = "none";
     dom.breadcrumbBar.style.display = "none";
     dom.titleCenter.textContent = "Welcome";
-    document.title = "Welcome — Antigravity — Monaco Vanced";
+    document.title = "Welcome — Monaco Vanced";
   }
 
   function hideWelcome() {
@@ -61,7 +61,8 @@ function wireReactPanelVisibility(
     dom.settingsWebview.style.display = "flex";
     dom.editorContainer.style.display = "none";
     dom.welcomePage.style.display = "none";
-    eventBus.emit("tab:open-special", { uri: SETTINGS_URI, label: "Settings" });
+    dom.breadcrumbBar.style.display = "none";
+    eventBus.emit(TabEvents.OpenSpecial, { uri: SETTINGS_URI, label: "Settings" });
   }
 
   function closeSettings() {
@@ -69,6 +70,7 @@ function wireReactPanelVisibility(
     settingsOpen = false;
     dom.settingsWebview.style.display = "none";
     dom.editorContainer.style.display = "";
+    dom.breadcrumbBar.style.display = "";
   }
 
   // Show welcome on startup
@@ -87,12 +89,12 @@ function wireReactPanelVisibility(
     openSettings();
   });
 
-  on("tab:switch-special", (p) => {
+  on(TabEvents.SwitchSpecial, (p) => {
     const { uri } = p as { uri: string };
     if (uri === SETTINGS_URI) openSettings();
   });
 
-  on("welcome:show", () => {
+  on(WelcomeEvents.Show, () => {
     if (settingsOpen) closeSettings();
     showWelcome();
   });
@@ -113,6 +115,9 @@ export function mountWireframe(
   tabListEl: HTMLElement;
   breadcrumbEl: HTMLElement;
   titleCenterEl: HTMLElement;
+  activityBarEl: HTMLElement;
+  statusBarEl: HTMLElement;
+  sidebarEl: HTMLElement;
   destroy: () => void;
 } {
   const dom = buildShell(root);
@@ -122,7 +127,7 @@ export function mountWireframe(
     disposers.push(() => eventBus.off(ev, fn));
   };
 
-  wireActivityBar(dom, apis, eventBus, on);
+  wireActivityBar(dom, apis, eventBus, on, extras);
   wireSidebar(dom, apis, eventBus, on, files, mockFs, extras);
 
   // Skip vanilla tabs when React tabs are used
@@ -154,6 +159,9 @@ export function mountWireframe(
     tabListEl: dom.tabList,
     breadcrumbEl: dom.breadcrumbBar,
     titleCenterEl: dom.titleCenter,
+    activityBarEl: dom.activityBar,
+    statusBarEl: dom.statusBar,
+    sidebarEl: dom.sidebarContainer,
     destroy: () => { disposers.forEach((d) => d()); dom.root.innerHTML = ""; },
   };
 }

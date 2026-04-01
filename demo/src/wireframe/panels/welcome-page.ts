@@ -1,7 +1,7 @@
 // ── Welcome Page — shown when no editor tabs are open ───────
 
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
-import { FileEvents } from "@enjoys/monaco-vanced/core/events";
+import { FileEvents, CommandEvents, NotificationEvents, SettingsEvents, SidebarEvents, WelcomeEvents } from "@enjoys/monaco-vanced/core/events";
 import type { DOMRefs, OnHandler, VirtualFile } from "../types";
 import { C } from "../types";
 import { el } from "../utils";
@@ -34,17 +34,17 @@ export function wireWelcomePage(
 
     const title = el("div", {
       style: `font-size:24px;font-weight:300;color:${C.fg};margin-bottom:4px;letter-spacing:-0.5px;`,
-    }, "Antigravity");
+    }, "Monaco Vanced");
     const subtitle = el("div", {
       style: `font-size:13px;color:${C.fgDim};margin-bottom:32px;`,
-    }, "Monaco Vanced IDE — v3.0");
+    }, "Plugin-based IDE — v3.0");
 
     // ── Start section ────────────────────────────────────────
     const startSection = makeSection("Start");
     const startItems = [
-      { icon: "file", label: "New File…", shortcut: "Ctrl+N", action: () => eventBus.emit("command:execute", { id: "workbench.action.files.newUntitledFile" }) },
-      { icon: "folder", label: "Open Folder…", shortcut: "Ctrl+K Ctrl+O", action: () => eventBus.emit("notification:show", { type: "info", message: "Open Folder: Not available in browser demo", duration: 3000 }) },
-      { icon: "clone", label: "Clone Repository…", shortcut: "", action: () => eventBus.emit("notification:show", { type: "info", message: "Clone: Not available in browser demo", duration: 3000 }) },
+{ icon: "file", label: "New File\u2026", shortcut: "Ctrl+N", action: () => eventBus.emit(CommandEvents.Execute, { id: "workbench.action.files.newUntitledFile" }) },
+      { icon: "folder", label: "Open Folder\u2026", shortcut: "Ctrl+K Ctrl+O", action: () => eventBus.emit(NotificationEvents.Show, { type: "info", message: "Open Folder: Not available in browser demo", duration: 3000 }) },
+      { icon: "clone", label: "Clone Repository\u2026", shortcut: "", action: () => eventBus.emit(NotificationEvents.Show, { type: "info", message: "Clone: Not available in browser demo", duration: 3000 }) },
     ];
     for (const item of startItems) {
       startSection.appendChild(makeActionRow(item.icon, item.label, item.shortcut, item.action));
@@ -68,10 +68,10 @@ export function wireWelcomePage(
     // ── Help section ─────────────────────────────────────────
     const helpSection = makeSection("Help");
     const helpItems = [
-      { icon: "terminal", label: "Command Palette", shortcut: "Ctrl+Shift+P", action: () => eventBus.emit("command-palette:toggle", {}) },
-      { icon: "settings", label: "Settings", shortcut: "Ctrl+,", action: () => eventBus.emit("settings:ui-open", {}) },
-      { icon: "extensions", label: "Browse Extensions", shortcut: "Ctrl+Shift+X", action: () => eventBus.emit("sidebar:activate", { viewId: "extensions" }) },
-      { icon: "keyboard", label: "Keyboard Shortcuts", shortcut: "", action: () => eventBus.emit("settings:ui-open", { category: "keybindings" }) },
+      { icon: "terminal", label: "Command Palette", shortcut: "Ctrl+Shift+P", action: () => eventBus.emit(CommandEvents.PaletteToggle, {}) },
+      { icon: "settings", label: "Settings", shortcut: "Ctrl+,", action: () => eventBus.emit(SettingsEvents.UIOpen, {}) },
+      { icon: "extensions", label: "Browse Extensions", shortcut: "Ctrl+Shift+X", action: () => eventBus.emit(SidebarEvents.ViewActivate, { viewId: "extensions" }) },
+      { icon: "keyboard", label: "Keyboard Shortcuts", shortcut: "", action: () => eventBus.emit(SettingsEvents.UIOpen, { category: "keybindings" }) },
     ];
     for (const item of helpItems) {
       helpSection.appendChild(makeActionRow(item.icon, item.label, item.shortcut, item.action));
@@ -154,7 +154,7 @@ export function wireWelcomePage(
     dom.tabBar.style.display = "none";
     dom.breadcrumbBar.style.display = "none";
     dom.titleCenter.textContent = "Welcome";
-    document.title = "Welcome — Antigravity — Monaco Vanced";
+    document.title = "Welcome — Monaco Vanced";
   }
 
   function hide() {
@@ -171,10 +171,10 @@ export function wireWelcomePage(
   on(FileEvents.Open, () => { hide(); });
 
   // Hide when settings opens
-  on("settings:ui-open", () => { hide(); });
+  on(SettingsEvents.UIOpen, () => { hide(); });
 
   // Show when all tabs are closed
-  on("welcome:show", () => { show(); });
+  on(WelcomeEvents.Show, () => { show(); });
 }
 
 // ── Icon helpers ─────────────────────────────────────────────

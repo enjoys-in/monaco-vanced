@@ -5,7 +5,7 @@
 // theme change.
 
 import type { ThemeTokens } from "./ThemeProvider";
-import { THEME_MAP } from "./ThemeProvider";
+import { THEME_MAP, DEFAULT_TOKENS } from "./ThemeProvider";
 
 const PREFIX = "--vsc";
 
@@ -17,10 +17,10 @@ export function applyThemeVars(tokens: ThemeTokens): void {
   }
 }
 
-/** Initialize default Dracula theme CSS variables */
+/** Initialize default dark theme CSS variables (fallback until plugin loads) */
 export function initThemeVars(): void {
-  const defaultTheme = THEME_MAP["Dracula"];
-  if (defaultTheme) applyThemeVars(defaultTheme);
+  const defaultTheme = THEME_MAP["Dracula"] ?? DEFAULT_TOKENS;
+  applyThemeVars(defaultTheme);
 }
 
 /** Resolve a theme by name and apply its CSS vars */

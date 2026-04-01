@@ -3,6 +3,7 @@
 import { createRoot, type Root } from "react-dom/client";
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
 import type { ExplorerIconAPI } from "../explorer";
+import type { MockFsAPI } from "../mock-fs";
 import { ThemeProvider } from "./theme";
 import { SettingsPanel } from "./settings";
 import { WelcomePage } from "./welcome";
@@ -18,6 +19,7 @@ interface MountOptions {
   breadcrumbEl?: HTMLElement;
   titleCenterEl?: HTMLElement;
   iconApi?: ExplorerIconAPI;
+  fsApi?: MockFsAPI;
 }
 
 let settingsRoot: Root | null = null;
@@ -27,7 +29,7 @@ let breadcrumbRoot: Root | null = null;
 
 export function mountReactComponents({
   settingsEl, welcomeEl, eventBus, recentFiles,
-  tabListEl, breadcrumbEl, titleCenterEl, iconApi,
+  tabListEl, breadcrumbEl, titleCenterEl, iconApi, fsApi,
 }: MountOptions) {
   const emit = (ev: string, payload: unknown) => eventBus.emit(ev, payload);
 
@@ -76,7 +78,7 @@ export function mountReactComponents({
     }
     breadcrumbRoot.render(
       <ThemeProvider eventBus={eventBus}>
-        <Breadcrumbs eventBus={eventBus} />
+        <Breadcrumbs eventBus={eventBus} fsApi={fsApi} iconApi={iconApi} />
       </ThemeProvider>,
     );
   }

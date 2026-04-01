@@ -2,7 +2,7 @@ import "./style.css";
 import * as monaco from "monaco-editor";
 
 // ── Theme CSS custom properties (must init before wireframe) ─
-import { initThemeVars, switchTheme } from "./components/theme";
+import { initThemeVars, switchTheme, BUILTIN_THEME_NAMES, THEME_DEFS, registerThemes } from "./components/theme";
 
 // ── Core ─────────────────────────────────────────────────────
 import { createMonacoIDE } from "@enjoys/monaco-vanced/core/facade";
@@ -47,12 +47,26 @@ import { createSearchPlugin } from "@enjoys/monaco-vanced/filesystem/search-modu
 // ── Plugins: SCM ─────────────────────────────────────────────
 import { createGitPlugin } from "@enjoys/monaco-vanced/scm/git-module";
 
+// ── Plugins: Language ─────────────────────────────────────────
+import { createLanguageDetectionPlugin, detectLanguage } from "@enjoys/monaco-vanced/language/language-detection";
+
 // ── Plugins: Devtools ────────────────────────────────────────
 import { createTerminalPlugin } from "@enjoys/monaco-vanced/devtools/terminal-module";
 import { createDebugPlugin } from "@enjoys/monaco-vanced/devtools/debugger-module";
 
+// ── Plugins: Auth ─────────────────────────────────────────────
+import { createAuthPlugin } from "@enjoys/monaco-vanced/infrastructure/auth-module";
+
 // ── Events ───────────────────────────────────────────────────
-import { FileEvents, PanelEvents, SidebarEvents, SettingsEvents, ThemeEvents, TabEvents } from "@enjoys/monaco-vanced/core/events";
+import { FileEvents, PanelEvents, SidebarEvents, SettingsEvents, ThemeEvents, TabEvents, EditorEvents, AuthEvents, WelcomeEvents, ExtensionEvents } from "@enjoys/monaco-vanced/core/events";
+
+// ── Builtin theme definitions for registration ───────────────
+import draculaTheme from "../../plugins/theming/theme-module/builtin/dracula.json";
+import githubDarkTheme from "../../plugins/theming/theme-module/builtin/github-dark.json";
+import githubLightTheme from "../../plugins/theming/theme-module/builtin/github-light.json";
+import monokaiTheme from "../../plugins/theming/theme-module/builtin/monokai.json";
+import oneDarkTheme from "../../plugins/theming/theme-module/builtin/one-dark.json";
+import type { ThemeDefinition } from "../../plugins/theming/theme-module/types";
 
 // ── Monaco Workers ────────────────────────────────────────────
 
@@ -104,16 +118,10 @@ import { mountWireframe, type WireframeAPIs, type VirtualFile } from "./wirefram
 
 function buildVirtualFiles(fs: MockFsAPI): VirtualFile[] {
   const result: VirtualFile[] = [];
-  const EXT_LANG: Record<string, string> = {
-    ts: "typescript", tsx: "typescriptreact", js: "javascript", jsx: "javascriptreact",
-    json: "json", css: "css", html: "html", md: "markdown", yaml: "yaml", yml: "yaml",
-    py: "python", rs: "rust", go: "go", sh: "shell", sql: "sql", toml: "toml",
-    mjs: "javascript", mts: "typescript",
-  };
   for (const [path, content] of fs.getAllFiles()) {
     const name = path.split("/").pop() ?? path;
-    const ext = name.includes(".") ? name.split(".").pop()!.toLowerCase() : "";
-    result.push({ uri: path, name, language: EXT_LANG[ext] ?? "plaintext", content });
+    const detected = detectLanguage(path, content, monaco.languages);
+    result.push({ uri: path, name, language: detected.languageId, content });
   }
   return result;
 }
@@ -130,12 +138,12 @@ const { plugin: notificationPlugin, api: notificationApi } = createNotificationP
 const { plugin: dialogPlugin, api: dialogApi } = createDialogPlugin();
 
 // Theming
-const { plugin: themePlugin } = createThemePlugin();
+const { plugin: themePlugin, api: themeApi } = createThemePlugin();
 const { plugin: iconPlugin, api: iconApi } = createIconPlugin();
 
 // Layout
 const { plugin: layoutPlugin, api: layoutApi } = createLayoutPlugin();
-const { plugin: headerPlugin, api: headerApi } = createHeaderPlugin({ title: "Antigravity" });
+const { plugin: headerPlugin, api: headerApi } = createHeaderPlugin({ title: "Monaco Vanced" });
 const { plugin: sidebarPlugin, api: sidebarApi } = createSidebarPlugin();
 const { plugin: statusbarPlugin, api: statusbarApi } = createStatusbarPlugin();
 const { plugin: titlePlugin, api: titleApi } = createTitlePlugin();
@@ -148,9 +156,18 @@ const editorPlugin = createEditorPlugin({ defaultLanguage: "typescript" });
 const tabsPlugin = createTabsPlugin();
 
 // Extensions / FS / SCM / Devtools
-const { plugin: extensionPlugin } = createExtensionPlugin();
-const { plugin: marketplacePlugin } = createMarketplacePlugin();
-const { plugin: vsixPlugin } = createVSIXPlugin();
+const { plugin: extensionPlugin, api: extensionApi } = createExtensionPlugin();
+const { plugin: marketplacePlugin, api: marketplaceApi } = createMarketplacePlugin();
+const { plugin: vsixPlugin, api: vsixApi } = createVSIXPlugin();
+
+// Language
+const languageDetectionPlugin = createLanguageDetectionPlugin();
+
+// Auth
+const { plugin: authPlugin, api: authApi } = createAuthPlugin({
+  providers: ["github", "google"],
+  tokenStorageKey: "monaco-vanced-auth",
+});
 
 // In-memory FS adapter backed by the demo's mock filesystem
 const memoryStore = new Map<string, Uint8Array>();
@@ -214,6 +231,8 @@ const allPlugins = [
   extensionPlugin, marketplacePlugin, vsixPlugin,
   fsPlugin, searchPlugin, gitPlugin,
   terminalPlugin, debugPlugin,
+  languageDetectionPlugin,
+  authPlugin,
 ];
 
 const apis: WireframeAPIs = {
@@ -295,9 +314,41 @@ async function bootstrap() {
   }
 
   // ── Mount Wireframe ──────────────────────────────────────
-  const { editorContainer, settingsEl, welcomeEl, tabListEl, breadcrumbEl, titleCenterEl } = mountWireframe(appRoot, apis, eventBus, DEMO_FILES, mockFs, {
+  const { editorContainer, settingsEl, welcomeEl, tabListEl, breadcrumbEl, titleCenterEl, activityBarEl, statusBarEl, sidebarEl } = mountWireframe(appRoot, apis, eventBus, DEMO_FILES, mockFs, {
     iconApi: iconApi,
+    extensionApi: extensionApi,
+    vsixApi: vsixApi,
+    authApi: authApi,
+    marketplaceApi: marketplaceApi,
   }, { useReactPanels: true, useReactTabs: true });
+
+  const defaultFile = DEMO_FILES.find((f) => f.uri === "src/app.tsx")
+    ?? DEMO_FILES.find((f) => f.uri === "src/main.tsx")
+    ?? DEMO_FILES[0];
+
+  // ── Register builtin themes into theme plugin before IDE creation ──
+  const builtinThemes = [draculaTheme, githubDarkTheme, githubLightTheme, monokaiTheme, oneDarkTheme] as unknown as ThemeDefinition[];
+  for (const t of builtinThemes) {
+    themeApi.register(t);
+  }
+
+  // ── Create IDE ───────────────────────────────────────────
+  ide = await createMonacoIDE({
+    container: editorContainer,
+    monaco,
+    plugins: allPlugins,
+    language: defaultFile.language,
+    value: "",
+    editorOptions: editorOptions as Record<string, unknown>,
+    eventBus,
+  });
+
+  console.log("[monaco-vanced] IDE ready:", ide.engine.getRegisteredIds());
+
+  // ── Register themes from plugin API (runtime, no static JSON imports) ──
+  registerThemes(themeApi.getThemes());
+  const currentThemeId = themeApi.getCurrent();
+  if (currentThemeId) switchTheme(currentThemeId);
 
   // ── Mount React components (Settings + Welcome + Tabs + Breadcrumbs) ──
   const { mountReactComponents } = await import("./components/mount");
@@ -310,31 +361,11 @@ async function bootstrap() {
     breadcrumbEl,
     titleCenterEl,
     iconApi,
+    fsApi: mockFs,
   });
-
-  const defaultFile = DEMO_FILES.find((f) => f.uri === "src/app.tsx")
-    ?? DEMO_FILES.find((f) => f.uri === "src/main.tsx")
-    ?? DEMO_FILES[0];
-
-  // ── Create IDE ───────────────────────────────────────────
-  ide = await createMonacoIDE({
-    container: editorContainer,
-    monaco,
-    plugins: allPlugins,
-    language: defaultFile.language,
-    value: defaultFile.content,
-    editorOptions: editorOptions as Record<string, unknown>,
-    eventBus,
-  });
-
-  console.log("[monaco-vanced] IDE ready:", ide.engine.getRegisteredIds());
 
   // Pre-create all models so file switching is instant
   for (const file of DEMO_FILES) getOrCreateModel(file);
-
-  // Set the default file model (replace the anonymous model from createMonacoIDE)
-  const defaultModel = getOrCreateModel(defaultFile);
-  ide.editor.setModel(defaultModel);
 
   // ── Wire file:open → switch Monaco model ─────────────────
   eventBus.on(FileEvents.Open, (payload: unknown) => {
@@ -373,33 +404,114 @@ async function bootstrap() {
 
   // ── Wire settings changes → Monaco editor options ────────
   eventBus.on(SettingsEvents.Change, (payload: unknown) => {
-    const { id, value } = payload as { id: string; value: unknown };
+    const p = payload as { id?: string; key?: string; value: unknown; _src?: string };
+    if (p._src === "main") return; // prevent re-entry
+    const settingId = p.id ?? p.key ?? "";
+    if (!settingId) return;
+
+    // Re-emit with both id AND key so plugin engine onConfigChange works
+    if (p.id && !p.key) {
+      eventBus.emit(SettingsEvents.Change, { id: settingId, key: settingId, value: p.value, _src: "main" });
+      return;
+    }
+
+    // ── Editor options mapping ─────────────────────────────
     const optMap: Record<string, string> = {
       "editor.fontSize": "fontSize",
       "editor.fontFamily": "fontFamily",
+      "editor.fontWeight": "fontWeight",
+      "editor.fontLigatures": "fontLigatures",
+      "editor.lineHeight": "lineHeight",
+      "editor.letterSpacing": "letterSpacing",
       "editor.tabSize": "tabSize",
+      "editor.insertSpaces": "insertSpaces",
       "editor.wordWrap": "wordWrap",
+      "editor.lineNumbers": "lineNumbers",
+      "editor.folding": "folding",
+      "editor.glyphMargin": "glyphMargin",
       "editor.minimap.enabled": "minimap.enabled",
+      "editor.minimap.side": "minimap.side",
       "editor.smoothScrolling": "smoothScrolling",
+      "editor.scrollBeyondLastLine": "scrollBeyondLastLine",
       "editor.cursorBlinking": "cursorBlinking",
-      "editor.bracketPairColorization": "bracketPairColorization.enabled",
+      "editor.cursorStyle": "cursorStyle",
+      "editor.cursorSmoothCaretAnimation": "cursorSmoothCaretAnimation",
+      "editor.bracketPairColorization.enabled": "bracketPairColorization.enabled",
       "editor.renderWhitespace": "renderWhitespace",
+      "editor.renderLineHighlight": "renderLineHighlight",
+      "editor.suggestOnTriggerCharacters": "suggestOnTriggerCharacters",
+      "editor.quickSuggestions": "quickSuggestions",
+      "editor.snippetSuggestions": "snippetSuggestions",
+      "editor.formatOnPaste": "formatOnPaste",
+      "editor.formatOnType": "formatOnType",
+      "diffEditor.renderSideBySide": "renderSideBySide",
     };
-    const opt = optMap[id];
-    if (!opt) return;
-    if (opt.includes(".")) {
-      const [parent, child] = opt.split(".");
-      ide.editor.updateOptions({ [parent]: { [child]: value } });
-    } else {
-      ide.editor.updateOptions({ [opt]: value });
+    const opt = optMap[settingId];
+    if (opt) {
+      if (opt.includes(".")) {
+        const [parent, child] = opt.split(".");
+        ide.editor.updateOptions({ [parent]: { [child]: p.value } });
+      } else {
+        ide.editor.updateOptions({ [opt]: p.value });
+      }
+      return;
+    }
+
+    // ── Workbench / UI toggle settings ─────────────────────
+    switch (settingId) {
+      case "workbench.colorTheme": {
+        const themeName = String(p.value);
+        // Use theme plugin API — handles CDN loading, caching, and Monaco registration
+        themeApi.apply(themeName).catch((err) => {
+          // Fallback: try case-insensitive match against registered names
+          const match = BUILTIN_THEME_NAMES.find((n) => n.toLowerCase() === themeName.toLowerCase());
+          if (match) {
+            themeApi.apply(match).catch(() => console.warn("[theme] failed to apply:", themeName, err));
+          }
+        });
+        break;
+      }
+      case "workbench.activityBar.visible":
+        activityBarEl.style.display = p.value ? "" : "none";
+        break;
+      case "workbench.statusBar.visible":
+        statusBarEl.style.display = p.value ? "" : "none";
+        break;
+      case "workbench.sideBar.location":
+        sidebarEl.style.order = p.value === "right" ? "3" : "";
+        activityBarEl.style.order = p.value === "right" ? "4" : "";
+        break;
+      case "breadcrumbs.enabled":
+        breadcrumbEl.style.display = p.value ? "" : "none";
+        break;
+      case "workbench.editor.showIcons":
+        document.documentElement.style.setProperty("--tab-icon-display", p.value ? "inline-flex" : "none");
+        break;
+      case "workbench.editor.highlightModifiedTabs":
+        document.documentElement.style.setProperty("--tab-dirty-border", p.value ? "2px" : "0");
+        break;
     }
   });
 
   // ── Wire theme changes → Monaco + wireframe CSS vars ──────
   eventBus.on(ThemeEvents.Changed, (payload: unknown) => {
-    const { name, monacoTheme } = payload as { name: string; type: string; monacoTheme: string };
+    const p = payload as { name?: string; themeId?: string; monacoTheme?: string };
+    const themeKey = p.name ?? p.themeId ?? "";
+    const def = THEME_DEFS[themeKey];
+    const monacoTheme = p.monacoTheme ?? (def?.type === "light" ? "vs" : def?.type === "hc" ? "hc-black" : "vs-dark");
     monaco.editor.setTheme(monacoTheme);
-    switchTheme(name);
+    switchTheme(themeKey);
+    // Re-register any newly loaded themes from the plugin
+    registerThemes(themeApi.getThemes());
+  });
+
+  // ── Wire language detection → Monaco model language ───────
+  eventBus.on(EditorEvents.LanguageChange, (payload: unknown) => {
+    const { uri, language } = payload as { uri: string; language: string };
+    const model = models.get(uri);
+    if (model) {
+      monaco.editor.setModelLanguage(model, language);
+    }
   });
 
   // ══════════════════════════════════════════════════════════
@@ -477,7 +589,7 @@ async function bootstrap() {
     // Title
     const filePath = model.uri.path.replace(/^\//, "");
     const fileName = filePath.split("/").pop() ?? filePath;
-    document.title = `${fileName} — Antigravity — Monaco Vanced`;
+    document.title = `${fileName} — Monaco Vanced`;
   }
 
   ide.editor.onDidChangeModel(() => { updateModelMeta(); });
@@ -522,7 +634,7 @@ async function bootstrap() {
 const actions: monaco.editor.IActionDescriptor[] = [
    
     {
-      id: "antigravity.toggleSidebar",
+      id: "monacoVanced.toggleSidebar",
       label: "Toggle Sidebar",
       contextMenuGroupId: "z_commands",
       contextMenuOrder: 2,
@@ -530,7 +642,7 @@ const actions: monaco.editor.IActionDescriptor[] = [
       run: () => { eventBus.emit(SidebarEvents.Toggle, {}); },
     },
     {
-      id: "antigravity.togglePanel",
+      id: "monacoVanced.togglePanel",
       label: "Toggle Panel",
       contextMenuGroupId: "z_commands",
       contextMenuOrder: 3,
@@ -538,7 +650,7 @@ const actions: monaco.editor.IActionDescriptor[] = [
       run: () => { eventBus.emit(PanelEvents.BottomToggle, {}); },
     },
     {
-      id: "antigravity.openSettings",
+      id: "monacoVanced.openSettings",
       label: "Open Settings",
       contextMenuGroupId: "z_commands",
       contextMenuOrder: 4,
@@ -548,74 +660,74 @@ const actions: monaco.editor.IActionDescriptor[] = [
 
     // ── Palette-only (no contextMenuGroupId) ──────────────
     {
-      id: "antigravity.find",
+      id: "monacoVanced.find",
       label: "Find",
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF],
       run: (ed) => { ed.getAction("actions.find")?.run(); },
     },
     {
-      id: "antigravity.findReplace",
+      id: "monacoVanced.findReplace",
       label: "Find and Replace",
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyH],
       run: (ed) => { ed.getAction("editor.action.startFindReplaceAction")?.run(); },
     },
     {
-      id: "antigravity.selectAll",
+      id: "monacoVanced.selectAll",
       label: "Select All",
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyA],
       run: (ed) => { ed.getAction("editor.action.selectAll")?.run(); },
     },
     {
-      id: "antigravity.expandSelection",
+      id: "monacoVanced.expandSelection",
       label: "Expand Selection",
       run: (ed) => { ed.getAction("editor.action.smartSelect.expand")?.run(); },
     },
  
     {
-      id: "antigravity.showSourceControl",
+      id: "monacoVanced.showSourceControl",
       label: "Show Source Control",
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyG],
       run: () => { eventBus.emit(SidebarEvents.ViewActivate, { viewId: "scm" }); },
     },
     {
-      id: "antigravity.showDebug",
+      id: "monacoVanced.showDebug",
       label: "Show Run and Debug",
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyD],
       run: () => { eventBus.emit(SidebarEvents.ViewActivate, { viewId: "debug" }); },
     },
     {
-      id: "antigravity.showExtensions",
+      id: "monacoVanced.showExtensions",
       label: "Show Extensions",
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyX],
       run: () => { eventBus.emit(SidebarEvents.ViewActivate, { viewId: "extensions" }); },
     },
     // File
     {
-      id: "antigravity.saveFile",
+      id: "monacoVanced.saveFile",
       label: "Save File",
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS],
       run: () => { notificationApi.show({ type: "success", message: "File saved.", duration: 2000 }); },
     },
     {
-      id: "antigravity.newFile",
+      id: "monacoVanced.newFile",
       label: "New File",
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyN],
       run: () => { notificationApi.show({ type: "info", message: "Use Explorer > New File toolbar button.", duration: 3000 }); },
     },
     // Help
     {
-      id: "antigravity.welcome",
+      id: "monacoVanced.welcome",
       label: "Welcome",
-      run: () => { notificationApi.show({ type: "info", message: "Welcome to Antigravity — Monaco Vanced IDE", duration: 4000 }); },
+      run: () => { notificationApi.show({ type: "info", message: "Welcome to Monaco Vanced IDE", duration: 4000 }); },
     },
     {
-      id: "antigravity.about",
+      id: "monacoVanced.about",
       label: "About",
       run: () => { notificationApi.show({ type: "info", message: "Monaco Vanced v0.2.0 — Plugin-based IDE Architecture", duration: 4000 }); },
     },
     // Language
     {
-      id: "antigravity.changeLanguageMode",
+      id: "monacoVanced.changeLanguageMode",
       label: "Change Language Mode",
       run: () => { notificationApi.show({ type: "info", message: "Language mode selection coming soon.", duration: 3000 }); },
     },
@@ -635,14 +747,55 @@ const actions: monaco.editor.IActionDescriptor[] = [
     });
   }
   // ══════════════════════════════════════════════════════════
-  // Open default file + welcome notification
+  // Startup behavior based on workbench.startupEditor setting
   // ══════════════════════════════════════════════════════════
 
-  eventBus.emit(FileEvents.Open, { uri: defaultFile.uri, label: defaultFile.name });
+  const startupEditor: string = "welcomePage"; // default, overridden by settings
+  switch (startupEditor) {
+    case "none":
+      // Show blank editor — do nothing
+      break;
+    case "newUntitledFile":
+      // Create an empty untitled model
+      ide.editor.setModel(monaco.editor.createModel("", "plaintext"));
+      break;
+    case "readme": {
+      const readmeFile = DEMO_FILES.find((f) => f.uri.toLowerCase() === "readme.md");
+      if (readmeFile) {
+        eventBus.emit(FileEvents.Open, { uri: readmeFile.uri, label: readmeFile.name });
+      }
+      break;
+    }
+    case "welcomePage":
+    default:
+      // Welcome page is shown by default via wireframe
+      eventBus.emit(WelcomeEvents.Show, {});
+      break;
+  }
+
+  // ── Wire startupEditor setting changes ───────────────────
+  eventBus.on(SettingsEvents.Change, (payload: unknown) => {
+    const p = payload as { id?: string; key?: string; value: unknown; _src?: string };
+    const settingId = p.id ?? p.key ?? "";
+    if (settingId === "workbench.startupEditor") {
+      // Store for next session (in localStorage)
+      try { localStorage.setItem("monaco-vanced:startupEditor", String(p.value)); } catch { /* ignore */ }
+    }
+  });
+
+  // ── Wire plugin enable/disable ───────────────────────────
+  eventBus.on(ExtensionEvents.Enabled, (payload: unknown) => {
+    const { id } = payload as { id: string };
+    console.log("[monaco-vanced] Plugin enabled:", id);
+  });
+  eventBus.on(ExtensionEvents.Disabled, (payload: unknown) => {
+    const { id } = payload as { id: string };
+    console.log("[monaco-vanced] Plugin disabled:", id);
+  });
 
   notificationApi.show({
     type: "info",
-    message: "Welcome to Antigravity — Right-click for context menu. Ctrl+Shift+P for command palette.",
+    message: "Welcome to Monaco Vanced — Right-click for context menu. Ctrl+Shift+P for command palette.",
     duration: 6000,
   });
 

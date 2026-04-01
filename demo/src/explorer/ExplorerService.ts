@@ -2,7 +2,7 @@
 // Pure logic layer — no DOM. Components subscribe to state changes.
 
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
-import { FileEvents } from "@enjoys/monaco-vanced/core/events";
+import { FileEvents, TabEvents } from "@enjoys/monaco-vanced/core/events";
 import type { MockFsAPI } from "../mock-fs";
 import type { TreeNode, ExplorerState, InlineInputState } from "./ExplorerTypes";
  
@@ -288,7 +288,7 @@ export class ExplorerService {
     this.eventBus.on(FileEvents.Deleted, onDeleted);
     this.eventBus.on(FileEvents.Renamed, onRenamed);
     this.eventBus.on(FileEvents.Open, onFileOpen);
-    this.eventBus.on("tab:switch", onTabSwitch);
+    this.eventBus.on(TabEvents.Switch, onTabSwitch);
     this.eventBus.on(FileEvents.Modified, onFileModified);
     this.eventBus.on(FileEvents.Saved, onFileSaved);
 
@@ -297,7 +297,7 @@ export class ExplorerService {
       () => this.eventBus.off(FileEvents.Deleted, onDeleted),
       () => this.eventBus.off(FileEvents.Renamed, onRenamed),
       () => this.eventBus.off(FileEvents.Open, onFileOpen),
-      () => this.eventBus.off("tab:switch", onTabSwitch),
+      () => this.eventBus.off(TabEvents.Switch, onTabSwitch),
       () => this.eventBus.off(FileEvents.Modified, onFileModified),
       () => this.eventBus.off(FileEvents.Saved, onFileSaved),
     );

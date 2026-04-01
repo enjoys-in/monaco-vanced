@@ -1,7 +1,7 @@
 // ── Tab bar — open, close, switch, dirty, context menu, breadcrumbs ──
 
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
-import { TabEvents, FileEvents, LayoutEvents } from "@enjoys/monaco-vanced/core/events";
+import { TabEvents, FileEvents, LayoutEvents, SidebarEvents, WelcomeEvents } from "@enjoys/monaco-vanced/core/events";
 import type { DOMRefs, OnHandler, VirtualFile } from "../types";
 import { C } from "../types";
 import { el, fileIconSvg, getExt, langColor } from "../utils";
@@ -89,7 +89,7 @@ export function wireTabs(
     updateBreadcrumb(uri);
     const file = fileMap.get(uri);
     dom.titleCenter.textContent = file ? file.name : uri;
-    document.title = `${file?.name ?? uri} — Antigravity — Monaco Vanced`;
+    document.title = `${file?.name ?? uri} — Monaco Vanced`;
   }
 
   // ── Close tab ──────────────────────────────────────────────
@@ -107,9 +107,9 @@ export function wireTabs(
       } else {
         activeTabUri = null;
         dom.breadcrumbBar.innerHTML = "";
-        dom.titleCenter.textContent = "Antigravity";
-        document.title = "Antigravity — Monaco Vanced";
-        eventBus.emit("welcome:show", {});
+        dom.titleCenter.textContent = "Monaco Vanced";
+        document.title = "Monaco Vanced";
+        eventBus.emit(WelcomeEvents.Show, {});
       }
     }
   }
@@ -173,7 +173,7 @@ export function wireTabs(
         entry.el.style.fontStyle = entry.pinned ? "italic" : "normal";
         eventBus.emit(TabEvents.Pin, { uri, pinned: entry.pinned });
       }},
-      { label: "Reveal in Explorer", action: () => { eventBus.emit("sidebar:view-activate", { viewId: "explorer" }); } },
+      { label: "Reveal in Explorer", action: () => { eventBus.emit(SidebarEvents.ViewActivate, { viewId: "explorer" }); } },
     ]);
   }
 
@@ -267,7 +267,7 @@ export function wireTabs(
       activeTabUri = newUri;
       updateBreadcrumb(newUri);
       dom.titleCenter.textContent = newLabel;
-      document.title = `${newLabel} — Antigravity — Monaco Vanced`;
+      document.title = `${newLabel} — Monaco Vanced`;
     }
 
     fileMap.delete(oldUri);
@@ -291,7 +291,7 @@ export function wireTabs(
   });
 
   // ── Special tabs (Settings, etc.) ──────────────────────────
-  on("tab:open-special", (p) => {
+  on(TabEvents.OpenSpecial, (p) => {
     const { uri, label } = p as { uri: string; label: string };
     if (!openTabs.has(uri)) {
       const tab = createSpecialTabElement(uri, label, eventBus, showTabContextMenu);
@@ -407,7 +407,7 @@ function createSpecialTabElement(
     style: `display:flex;align-items:center;gap:6px;padding:0 12px;height:100%;cursor:pointer;border-right:1px solid ${C.border};font-size:13px;white-space:nowrap;background:${C.tabInactiveBg};color:${C.fgDim};position:relative;min-width:0;border-top:2px solid transparent;border-bottom:1px solid transparent;transition:background .1s;user-select:none;`,
   });
 
-  tab.addEventListener("click", () => eventBus.emit("tab:switch-special", { uri, label }));
+  tab.addEventListener("click", () => eventBus.emit(TabEvents.SwitchSpecial, { uri, label }));
   tab.addEventListener("mouseenter", () => {
     if (uri !== activeTabUri) tab.style.background = C.hover;
     const close = tab.querySelector(".tab-close") as HTMLElement;

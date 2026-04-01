@@ -1,7 +1,7 @@
 // ── Sidebar: multi-view panels — modernized VS Code style ──
 
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
-import { SidebarEvents, FileEvents } from "@enjoys/monaco-vanced/core/events";
+import { SidebarEvents, FileEvents, TabEvents } from "@enjoys/monaco-vanced/core/events";
 import type { DOMRefs, WireframeAPIs, OnHandler, VirtualFile } from "../../types";
 import { C } from "../../types";
 import { el, fileIconSvg, getExt } from "../../utils";
@@ -19,6 +19,10 @@ import { buildSettingsRedirect } from "./settings-view";
 
 export interface SidebarExtras {
   iconApi?: ExplorerIconAPI;
+  extensionApi?: import("@enjoys/monaco-vanced/extensions/extension-module").ExtensionModuleAPI;
+  vsixApi?: import("@enjoys/monaco-vanced/extensions/vsix-module").VSIXModuleAPI;
+  authApi?: import("@enjoys/monaco-vanced/infrastructure/auth-module").AuthModuleAPI;
+  marketplaceApi?: import("@enjoys/monaco-vanced/extensions/marketplace-module").MarketplaceModuleAPI;
 }
 
 export function wireSidebar(
@@ -32,7 +36,7 @@ export function wireSidebar(
 ) {
   let activeViewId = "explorer";
   const viewContainers: Record<string, HTMLElement> = {};
-  const ctx: ViewContext = { files, apis, eventBus, iconApi: extras?.iconApi };
+  const ctx: ViewContext = { files, apis, eventBus, iconApi: extras?.iconApi, extensionApi: extras?.extensionApi, vsixApi: extras?.vsixApi, authApi: extras?.authApi, marketplaceApi: extras?.marketplaceApi };
 
   // ── Explorer instance (if mockFs is provided) ──────────
   let explorer: Explorer | null = null;
@@ -263,7 +267,7 @@ export function wireSidebar(
       });
     };
     on(FileEvents.Open, (p) => { const { uri } = p as { uri: string }; setActiveFile(uri); });
-    on("tab:switch", (p) => { const { uri } = p as { uri: string }; setActiveFile(uri); });
+    on(TabEvents.Switch, (p) => { const { uri } = p as { uri: string }; setActiveFile(uri); });
   }
 }
 
