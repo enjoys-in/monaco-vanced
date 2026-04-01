@@ -7,7 +7,7 @@ import type { SidebarExtras } from "./layout/sidebar/index";
 import { FileEvents, SettingsEvents, TabEvents, WelcomeEvents } from "@enjoys/monaco-vanced/core/events";
 
 // Layout
-import { buildShell } from "./layout/shell";
+import { buildReactShell, unmountReactShell } from "../components/mount";
 import { wireActivityBar } from "./layout/activity-bar";
 import { wireSidebar, wireResizeHandle } from "./layout/sidebar/index";
 import { wireTitleBar, wireStatusBar } from "./layout/bars";
@@ -119,7 +119,7 @@ export function mountWireframe(
   sidebarEl: HTMLElement;
   destroy: () => void;
 } {
-  const dom = buildShell(root);
+  const dom = buildReactShell(root, eventBus);
   const disposers: (() => void)[] = [];
   const on = (ev: string, fn: (p: unknown) => void) => {
     eventBus.on(ev, fn);
@@ -155,6 +155,6 @@ export function mountWireframe(
     activityBarEl: dom.activityBar,
     statusBarEl: dom.statusBar,
     sidebarEl: dom.sidebarContainer,
-    destroy: () => { disposers.forEach((d) => d()); dom.root.innerHTML = ""; },
+    destroy: () => { disposers.forEach((d) => d()); unmountReactShell(); dom.root.innerHTML = ""; },
   };
 }

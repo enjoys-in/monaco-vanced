@@ -113,6 +113,7 @@ import { createMockFs, seedDemoProject, type MockFsAPI } from "./mock-fs";
 
 // ── Wireframe ────────────────────────────────────────────────
 import { mountWireframe, type WireframeAPIs, type VirtualFile } from "./wireframe";
+import { mountReactComponents } from "./components/mount";
 
 // ── Build VirtualFile list from mock FS ──────────────────────
 
@@ -353,7 +354,6 @@ async function bootstrap() {
   if (currentThemeId) switchTheme(currentThemeId);
 
   // ── Mount React components (Settings + Welcome + Tabs + Breadcrumbs) ──
-  const { mountReactComponents } = await import("./components/mount");
   mountReactComponents({
     settingsEl,
     welcomeEl,
@@ -642,9 +642,9 @@ async function bootstrap() {
   //   (omit)           → palette-only, no context menu entry
   // ══════════════════════════════════════════════════════════
 
-  
+
 const actions: monaco.editor.IActionDescriptor[] = [
-   
+
     {
       id: "monacoVanced.toggleSidebar",
       label: "Toggle Sidebar",

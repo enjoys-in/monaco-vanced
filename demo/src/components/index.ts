@@ -5,3 +5,5 @@ export { WelcomePage } from "./welcome";
 export { TabBar, Tab, TabContextMenu, Breadcrumbs } from "./tabs";
 export type { TabBarProps, TabProps, MenuItemDef, BreadcrumbsProps } from "./tabs";
 export { CollapsibleSection, SearchInput, TabPill, IconButton } from "./shared";
+export { Shell } from "./shell";
+export type { ShellHandle } from "./shell";
