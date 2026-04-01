@@ -179,27 +179,10 @@ export function buildExtensionsView(ctx: ViewContext): HTMLElement {
     const category = activeFilter !== "all" ? activeFilter : undefined;
 
     try {
-      // Try marketplace API first (if wired), then Open VSX direct
-      if (marketplaceApi) {
-        try {
-          const results = await marketplaceApi.search({ query, limit: PAGE_SIZE, category } as any);
-          currentExts = results.map((r: any) => ({
-            id: r.id, name: r.name, publisher: r.publisher, version: r.version,
-            description: r.description, downloads: r.downloads ?? 0,
-            rating: r.rating ?? 0, categories: r.categories ?? [], iconUrl: r.icon,
-          }));
-          totalResults = currentExts.length;
-        } catch {
-          // Fall through to Open VSX
-          const result = await fetchOpenVSX(query, PAGE_SIZE, category);
-          currentExts = result.entries;
-          totalResults = result.total;
-        }
-      } else {
-        const result = await fetchOpenVSX(query, PAGE_SIZE, category);
-        currentExts = result.entries;
-        totalResults = result.total;
-      }
+      // Fetch directly from Open VSX registry
+      const result = await fetchOpenVSX(query, PAGE_SIZE, category);
+      currentExts = result.entries;
+      totalResults = result.total;
 
       resultInfo.textContent = totalResults > 0
         ? `${totalResults.toLocaleString()} extensions found${query ? ` for "${query}"` : ""}${category ? ` in ${category}` : ""}`
