@@ -138,7 +138,10 @@ const { plugin: notificationPlugin, api: notificationApi } = createNotificationP
 const { plugin: dialogPlugin, api: dialogApi } = createDialogPlugin();
 
 // Theming
-const { plugin: themePlugin, api: themeApi } = createThemePlugin();
+const { plugin: themePlugin, api: themeApi } = createThemePlugin({
+  persistKey: "monaco-vanced:colorTheme",
+  defaultTheme: "dracula",
+});
 const { plugin: iconPlugin, api: iconApi } = createIconPlugin();
 
 // Layout
