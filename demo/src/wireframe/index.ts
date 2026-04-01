@@ -3,12 +3,12 @@
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
 import type { WireframeAPIs, VirtualFile } from "./types";
 import type { MockFsAPI } from "../mock-fs";
-import type { SidebarExtras } from "./layout/sidebar";
+import type { SidebarExtras } from "./layout/sidebar/index";
 
 // Layout
 import { buildShell } from "./layout/shell";
 import { wireActivityBar } from "./layout/activity-bar";
-import { wireSidebar, wireResizeHandle } from "./layout/sidebar";
+import { wireSidebar, wireResizeHandle } from "./layout/sidebar/index";
 import { wireTabs } from "./layout/tabs";
 import { wireTitleBar, wireStatusBar } from "./layout/bars";
 
@@ -19,7 +19,7 @@ import { wireSettingsWebview } from "./panels/settings-webview";
 
 export type { WireframeAPIs, VirtualFile } from "./types";
 
-export type { SidebarExtras as WireframeExtras } from "./layout/sidebar";
+export type { SidebarExtras as WireframeExtras } from "./layout/sidebar/index";
 
 export function mountWireframe(
   root: HTMLElement,
