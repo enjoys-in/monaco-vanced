@@ -323,7 +323,7 @@ async function bootstrap() {
     vsixApi: vsixApi,
     authApi: authApi,
     marketplaceApi: marketplaceApi,
-  }, { useReactPanels: true, useReactTabs: true });
+  }, { useReactPanels: true });
 
   const defaultFile = DEMO_FILES.find((f) => f.uri === "src/app.tsx")
     ?? DEMO_FILES.find((f) => f.uri === "src/main.tsx")

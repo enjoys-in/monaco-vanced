@@ -10,7 +10,6 @@ import { FileEvents, SettingsEvents, TabEvents, WelcomeEvents } from "@enjoys/mo
 import { buildShell } from "./layout/shell";
 import { wireActivityBar } from "./layout/activity-bar";
 import { wireSidebar, wireResizeHandle } from "./layout/sidebar/index";
-import { wireTabs } from "./layout/tabs";
 import { wireTitleBar, wireStatusBar } from "./layout/bars";
 
 // Panels
@@ -107,7 +106,7 @@ export function mountWireframe(
   files: VirtualFile[],
   mockFs?: MockFsAPI,
   extras?: SidebarExtras,
-  options?: { useReactPanels?: boolean; useReactTabs?: boolean },
+  options?: { useReactPanels?: boolean },
 ): {
   editorContainer: HTMLElement;
   settingsEl: HTMLElement;
@@ -129,12 +128,6 @@ export function mountWireframe(
 
   wireActivityBar(dom, apis, eventBus, on, extras);
   wireSidebar(dom, apis, eventBus, on, files, mockFs, extras);
-
-  // Skip vanilla tabs when React tabs are used
-  if (!options?.useReactTabs) {
-    wireTabs(dom, eventBus, on, files, extras?.iconApi);
-  }
-
   wireTitleBar(dom, apis, eventBus, on);
   wireStatusBar(dom, apis, on);
   wireBottomPanel(dom, eventBus, on, files);
