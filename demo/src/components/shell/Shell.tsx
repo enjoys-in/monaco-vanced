@@ -1,6 +1,6 @@
 // ── React Shell — full IDE chrome layout ─────────────────────
 
-import { useRef, useCallback, useImperativeHandle, useEffect, forwardRef, type CSSProperties } from "react";
+import { useState, useRef, useCallback, useImperativeHandle, useEffect, forwardRef, type CSSProperties } from "react";
 import { CV } from "../theme";
 import type { DOMRefs } from "../../wireframe/types";
 import { ActivityBar, ActivityBarBottom, type ActivityBarProps } from "../activity-bar/ActivityBar";
@@ -10,6 +10,7 @@ import { StatusBar, type StatusBarProps } from "../status-bar/StatusBar";
 import { ContextMenu } from "../context-menu/ContextMenu";
 import { CommandPalette } from "../command-palette/CommandPalette";
 import { BottomPanel } from "../bottom-panel/BottomPanel";
+import { AiChat, type AiChatProps } from "../ai-chat/AiChat";
 
 // ── Styles (CSS custom properties for live theming) ──────────
 const S = {
@@ -170,8 +171,18 @@ export const Shell = forwardRef<ShellHandle, {
   commandApi?: TitleBarProps["commandApi"];
   statusbarApi?: StatusBarProps["statusbarApi"];
   contextMenuApi?: { dismiss(): void };
+  aiApi?: AiChatProps["aiApi"];
   files?: { uri: string; name: string }[];
-}>(function Shell({ rootEl, eventBus, authApi, commandApi, statusbarApi, contextMenuApi, files }, ref) {
+}>(function Shell({ rootEl, eventBus, authApi, commandApi, statusbarApi, contextMenuApi, aiApi, files }, ref) {
+  const [chatVisible, setChatVisible] = useState(false);
+
+  // Listen for copilot toggle from activity bar or command
+  useEffect(() => {
+    const toggleChat = () => setChatVisible((v) => !v);
+    eventBus.on("copilot:toggle", toggleChat);
+    return () => { eventBus.off("copilot:toggle", toggleChat); };
+  }, [eventBus]);
+
   // Refs for every element that wiring code needs
   const refs = useRef<Partial<DOMRefs>>({});
   const setRef = useCallback(<K extends keyof DOMRefs>(key: K) => (el: HTMLElement | null) => {
@@ -271,6 +282,17 @@ export const Shell = forwardRef<ShellHandle, {
           {/* Bottom Panel */}
           <BottomPanel eventBus={eventBus} files={files} />
         </div>
+
+        {/* AI Chat Panel (right side) */}
+        {aiApi && (
+          <AiChat
+            eventBus={eventBus}
+            aiApi={aiApi}
+            visible={chatVisible}
+            onClose={() => setChatVisible(false)}
+            files={files}
+          />
+        )}
       </div>
 
       {/* ── Status Bar ── */}

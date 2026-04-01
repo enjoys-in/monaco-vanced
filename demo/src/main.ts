@@ -500,6 +500,7 @@ async function bootstrap() {
     vsixApi: vsixApi,
     authApi: authApi,
     marketplaceApi: marketplaceApi,
+    aiApi: aiApi,
   });
 
   const defaultFile = DEMO_FILES.find((f) => f.uri === "src/app.tsx")
@@ -1262,6 +1263,11 @@ const actions: monaco.editor.IActionDescriptor[] = [
       const status = aiApi.getStatus();
       notificationApi.show({ type: "info", message: `AI Module Status: ${status}`, duration: 3000 });
     },
+  });
+  commandApi.register({
+    id: "monacoVanced.toggleCopilot",
+    label: "Copilot: Toggle Chat Panel",
+    handler: () => eventBus.emit("copilot:toggle", {}),
   });
 
   // ── 16. AI Agent — register demo actions ──────────────────

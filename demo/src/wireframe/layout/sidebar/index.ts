@@ -23,6 +23,7 @@ export interface SidebarExtras {
   vsixApi?: import("@enjoys/monaco-vanced/extensions/vsix-module").VSIXModuleAPI;
   authApi?: import("@enjoys/monaco-vanced/infrastructure/auth-module").AuthModuleAPI;
   marketplaceApi?: import("@enjoys/monaco-vanced/extensions/marketplace-module").MarketplaceModuleAPI;
+  aiApi?: { chat(messages: { role: string; content: string }[], opts?: Record<string, unknown>): Promise<{ content: string; metadata?: Record<string, unknown> }>; abort(): void; getStatus(): string };
 }
 
 export function wireSidebar(

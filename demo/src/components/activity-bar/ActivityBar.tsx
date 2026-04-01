@@ -15,6 +15,7 @@ const ICONS = [
 ] as const;
 
 const BOTTOM_ICONS = [
+  { id: "copilot", label: "Copilot (Ctrl+Shift+I)", svg: `<svg width="24" height="24" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l1.7 4.3L14 7l-4.3 1.7L8 13l-1.7-4.3L2 7l4.3-1.7L8 1z"/></svg>` },
   { id: "accounts", label: "Accounts", svg: `<svg width="24" height="24" viewBox="0 0 16 16" fill="none"><path d="M16 7.992C16 3.58 12.416 0 8 0S0 3.58 0 7.992c0 2.43 1.104 4.612 2.832 6.088.016.016.032.016.032.032.144.112.288.224.448.336.08.048.144.111.224.175A7.98 7.98 0 008.016 16a7.98 7.98 0 004.48-1.377c.08-.048.144-.111.224-.16.144-.128.304-.224.448-.336.016-.016.032-.016.032-.032A7.995 7.995 0 0016 7.992zm-8 6.513a6.493 6.493 0 01-3.6-1.09 4 4 0 017.2 0 6.493 6.493 0 01-3.6 1.09zM5.5 7a2.5 2.5 0 015 0 2.5 2.5 0 01-5 0zm8.065 5.408a5.493 5.493 0 00-3.214-2.688A4.001 4.001 0 008 3.5a4 4 0 00-2.35 6.22 5.494 5.494 0 00-3.214 2.688A6.491 6.491 0 011.5 7.992 6.494 6.494 0 018 1.5a6.494 6.494 0 016.5 6.492 6.49 6.49 0 01-1.935 4.416z" fill="currentColor"/></svg>` },
   { id: "settings-gear", label: "Manage", svg: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M19.85 8.75l4.15.83v4.84l-4.15.83 2.35 3.52-3.42 3.42-3.52-2.35-.83 4.16H9.58l-.84-4.15-3.52 2.35-3.42-3.43 2.35-3.52L0 12.42V7.58l4.15-.84L1.8 3.22 5.22 1.8l3.52 2.35L9.58 0h4.84l.84 4.15 3.52-2.35 3.42 3.42-2.35 3.53zM12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z" fill="currentColor"/></svg>` },
 ] as const;
@@ -236,6 +237,8 @@ export function ActivityBarBottom({ eventBus, authApi }: ActivityBarProps) {
               eventBus.emit(SettingsEvents.UIOpen, {});
             } else if (icon.id === "accounts") {
               setAccountsAnchor(e.currentTarget.getBoundingClientRect());
+            } else if (icon.id === "copilot") {
+              eventBus.emit("copilot:toggle" as string, {});
             }
           }}
         />

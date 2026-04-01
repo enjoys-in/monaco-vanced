@@ -29,6 +29,9 @@
 
   /* Notifications narrower */
   .vsc-toast-container { right: 8px !important; max-width: calc(100vw - 16px) !important; }
+
+  /* AI Chat panel narrower on tablet */
+  .vsc-ai-chat { width: 320px !important; min-width: 260px !important; }
 }
 
 /* ── Small Tablet / Large Phone: ≤768px ────────────────────── */
@@ -58,6 +61,9 @@
 
   /* Command palette full width */
   .vsc-command-palette { width: 100vw !important; max-width: 100vw !important; left: 0 !important; transform: none !important; border-radius: 0 !important; }
+
+  /* AI Chat: overlay on small screens */
+  .vsc-ai-chat { position: absolute !important; right: 0 !important; top: 0 !important; bottom: 0 !important; z-index: 60 !important; width: 100vw !important; max-width: 340px !important; box-shadow: -4px 0 16px rgba(0,0,0,0.5) !important; }
 
   /* Tab bar: scroll horizontally, smaller tabs */
   .vsc-tab-bar { scroll-snap-type: x mandatory; }
@@ -95,6 +101,15 @@
   .vsc-tab-bar > * { min-height: 38px !important; }
   .vsc-status-item { min-height: 28px !important; padding: 0 6px !important; }
   .vsc-menu-item { min-height: 32px !important; }
+}
+
+/* ── AI Chat panel ─────────────────────────────────────────── */
+.vsc-ai-chat { transition: width .15s ease; }
+.vsc-ai-chat-messages { scroll-behavior: smooth; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
 /* ── Explorer enhancements ─────────────────────────────────── */

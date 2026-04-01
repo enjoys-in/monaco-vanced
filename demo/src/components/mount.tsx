@@ -113,6 +113,7 @@ export function buildReactShell(
     commandApi?: { execute(id: string, ...args: unknown[]): void; search?(query: string): { id: string; label?: string }[]; getAll?(): { id: string; label?: string }[] | string[] };
     statusbarApi?: { getItems(align: "left" | "right"): { id: string; label: string; tooltip?: string; alignment?: "left" | "right"; command?: string; visible?: boolean }[] };
     contextMenuApi?: { dismiss(): void };
+    aiApi?: { chat(messages: { role: string; content: string }[], opts?: Record<string, unknown>): Promise<{ content: string; metadata?: Record<string, unknown> }>; abort(): void; getStatus(): string };
     files?: { uri: string; name: string }[];
   },
 ): DOMRefs {
@@ -137,6 +138,7 @@ export function buildReactShell(
           commandApi={extras?.commandApi}
           statusbarApi={extras?.statusbarApi}
           contextMenuApi={extras?.contextMenuApi}
+          aiApi={extras?.aiApi}
           files={extras?.files}
         />
       </ThemeProvider>,

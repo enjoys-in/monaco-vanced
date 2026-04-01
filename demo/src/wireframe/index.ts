@@ -118,6 +118,7 @@ export function mountWireframe(
     commandApi: apis.command,
     statusbarApi: apis.statusbar,
     contextMenuApi: apis.contextMenu,
+    aiApi: extras?.aiApi,
     files,
   });
   const disposers: (() => void)[] = [];
