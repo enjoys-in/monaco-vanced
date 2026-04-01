@@ -2,7 +2,7 @@
 // Pure logic layer — no DOM. Components subscribe to state changes.
 
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
-import { FileEvents, TabEvents } from "@enjoys/monaco-vanced/core/events";
+import { FileEvents, TabEvents, LayoutEvents } from "@enjoys/monaco-vanced/core/events";
 import type { MockFsAPI } from "../mock-fs";
 import type { TreeNode, ExplorerState, InlineInputState } from "./ExplorerTypes";
  
@@ -138,6 +138,11 @@ export class ExplorerService {
       uri: path,
       label: path.split("/").pop() ?? path,
     });
+  }
+
+  openFileSide(path: string): void {
+    this.openFile(path);
+    this.eventBus.emit(LayoutEvents.Split, { direction: "right", uri: path });
   }
 
   // ── CRUD operations ─────────────────────────────────────

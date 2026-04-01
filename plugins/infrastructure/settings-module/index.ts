@@ -209,6 +209,34 @@ const DEFAULT_EDITOR_SETTINGS: Record<string, { type: SettingType; default: unkn
   "editor.inDiffEditor":                   { type: "boolean", default: false, description: "Editor is inside a diff editor" },
   "editor.mouseStyle":                     { type: "enum",    default: "text", description: "Mouse pointer style: 'text', 'default', 'copy'" },
   "editor.experimentalGpuAcceleration":    { type: "enum",    default: "off", description: "WebGPU rendering: 'on', 'off'" },
+
+  // ── Hover ──────────────────────────────────────────────
+  "editor.hover.enabled":                  { type: "boolean", default: true, description: "Show hover tooltips" },
+  "editor.hover.delay":                    { type: "number",  default: 300, description: "Hover delay in ms" },
+
+  // ── Parameter Hints ────────────────────────────────────
+  "editor.parameterHints.enabled":         { type: "boolean", default: true, description: "Show parameter hints on function call" },
+
+  // ── Guides ─────────────────────────────────────────────
+  "editor.guides.bracketPairs":            { type: "enum",    default: "false", description: "Bracket pair guides: 'true', 'false', 'active'" },
+  "editor.guides.indentation":             { type: "boolean", default: true, description: "Render indentation guides" },
+
+  // ── Minimap (extra) ────────────────────────────────────
+  "editor.minimap.side":                   { type: "enum",    default: "right", description: "Minimap side: 'left', 'right'" },
+  "editor.minimap.maxColumn":              { type: "number",  default: 120, description: "Maximum width of minimap in columns" },
+
+  // ── Find ───────────────────────────────────────────────
+  "editor.find.seedSearchStringFromSelection": { type: "enum", default: "always", description: "Seed search from selection: 'never', 'always', 'selection'" },
+  "editor.find.autoFindInSelection":       { type: "enum",    default: "never", description: "Auto find in selection: 'never', 'always', 'multiline'" },
+
+  // ── Inlay Hints ────────────────────────────────────────
+  "editor.inlayHints.enabled":             { type: "enum",    default: "on", description: "Inlay hints: 'on', 'off', 'onUnlessPressed', 'offUnlessPressed'" },
+
+  // ── Unicode ────────────────────────────────────────────
+  "editor.unicodeHighlight.ambiguousCharacters": { type: "boolean", default: true, description: "Highlight ambiguous unicode characters" },
+
+  // ── Formatter ──────────────────────────────────────────
+  "editor.defaultFormatter":               { type: "string",  default: "", description: "Default formatter extension id" },
 };
 
 const DEFAULT_THEME_SETTINGS: Record<string, { type: SettingType; default: unknown; description: string }> = {

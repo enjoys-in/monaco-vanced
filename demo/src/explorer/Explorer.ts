@@ -184,7 +184,7 @@ export class Explorer {
         if (!node.isDirectory) this.service.openFile(node.path);
         break;
       case ExplorerAction.OpenSide:
-        if (!node.isDirectory) this.service.openFile(node.path);
+        if (!node.isDirectory) this.service.openFileSide(node.path);
         break;
       case ExplorerAction.NewFile:
         this.service.startInlineInput(node.path, "file", this.getDepth(node.path) + 1);

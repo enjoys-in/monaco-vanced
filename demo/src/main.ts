@@ -57,8 +57,88 @@ import { createDebugPlugin } from "@enjoys/monaco-vanced/devtools/debugger-modul
 // ── Plugins: Auth ─────────────────────────────────────────────
 import { createAuthPlugin } from "@enjoys/monaco-vanced/infrastructure/auth-module";
 
+// ── Plugins: Infrastructure (extras) ─────────────────────────
+import { createDeepLinkPlugin } from "@enjoys/monaco-vanced/infrastructure/deep-link-module";
+import { createStoragePlugin } from "@enjoys/monaco-vanced/infrastructure/storage-module";
+
+// ── Plugins: Editor (extras) ─────────────────────────────────
+import { createDecorationsPlugin } from "@enjoys/monaco-vanced/editor/decorations-module";
+import { createPreviewPlugin } from "@enjoys/monaco-vanced/editor/preview-module";
+import { createSnippetsPlugin } from "@enjoys/monaco-vanced/editor/snippets-module";
+import { createVirtualizationPlugin } from "@enjoys/monaco-vanced/editor/virtualization-module";
+import { createWebviewPlugin } from "@enjoys/monaco-vanced/editor/webview-module";
+
+// ── Plugins: Language ────────────────────────────────────────
+import { createContextPlugin } from "@enjoys/monaco-vanced/language/context-module";
+import { createDiagnosticsPlugin } from "@enjoys/monaco-vanced/language/diagnostics-module";
+import { createESLintPlugin } from "@enjoys/monaco-vanced/language/eslint-module";
+import { createLanguageConfigPlugin } from "@enjoys/monaco-vanced/language/language-config";
+import { createLspBridgePlugin } from "@enjoys/monaco-vanced/language/lsp-bridge-module";
+import { createMonarchGrammarsPlugin } from "@enjoys/monaco-vanced/language/monarch-grammars";
+import { createPrettierPlugin } from "@enjoys/monaco-vanced/language/prettier-module";
+import { createSymbolIndexPlugin } from "@enjoys/monaco-vanced/language/symbol-index-module";
+
+// ── Plugins: Platform ────────────────────────────────────────
+import { createConcurrencyPlugin } from "@enjoys/monaco-vanced/platform/concurrency-module";
+import { createCrashRecoveryPlugin } from "@enjoys/monaco-vanced/platform/crash-recovery-module";
+import { createFallbackPlugin } from "@enjoys/monaco-vanced/platform/fallback-module";
+import { createFeatureFlagPlugin } from "@enjoys/monaco-vanced/platform/feature-flags-module";
+import { createPerformancePlugin } from "@enjoys/monaco-vanced/platform/performance-module";
+import { createResourcePlugin } from "@enjoys/monaco-vanced/platform/resource-module";
+import { createSecurityPlugin } from "@enjoys/monaco-vanced/platform/security-module";
+import { createStreamingPlugin } from "@enjoys/monaco-vanced/platform/streaming-module";
+import { createWorkerPlugin } from "@enjoys/monaco-vanced/platform/worker-module";
+
+// ── Plugins: AI ──────────────────────────────────────────────
+import { createAIPlugin } from "@enjoys/monaco-vanced/ai/ai-module";
+import { createAgentPlugin } from "@enjoys/monaco-vanced/ai/agent-module";
+import { createAIMemoryPlugin } from "@enjoys/monaco-vanced/ai/ai-memory-module";
+import { createContextFusionPlugin } from "@enjoys/monaco-vanced/ai/context-fusion-module";
+import { createEvalPlugin } from "@enjoys/monaco-vanced/ai/eval-module";
+import { createIntentPlugin } from "@enjoys/monaco-vanced/ai/intent-module";
+import { createKnowledgeGraphPlugin } from "@enjoys/monaco-vanced/ai/knowledge-graph-module";
+import { createMemoryPlugin } from "@enjoys/monaco-vanced/ai/memory-module";
+import { createPredictivePlugin } from "@enjoys/monaco-vanced/ai/predictive-module";
+import { createRAGPlugin } from "@enjoys/monaco-vanced/ai/rag-module";
+
+// ── Plugins: SCM (extras) ────────────────────────────────────
+import { createCollabPlugin } from "@enjoys/monaco-vanced/scm/collab-module";
+import { createReviewPlugin } from "@enjoys/monaco-vanced/scm/review-module";
+import { createSnapshotPlugin } from "@enjoys/monaco-vanced/scm/snapshot-module";
+import { createSyncPlugin } from "@enjoys/monaco-vanced/scm/sync-module";
+
+// ── Plugins: Filesystem (extras) ─────────────────────────────
+import { createIndexerPlugin } from "@enjoys/monaco-vanced/filesystem/indexer-module";
+import { createWorkspacePlugin } from "@enjoys/monaco-vanced/filesystem/workspace-module";
+
+// ── Plugins: Devtools (extras) ───────────────────────────────
+import { createNotebookPlugin } from "@enjoys/monaco-vanced/devtools/notebook-module";
+import { createProfilerPlugin } from "@enjoys/monaco-vanced/devtools/profiler-module";
+import { createTaskPlugin } from "@enjoys/monaco-vanced/devtools/task-module";
+import { createTestPlugin } from "@enjoys/monaco-vanced/devtools/test-module";
+
+// ── Plugins: Extensions (extras) ─────────────────────────────
+import { createEmbedPlugin } from "@enjoys/monaco-vanced/extensions/embed-module";
+
+// ── Plugins: Enterprise ──────────────────────────────────────
+import { createAPIStabilityPlugin } from "@enjoys/monaco-vanced/enterprise/api-stability-module";
+import { createAuditPlugin } from "@enjoys/monaco-vanced/enterprise/audit-module";
+import { createBillingPlugin } from "@enjoys/monaco-vanced/enterprise/billing-module";
+import { createContextEnginePlugin } from "@enjoys/monaco-vanced/enterprise/context-engine";
+import { createPolicyPlugin } from "@enjoys/monaco-vanced/enterprise/policy-module";
+import { createRealtimePlugin } from "@enjoys/monaco-vanced/enterprise/realtime-module";
+import { createSaasTenantPlugin } from "@enjoys/monaco-vanced/enterprise/saas-tenant-module";
+import { createSecretsPlugin } from "@enjoys/monaco-vanced/enterprise/secrets-module";
+import { createTelemetryPlugin } from "@enjoys/monaco-vanced/enterprise/telemetry-module";
+
 // ── Events ───────────────────────────────────────────────────
-import { FileEvents, PanelEvents, SidebarEvents, SettingsEvents, ThemeEvents, TabEvents, EditorEvents, AuthEvents, WelcomeEvents, ExtensionEvents } from "@enjoys/monaco-vanced/core/events";
+import {
+  FileEvents, PanelEvents, SidebarEvents, SettingsEvents, ThemeEvents, TabEvents,
+  EditorEvents, AuthEvents, WelcomeEvents, ExtensionEvents,
+  DecorationEvents, SnippetEvents, ProfilerEvents, TaskEvents, TestEvents,
+  CrashEvents, SecurityEvents, AuditEvents, CollabEvents, ReviewEvents,
+  NotebookEvents, GraphEvents, PredictEvents, PerformanceEvents, AiEvents,
+} from "@enjoys/monaco-vanced/core/events";
 
 // ── Builtin theme definitions for registration ───────────────
 import draculaTheme from "../../plugins/theming/theme-module/builtin/dracula.json";
@@ -226,17 +306,113 @@ const { plugin: gitPlugin } = createGitPlugin();
 const { plugin: terminalPlugin } = createTerminalPlugin();
 const { plugin: debugPlugin } = createDebugPlugin();
 
+// Infrastructure (extras)
+const { plugin: deepLinkPlugin, api: deepLinkApi } = createDeepLinkPlugin();
+const { plugin: storagePlugin, api: storageApi } = createStoragePlugin();
+
+// Editor (extras)
+const decorationsPlugin = createDecorationsPlugin();
+const previewPlugin = createPreviewPlugin();
+const snippetsPlugin = createSnippetsPlugin();
+const virtualizationPlugin = createVirtualizationPlugin();
+const { plugin: webviewPlugin, api: webviewApi } = createWebviewPlugin();
+
+// Language
+const contextPlugin = createContextPlugin();
+const diagnosticsPlugin = createDiagnosticsPlugin();
+const eslintPlugin = createESLintPlugin();
+const languageConfigPlugin = createLanguageConfigPlugin();
+const lspBridgePlugin = createLspBridgePlugin();
+const monarchGrammarsPlugin = createMonarchGrammarsPlugin();
+const prettierPlugin = createPrettierPlugin();
+const symbolIndexPlugin = createSymbolIndexPlugin();
+
+// Platform
+const { plugin: concurrencyPlugin, api: concurrencyApi } = createConcurrencyPlugin();
+const { plugin: crashRecoveryPlugin, api: crashRecoveryApi } = createCrashRecoveryPlugin();
+const { plugin: fallbackPlugin, api: fallbackApi } = createFallbackPlugin();
+const { plugin: featureFlagPlugin, api: featureFlagApi } = createFeatureFlagPlugin();
+const { plugin: performancePlugin, api: performanceApi } = createPerformancePlugin();
+const { plugin: resourcePlugin, api: resourceApi } = createResourcePlugin();
+const { plugin: securityPlugin, api: securityApi } = createSecurityPlugin();
+const { plugin: streamingPlugin, api: streamingApi } = createStreamingPlugin();
+const { plugin: workerPlugin, api: workerApi } = createWorkerPlugin();
+
+// AI
+const { plugin: aiPlugin, api: aiApi, orchestrator: aiOrchestrator } = createAIPlugin({ transport: "rest", transportConfig: { baseUrl: "/api/ai" } });
+const { plugin: agentPlugin, api: agentApi } = createAgentPlugin();
+const { plugin: aiMemoryPlugin, api: aiMemoryApi } = createAIMemoryPlugin();
+const { plugin: contextFusionPlugin, api: contextFusionApi } = createContextFusionPlugin();
+const { plugin: evalPlugin, api: evalApi } = createEvalPlugin();
+const { plugin: intentPlugin, api: intentApi } = createIntentPlugin();
+const { plugin: knowledgeGraphPlugin, api: knowledgeGraphApi } = createKnowledgeGraphPlugin();
+const { plugin: memoryPlugin, api: memoryApi } = createMemoryPlugin();
+const { plugin: predictivePlugin, api: predictiveApi } = createPredictivePlugin();
+const { plugin: ragPlugin, api: ragApi } = createRAGPlugin({ embedding: { baseUrl: "/api/embeddings" } });
+
+// SCM (extras)
+const { plugin: collabPlugin, api: collabApi } = createCollabPlugin();
+const { plugin: reviewPlugin, api: reviewApi } = createReviewPlugin({ provider: "github" });
+const { plugin: snapshotPlugin, api: snapshotApi } = createSnapshotPlugin();
+const { plugin: syncPlugin, api: syncApi } = createSyncPlugin();
+
+// Filesystem (extras)
+const { plugin: indexerPlugin, api: indexerApi } = createIndexerPlugin();
+const { plugin: workspacePlugin, api: workspaceApi } = createWorkspacePlugin();
+
+// Devtools (extras)
+const { plugin: notebookPlugin, api: notebookApi } = createNotebookPlugin();
+const { plugin: profilerPlugin, api: profilerApi } = createProfilerPlugin();
+const { plugin: taskPlugin, api: taskApi } = createTaskPlugin();
+const { plugin: testPlugin, api: testApi } = createTestPlugin();
+
+// Extensions (extras)
+const { plugin: embedPlugin, api: embedApi } = createEmbedPlugin();
+
+// Enterprise
+const { plugin: apiStabilityPlugin, api: apiStabilityApi } = createAPIStabilityPlugin();
+const { plugin: auditPlugin, api: auditApi } = createAuditPlugin();
+const { plugin: billingPlugin, api: billingApi } = createBillingPlugin();
+const { plugin: contextEnginePlugin, api: contextEngineApi } = createContextEnginePlugin();
+const { plugin: policyPlugin, api: policyApi } = createPolicyPlugin();
+const { plugin: realtimePlugin, api: realtimeApi } = createRealtimePlugin();
+const { plugin: saasTenantPlugin, api: saasTenantApi } = createSaasTenantPlugin();
+const { plugin: secretsPlugin, api: secretsApi } = createSecretsPlugin();
+const { plugin: telemetryPlugin, api: telemetryApi } = createTelemetryPlugin();
+
 const allPlugins = [
+  // Infrastructure
   commandPlugin, keybindingPlugin, settingsPlugin, notificationPlugin, dialogPlugin,
+  authPlugin, deepLinkPlugin, storagePlugin,
+  // Theming
   themePlugin, iconPlugin,
+  // Layout
   layoutPlugin, headerPlugin, sidebarPlugin, statusbarPlugin, titlePlugin,
   navigationPlugin, uiPlugin, contextMenuPlugin,
-  editorPlugin, tabsPlugin,
-  extensionPlugin, marketplacePlugin, vsixPlugin,
-  fsPlugin, searchPlugin, gitPlugin,
-  terminalPlugin, debugPlugin,
-  languageDetectionPlugin,
-  authPlugin,
+  // Editor
+  editorPlugin, tabsPlugin, decorationsPlugin, previewPlugin,
+  snippetsPlugin, virtualizationPlugin, webviewPlugin,
+  // Extensions
+  extensionPlugin, marketplacePlugin, vsixPlugin, embedPlugin,
+  // Filesystem
+  fsPlugin, searchPlugin, indexerPlugin, workspacePlugin,
+  // SCM
+  gitPlugin, collabPlugin, reviewPlugin, snapshotPlugin, syncPlugin,
+  // Language
+  languageDetectionPlugin, contextPlugin, diagnosticsPlugin, eslintPlugin,
+  languageConfigPlugin, lspBridgePlugin, monarchGrammarsPlugin,
+  prettierPlugin, symbolIndexPlugin,
+  // Platform
+  concurrencyPlugin, crashRecoveryPlugin, fallbackPlugin, featureFlagPlugin,
+  performancePlugin, resourcePlugin, securityPlugin, streamingPlugin, workerPlugin,
+  // AI
+  aiPlugin, agentPlugin, aiMemoryPlugin, contextFusionPlugin, evalPlugin,
+  intentPlugin, knowledgeGraphPlugin, memoryPlugin, predictivePlugin, ragPlugin,
+  // Devtools
+  terminalPlugin, debugPlugin, notebookPlugin, profilerPlugin, taskPlugin, testPlugin,
+  // Enterprise
+  apiStabilityPlugin, auditPlugin, billingPlugin, contextEnginePlugin, policyPlugin,
+  realtimePlugin, saasTenantPlugin, secretsPlugin, telemetryPlugin,
 ];
 
 const apis: WireframeAPIs = {
@@ -324,7 +500,7 @@ async function bootstrap() {
     vsixApi: vsixApi,
     authApi: authApi,
     marketplaceApi: marketplaceApi,
-  }, { useReactPanels: true });
+  });
 
   const defaultFile = DEMO_FILES.find((f) => f.uri === "src/app.tsx")
     ?? DEMO_FILES.find((f) => f.uri === "src/main.tsx")
@@ -804,6 +980,626 @@ const actions: monaco.editor.IActionDescriptor[] = [
     const { id } = payload as { id: string };
     console.log("[monaco-vanced] Plugin disabled:", id);
   });
+
+  // ══════════════════════════════════════════════════════════
+  // Wire IDLE/PASSIVE plugin modules into the demo
+  // ══════════════════════════════════════════════════════════
+
+  // ── 1. Decorations — highlight TODO/FIXME/HACK in the editor ──
+  function applyTodoDecorations() {
+    const model = ide.editor.getModel();
+    if (!model) return;
+    const text = model.getValue();
+    const ranges: { range: { startLineNumber: number; startColumn: number; endLineNumber: number; endColumn: number }; options: { isWholeLine: boolean; className: string; glyphMarginClassName: string; overviewRuler: { color: string; position: number } } }[] = [];
+    const re = /\b(TODO|FIXME|HACK|BUG|NOTE|XXX)\b/gi;
+    for (let ln = 1; ln <= model.getLineCount(); ln++) {
+      const line = model.getLineContent(ln);
+      let m: RegExpExecArray | null;
+      re.lastIndex = 0;
+      while ((m = re.exec(line)) !== null) {
+        const tag = m[1].toUpperCase();
+        const color = tag === "FIXME" || tag === "BUG" ? "#f14c4c" : tag === "HACK" || tag === "XXX" ? "#cca700" : "#3794ff";
+        ranges.push({
+          range: { startLineNumber: ln, startColumn: m.index + 1, endLineNumber: ln, endColumn: m.index + m[0].length + 1 },
+          options: { isWholeLine: false, className: `todo-deco-${tag.toLowerCase()}`, glyphMarginClassName: "todo-glyph", overviewRuler: { color, position: 1 } },
+        });
+      }
+    }
+    eventBus.emit(DecorationEvents.Clear, { owner: "todo-highlights" });
+    if (ranges.length > 0) {
+      eventBus.emit(DecorationEvents.Apply, { owner: "todo-highlights", decorations: ranges });
+    }
+  }
+  ide.editor.onDidChangeModel(() => applyTodoDecorations());
+  ide.editor.onDidChangeModelContent(() => applyTodoDecorations());
+  applyTodoDecorations();
+
+  // ── 2. Snippets — register common React/TS/JS snippets ───
+  const demoSnippets = [
+    { prefix: "rfc", label: "React Function Component", body: "export function ${1:Component}({ ${2:props} }: ${3:Props}) {\n  return (\n    <div>\n      $0\n    </div>\n  );\n}", language: "typescriptreact", description: "React function component" },
+    { prefix: "us", label: "useState Hook", body: "const [${1:state}, set${1/(.*)/${1:/capitalize}/}] = useState<${2:string}>(${3:''});", language: "typescriptreact", description: "React useState hook" },
+    { prefix: "ue", label: "useEffect Hook", body: "useEffect(() => {\n  ${1:// effect}\n  return () => {\n    ${2:// cleanup}\n  };\n}, [${3:deps}]);", language: "typescriptreact", description: "React useEffect hook" },
+    { prefix: "cl", label: "Console Log", body: "console.log('${1:label}:', ${2:value});", language: "typescript", description: "Console log with label" },
+    { prefix: "af", label: "Arrow Function", body: "const ${1:name} = (${2:params}) => {\n  $0\n};", language: "typescript", description: "Arrow function" },
+    { prefix: "int", label: "TypeScript Interface", body: "interface ${1:Name} {\n  ${2:key}: ${3:string};\n}", language: "typescript", description: "TypeScript interface" },
+    { prefix: "map", label: "Array Map", body: "${1:array}.map((${2:item}) => {\n  return $0;\n});", language: "typescript", description: "Array map" },
+    { prefix: "imp", label: "Import Statement", body: "import { $2 } from '${1:module}';", language: "typescript", description: "Import statement" },
+    { prefix: "tryc", label: "Try-Catch", body: "try {\n  $1\n} catch (error) {\n  console.error(error);\n  $0\n}", language: "typescript", description: "Try-catch block" },
+    { prefix: "fetch", label: "Fetch Request", body: "const response = await fetch('${1:url}');\nconst data = await response.json();", language: "typescript", description: "Fetch API request" },
+  ];
+  for (const s of demoSnippets) {
+    eventBus.emit(SnippetEvents.Add, s);
+    // Also add for JS/JSX variants
+    if (s.language === "typescript") {
+      eventBus.emit(SnippetEvents.Add, { ...s, language: "javascript" });
+    } else if (s.language === "typescriptreact") {
+      eventBus.emit(SnippetEvents.Add, { ...s, language: "javascriptreact" });
+    }
+  }
+
+  // ── 3. Telemetry — track user actions ─────────────────────
+  {
+    const trackOpen = (p: unknown) => { const { uri } = p as { uri: string }; telemetryApi.recordEvent({ name: "file.open", properties: { uri } }); };
+    const trackSave = (p: unknown) => { const { uri } = p as { uri: string }; telemetryApi.recordEvent({ name: "file.save", properties: { uri } }); };
+    const trackClose = (p: unknown) => { const { uri } = p as { uri: string }; telemetryApi.recordEvent({ name: "tab.close", properties: { uri } }); };
+    eventBus.on(FileEvents.Open, trackOpen);
+    eventBus.on(FileEvents.Save, trackSave);
+    eventBus.on(TabEvents.Close, trackClose);
+  }
+
+  // ── 4. Audit — log security-relevant actions ──────────────
+  {
+    const logAudit = (action: string) => (p: unknown) => {
+      const { uri } = (p ?? {}) as { uri?: string };
+      auditApi.log({ action, resource: uri ?? "unknown", actor: "demo-user", timestamp: Date.now() });
+    };
+    eventBus.on(FileEvents.Open, logAudit("file.open"));
+    eventBus.on(FileEvents.Save, logAudit("file.save"));
+    eventBus.on(FileEvents.Deleted, logAudit("file.delete"));
+    eventBus.on(FileEvents.Created, logAudit("file.create"));
+    eventBus.on(SettingsEvents.UIOpen, logAudit("settings.open"));
+    eventBus.on(AuthEvents.Login, logAudit("auth.login"));
+  }
+
+  // ── 5. Snapshot — auto-snapshot on file save ──────────────
+  eventBus.on(FileEvents.Save, (p: unknown) => {
+    const { uri } = p as { uri: string };
+    const model = models.get(uri);
+    if (model) {
+      snapshotApi.capture({ label: `Auto-save: ${uri.split("/").pop()}`, files: { [uri]: model.getValue() } });
+    }
+  });
+
+  // ── 6. Predictive — track file open patterns ─────────────
+  eventBus.on(FileEvents.Open, (p: unknown) => {
+    const { uri } = p as { uri: string };
+    predictiveApi.recordFile(uri);
+  });
+  // Track command executions
+  const origRegister = commandApi.register.bind(commandApi);
+  commandApi.register = (cmd) => {
+    const wrapped = { ...cmd, handler: (...args: unknown[]) => { predictiveApi.recordCommand(cmd.id); return cmd.handler(...args); } };
+    return origRegister(wrapped);
+  };
+
+  // ── 7. Storage — persist settings to storage module ───────
+  eventBus.on(SettingsEvents.Change, (p: unknown) => {
+    const { key, value, _src } = p as { key?: string; value: unknown; _src?: string };
+    if (key && _src !== "storage-sync") {
+      storageApi.set(`settings:${key}`, JSON.stringify(value)).catch(() => {});
+    }
+  });
+
+  // ── 8. Workspace — configure with demo project root ───────
+  workspaceApi.addRoot({ uri: "file:///demo-project", name: "demo-project" });
+
+  // ── 9. Security — validate plugin permissions on load ─────
+  eventBus.on(ExtensionEvents.Enabled, (p: unknown) => {
+    const { id } = p as { id: string };
+    const result = securityApi.checkPermission(id, "fs.read");
+    if (!result) {
+      console.warn(`[security] Plugin "${id}" lacks fs.read permission`);
+    }
+  });
+
+  // ── 10. Policy — set up demo RBAC roles ───────────────────
+  policyApi.addPolicy({
+    id: "default-access",
+    name: "Default Access",
+    roles: ["editor"],
+    rules: [
+      { resource: "file:*", action: "read", effect: "allow" },
+      { resource: "file:*", action: "write", effect: "allow" },
+      { resource: "settings:*", action: "read", effect: "allow" },
+      { resource: "settings:*", action: "write", effect: "allow" },
+      { resource: "terminal:*", action: "execute", effect: "allow" },
+    ],
+  });
+  policyApi.assignRole("demo-user", "editor");
+
+  // ── 11. Secrets — seed demo secrets ───────────────────────
+  secretsApi.set("github-token", "ghp_demo_xxx_not_real").catch(() => {});
+  secretsApi.set("openai-key", "sk-demo_xxx_not_real").catch(() => {});
+
+  // ── 12. Profiler — add start/stop commands ────────────────
+  let _profiling = false;
+  commandApi.register({
+    id: "monacoVanced.startProfiler",
+    label: "Developer: Start Performance Profile",
+    handler: () => {
+      if (_profiling) return;
+      _profiling = true;
+      eventBus.emit(ProfilerEvents.Start, {});
+      statusbarApi.register({ id: "profiler", label: "$(flame) Profiling…", alignment: "left", priority: 50, tooltip: "Performance profiler running" });
+      notificationApi.show({ type: "info", message: "Profiler started. Use 'Stop Performance Profile' to finish.", duration: 3000 });
+    },
+  });
+  commandApi.register({
+    id: "monacoVanced.stopProfiler",
+    label: "Developer: Stop Performance Profile",
+    handler: () => {
+      if (!_profiling) return;
+      _profiling = false;
+      eventBus.emit(ProfilerEvents.Stop, {});
+      statusbarApi.update("profiler", { label: "$(check) Profile captured" });
+      setTimeout(() => statusbarApi.remove("profiler"), 4000);
+      notificationApi.show({ type: "success", message: "Profile captured. Check Performance tab in DevTools.", duration: 4000 });
+    },
+  });
+
+  // ── 13. Task — wire lint/build as background tasks ────────
+  commandApi.register({
+    id: "monacoVanced.runBuild",
+    label: "Task: Run Build",
+    handler: () => {
+      const id = `build-${Date.now()}`;
+      taskApi.enqueue({ id, label: "Build Project", priority: "high" });
+      statusbarApi.register({ id: "build-task", label: "$(loading~spin) Building…", alignment: "left", priority: 45, tooltip: "Build in progress" });
+      // Simulate build completion
+      setTimeout(() => {
+        taskApi.complete(id, { success: true });
+        statusbarApi.update("build-task", { label: "$(check) Build succeeded" });
+        notificationApi.show({ type: "success", message: "Build completed successfully.", duration: 3000 });
+        setTimeout(() => statusbarApi.remove("build-task"), 4000);
+      }, 2500);
+    },
+  });
+  commandApi.register({
+    id: "monacoVanced.runLint",
+    label: "Task: Run Lint",
+    handler: () => {
+      const id = `lint-${Date.now()}`;
+      taskApi.enqueue({ id, label: "Lint Project", priority: "normal" });
+      statusbarApi.register({ id: "lint-task", label: "$(loading~spin) Linting…", alignment: "left", priority: 44, tooltip: "Lint in progress" });
+      setTimeout(() => {
+        const markers = monaco.editor.getModelMarkers({});
+        const errors = markers.filter((m) => m.severity === monaco.MarkerSeverity.Error).length;
+        const warnings = markers.filter((m) => m.severity === monaco.MarkerSeverity.Warning).length;
+        taskApi.complete(id, { success: errors === 0, errors, warnings });
+        statusbarApi.update("lint-task", { label: errors > 0 ? `$(error) ${errors} errors` : "$(check) Lint clean" });
+        notificationApi.show({ type: errors > 0 ? "warning" : "success", message: `Lint: ${errors} errors, ${warnings} warnings`, duration: 3000 });
+        setTimeout(() => statusbarApi.remove("lint-task"), 4000);
+      }, 1500);
+    },
+  });
+
+  // ── 14. Test — wire test discovery + runner commands ──────
+  commandApi.register({
+    id: "monacoVanced.runTests",
+    label: "Test: Run All Tests",
+    handler: () => {
+      eventBus.emit(TestEvents.Run, { suiteId: "all" });
+      statusbarApi.register({ id: "test-run", label: "$(testing-run-icon) Running tests…", alignment: "left", priority: 43, tooltip: "Tests running" });
+      const passed = 12 + Math.floor(Math.random() * 5);
+      const failed = Math.floor(Math.random() * 3);
+      setTimeout(() => {
+        statusbarApi.update("test-run", {
+          label: failed > 0 ? `$(testing-failed-icon) ${passed} passed, ${failed} failed` : `$(testing-passed-icon) ${passed} passed`,
+        });
+        notificationApi.show({
+          type: failed > 0 ? "warning" : "success",
+          message: `Tests: ${passed} passed, ${failed} failed, ${passed + failed} total`,
+          duration: 4000,
+        });
+        setTimeout(() => statusbarApi.remove("test-run"), 6000);
+      }, 2000);
+    },
+  });
+
+  // ── 15. Notebook — register execute command ───────────────
+  commandApi.register({
+    id: "monacoVanced.notebookExecute",
+    label: "Notebook: Execute Active Cell",
+    handler: () => {
+      eventBus.emit(NotebookEvents.CellExecuteStart, { cellId: "demo-cell-1", language: "typescript" });
+      notificationApi.show({ type: "info", message: "Executing notebook cell…", duration: 2000 });
+      setTimeout(() => {
+        eventBus.emit(NotebookEvents.CellExecuteComplete, { cellId: "demo-cell-1", outputs: [{ type: "text", data: "Cell executed successfully" }], executionTime: 450 });
+      }, 500);
+    },
+  });
+
+  // ── 15b. AI — command palette commands ─────────────────────
+  commandApi.register({
+    id: "monacoVanced.aiExplain",
+    label: "AI: Explain Selected Code",
+    handler: () => eventBus.emit(AiEvents.Explain, {}),
+  });
+  commandApi.register({
+    id: "monacoVanced.aiGenerate",
+    label: "AI: Generate Code at Cursor",
+    handler: () => eventBus.emit(AiEvents.Generate, {}),
+  });
+  commandApi.register({
+    id: "monacoVanced.aiFix",
+    label: "AI: Fix Selected Code",
+    handler: () => eventBus.emit(AiEvents.Fix, {}),
+  });
+  commandApi.register({
+    id: "monacoVanced.aiChat",
+    label: "AI: Ask a Question",
+    handler: async () => {
+      const question = prompt("Ask AI a question:");
+      if (!question) return;
+      statusbarApi.register({ id: "ai-thinking", label: "$(loading~spin) AI: Thinking…", alignment: "left", priority: 60, tooltip: "AI is thinking" });
+      try {
+        const res = await aiApi.chat([
+          { role: "system", content: "You are a helpful coding assistant." },
+          { role: "user", content: question },
+        ]);
+        statusbarApi.remove("ai-thinking");
+        notificationApi.show({ type: "info", message: `AI: ${res.content.slice(0, 400)}`, duration: 10000 });
+      } catch {
+        statusbarApi.remove("ai-thinking");
+        notificationApi.show({ type: "error", message: "AI request failed.", duration: 3000 });
+      }
+    },
+  });
+  commandApi.register({
+    id: "monacoVanced.aiStatus",
+    label: "AI: Show Status",
+    handler: () => {
+      const status = aiApi.getStatus();
+      notificationApi.show({ type: "info", message: `AI Module Status: ${status}`, duration: 3000 });
+    },
+  });
+
+  // ── 16. AI Agent — register demo actions ──────────────────
+  agentApi.registerAction({
+    id: "explain-code",
+    name: "Explain Code",
+    description: "Explain the currently selected code",
+    handler: async (_ctx) => {
+      const sel = ide.editor.getModel()?.getValueInRange(ide.editor.getSelection()!) ?? "";
+      return { result: `Explanation: This code ${sel.length > 50 ? "is a complex block" : "is a short snippet"} containing ${sel.split("\n").length} lines of logic.` };
+    },
+  });
+  agentApi.registerAction({
+    id: "refactor-code",
+    name: "Suggest Refactor",
+    description: "Suggest a refactoring for the selected code",
+    handler: async (_ctx) => {
+      return { result: "Refactoring suggestion: Extract this logic into a separate function for better reusability and testability." };
+    },
+  });
+  agentApi.registerAction({
+    id: "generate-docs",
+    name: "Generate Documentation",
+    description: "Generate JSDoc for the current function",
+    handler: async (_ctx) => {
+      return { result: "/**\n * Description of the function.\n * @param param - Description\n * @returns Description of return value\n */" };
+    },
+  });
+
+  // ── 16b. AI Module — mock backend + wire Explain/Generate/Fix ──
+  // Mock /api/ai so the REST transport gets a realistic response
+  const _origFetch = window.fetch;
+  window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    if (url.endsWith("/api/ai") && init?.method === "POST") {
+      const body = JSON.parse(init.body as string);
+      const lastMsg = (body.messages as { role: string; content: string }[]).filter((m) => m.role === "user").pop();
+      const userContent = lastMsg?.content ?? "";
+      // Simulate a realistic AI response
+      let reply: string;
+      if (userContent.includes("[EXPLAIN]")) {
+        const code = userContent.replace("[EXPLAIN]", "").trim();
+        const lines = code.split("\n").length;
+        reply = `**Explanation**\n\nThis code block contains ${lines} line(s).\n\n` +
+          `- It appears to ${code.includes("function") || code.includes("=>") ? "define a function" : code.includes("class") ? "define a class" : code.includes("import") ? "import dependencies" : "perform data operations"}.\n` +
+          `- Key concepts: ${code.includes("async") ? "asynchronous execution, " : ""}${code.includes("map") || code.includes("filter") ? "array transformation, " : ""}${code.includes("interface") || code.includes("type ") ? "type definitions, " : ""}control flow.\n` +
+          `- Complexity: ${lines > 20 ? "moderate-to-high" : lines > 5 ? "moderate" : "low"}.`;
+      } else if (userContent.includes("[GENERATE]")) {
+        const intent = userContent.replace("[GENERATE]", "").trim();
+        reply = "```typescript\n" +
+          `// Generated code based on context\n` +
+          `export function generatedHelper(input: string): string {\n` +
+          `  // TODO: implement based on: ${intent.slice(0, 80)}\n` +
+          `  const result = input.trim();\n` +
+          `  return result;\n` +
+          `}\n` +
+          "```";
+      } else if (userContent.includes("[FIX]")) {
+        const code = userContent.replace("[FIX]", "").trim();
+        reply = `**Suggested Fix**\n\n` +
+          `1. ${code.includes("any") ? "Replace \`any\` with a proper type annotation." : "Review error handling at the boundaries."}\n` +
+          `2. ${code.includes("==") && !code.includes("===") ? "Use strict equality (===) instead of loose equality (==)." : "Consider adding null checks for optional values."}\n` +
+          `3. ${code.includes("console.log") ? "Remove or replace console.log with a proper logger." : "Add return-type annotation for better type safety."}\n\n` +
+          "```typescript\n// Fixed version (sample)\n" + code.split("\n").slice(0, 8).join("\n") + "\n```";
+      } else {
+        // Generic chat response
+        reply = `I can help with that! Based on the current editor context:\n\n` +
+          `- Language: ${ide.editor.getModel()?.getLanguageId() ?? "unknown"}\n` +
+          `- File: ${ide.editor.getModel()?.uri.path ?? "untitled"}\n\n` +
+          `Here's my analysis of your request: "${userContent.slice(0, 100)}"…\n\n` +
+          `The code looks well-structured. Consider extracting reusable logic into utility functions for better maintainability.`;
+      }
+      await new Promise((r) => setTimeout(r, 400 + Math.random() * 600)); // simulate latency
+      return new Response(JSON.stringify({ choices: [{ message: { content: reply } }] }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    return _origFetch(input, init);
+  };
+
+  // Helper: get selected text or nearby lines
+  const _getEditorContext = () => {
+    const model = ide.editor.getModel();
+    if (!model) return { selection: "", language: "plaintext", file: "untitled" };
+    const sel = ide.editor.getSelection();
+    const selection = sel && !sel.isEmpty()
+      ? model.getValueInRange(sel)
+      : model.getValueInRange({
+          startLineNumber: Math.max(1, (sel?.startLineNumber ?? 1) - 5),
+          startColumn: 1,
+          endLineNumber: Math.min(model.getLineCount(), (sel?.endLineNumber ?? 1) + 5),
+          endColumn: model.getLineMaxColumn(Math.min(model.getLineCount(), (sel?.endLineNumber ?? 1) + 5)),
+        });
+    return { selection, language: model.getLanguageId(), file: model.uri.path };
+  };
+
+  // Handle AI: Explain (from context menu)
+  eventBus.on(AiEvents.Explain, async () => {
+    const ctx = _getEditorContext();
+    statusbarApi.register({ id: "ai-thinking", label: "$(loading~spin) AI: Explaining…", alignment: "left", priority: 60, tooltip: "AI is analyzing code" });
+    try {
+      const res = await aiApi.chat([
+        { role: "system", content: "You are a helpful code explanation assistant." },
+        { role: "user", content: `[EXPLAIN] ${ctx.selection}` },
+      ]);
+      statusbarApi.remove("ai-thinking");
+      notificationApi.show({ type: "info", message: `AI Explain:\n${res.content.slice(0, 300)}`, duration: 8000 });
+      eventBus.emit(AiEvents.ChatResponse, { action: "explain", content: res.content });
+    } catch {
+      statusbarApi.remove("ai-thinking");
+      notificationApi.show({ type: "error", message: "AI Explain failed.", duration: 3000 });
+    }
+  });
+
+  // Handle AI: Generate (from context menu)
+  eventBus.on(AiEvents.Generate, async () => {
+    const ctx = _getEditorContext();
+    statusbarApi.register({ id: "ai-thinking", label: "$(loading~spin) AI: Generating…", alignment: "left", priority: 60, tooltip: "AI is generating code" });
+    try {
+      const res = await aiApi.chat([
+        { role: "system", content: `You are a ${ctx.language} code generator.` },
+        { role: "user", content: `[GENERATE] Context from ${ctx.file}:\n${ctx.selection}` },
+      ]);
+      statusbarApi.remove("ai-thinking");
+      // Insert generated code at cursor
+      const editor = ide.editor;
+      const sel = editor.getSelection();
+      if (sel) {
+        const codeMatch = res.content.match(/```[\w]*\n([\s\S]*?)```/);
+        const codeToInsert = codeMatch ? codeMatch[1] : res.content;
+        editor.executeEdits("ai-generate", [{ range: sel, text: codeToInsert }]);
+        notificationApi.show({ type: "success", message: "AI: Code generated and inserted.", duration: 3000 });
+      } else {
+        notificationApi.show({ type: "info", message: `AI Generate:\n${res.content.slice(0, 300)}`, duration: 8000 });
+      }
+      eventBus.emit(AiEvents.ChatResponse, { action: "generate", content: res.content });
+    } catch {
+      statusbarApi.remove("ai-thinking");
+      notificationApi.show({ type: "error", message: "AI Generate failed.", duration: 3000 });
+    }
+  });
+
+  // Handle AI: Fix (from context menu)
+  eventBus.on(AiEvents.Fix, async () => {
+    const ctx = _getEditorContext();
+    statusbarApi.register({ id: "ai-thinking", label: "$(loading~spin) AI: Fixing…", alignment: "left", priority: 60, tooltip: "AI is suggesting a fix" });
+    try {
+      const res = await aiApi.chat([
+        { role: "system", content: "You are a code review and fix assistant." },
+        { role: "user", content: `[FIX] ${ctx.selection}` },
+      ]);
+      statusbarApi.remove("ai-thinking");
+      notificationApi.show({ type: "info", message: `AI Fix:\n${res.content.slice(0, 400)}`, duration: 10000 });
+      eventBus.emit(AiEvents.ChatResponse, { action: "fix", content: res.content });
+    } catch {
+      statusbarApi.remove("ai-thinking");
+      notificationApi.show({ type: "error", message: "AI Fix failed.", duration: 3000 });
+    }
+  });
+
+  // Wire orchestrator default context sources
+  aiOrchestrator.wireDefaults({
+    getModel: () => ide.editor.getModel(),
+    getSelection: () => ide.editor.getSelection(),
+  });
+
+  // Track AI status changes in statusbar
+  eventBus.on(AiEvents.Status, (p: unknown) => {
+    const status = p as string;
+    if (status === "streaming") {
+      statusbarApi.register({ id: "ai-status", label: "$(sparkle) AI", alignment: "right", priority: 100, tooltip: "AI is active" });
+    } else {
+      statusbarApi.remove("ai-status");
+    }
+  });
+
+  // ── 17. Memory — track editor context for AI ──────────────
+  eventBus.on(FileEvents.Open, (p: unknown) => {
+    const { uri } = p as { uri: string };
+    const model = models.get(uri);
+    if (model) {
+      memoryApi.store(`file:${uri}`, {
+        language: model.getLanguageId(),
+        lines: model.getLineCount(),
+        preview: model.getValueInRange({ startLineNumber: 1, startColumn: 1, endLineNumber: 5, endColumn: 120 }),
+      });
+    }
+  });
+
+  // ── 18. AI Memory — store conversations for context ───────
+  aiMemoryApi.learnFact("project.name", "Monaco Vanced Demo");
+  aiMemoryApi.learnFact("project.framework", "React + Monaco Editor");
+  aiMemoryApi.learnFact("project.language", "TypeScript");
+
+  // ── 19. Context Fusion — register context sources ─────────
+  contextFusionApi.registerSource({
+    id: "editor-context",
+    name: "Editor Context",
+    gather: async () => {
+      const model = ide.editor.getModel();
+      if (!model) return { content: "" };
+      const sel = ide.editor.getSelection();
+      return {
+        content: sel && !sel.isEmpty() ? model.getValueInRange(sel) : model.getValueInRange({ startLineNumber: Math.max(1, (sel?.startLineNumber ?? 1) - 10), startColumn: 1, endLineNumber: (sel?.startLineNumber ?? 1) + 10, endColumn: 200 }),
+        language: model.getLanguageId(),
+        uri: model.uri.path,
+      };
+    },
+  });
+  contextFusionApi.registerSource({
+    id: "open-tabs",
+    name: "Open Tabs",
+    gather: async () => {
+      const uris = Array.from(models.keys());
+      return { content: uris.join("\n"), count: uris.length };
+    },
+  });
+
+  // ── 20. Collab — set up mock presence ─────────────────────
+  eventBus.emit(CollabEvents.Presence, {
+    users: [
+      { id: "user-1", name: "You", color: "#4ec9b0", cursor: null },
+      { id: "user-2", name: "Alice (viewing)", color: "#ce9178", cursor: { line: 15, column: 8 } },
+    ],
+  });
+
+  // ── 21. Review — seed mock PR data ────────────────────────
+  commandApi.register({
+    id: "monacoVanced.showPullRequests",
+    label: "Pull Requests: List Open",
+    handler: () => {
+      const prs = [
+        { id: 1, title: "feat: add dark mode toggle", author: "alice", state: "open", reviewers: ["bob"], comments: 3 },
+        { id: 2, title: "fix: tab close race condition", author: "bob", state: "open", reviewers: ["alice"], comments: 1 },
+        { id: 3, title: "refactor: extract sidebar logic", author: "charlie", state: "open", reviewers: [], comments: 0 },
+      ];
+      notificationApi.show({
+        type: "info",
+        message: `${prs.length} open PRs: ${prs.map((pr) => `#${pr.id} ${pr.title}`).join(", ")}`,
+        duration: 6000,
+      });
+    },
+  });
+
+  // ── 22. Billing — set demo plan + usage metering ──────────
+  billingApi.setPlan({ id: "pro", name: "Pro", limits: { "ai.requests": 1000, "storage.mb": 5120, "collab.users": 25 } });
+  eventBus.on(FileEvents.Save, () => { billingApi.meter({ feature: "storage.writes", quantity: 1 }); });
+
+  // ── 23. Knowledge Graph — log graph build ─────────────────
+  eventBus.on(GraphEvents.Built, (p: unknown) => {
+    const { nodes, edges } = p as { nodes: number; edges: number };
+    console.log(`[knowledge-graph] Graph built: ${nodes} nodes, ${edges} edges`);
+  });
+
+  // ── 24. Crash Recovery — log recovery events ──────────────
+  eventBus.on(CrashEvents.RecoveryStart, (p: unknown) => {
+    const { files } = p as { files?: number };
+    notificationApi.show({ type: "warning", message: `Recovering ${files ?? 0} unsaved files from previous session…`, duration: 5000 });
+  });
+
+  // ── 25. Performance — log long tasks + memory warnings ────
+  eventBus.on(PerformanceEvents.LongTask, (p: unknown) => {
+    const { duration } = p as { duration: number };
+    console.warn(`[perf] Long task detected: ${duration}ms`);
+  });
+  eventBus.on(PerformanceEvents.PerfMemoryWarning, (p: unknown) => {
+    const { usedJSHeapSize } = p as { usedJSHeapSize?: number };
+    const mb = ((usedJSHeapSize ?? 0) / 1024 / 1024).toFixed(0);
+    console.warn(`[perf] Memory warning: ${mb}MB heap used`);
+    statusbarApi.register({ id: "mem-warn", label: `$(warning) ${mb}MB`, alignment: "right", priority: 15, tooltip: "High memory usage" });
+    setTimeout(() => statusbarApi.remove("mem-warn"), 10000);
+  });
+
+  // ── 26. Feature flags — register demo flags ───────────────
+  featureFlagApi.set("ai.enabled", true);
+  featureFlagApi.set("collab.enabled", false);
+  featureFlagApi.set("notebook.enabled", true);
+  featureFlagApi.set("preview.markdown", true);
+
+  // ── 27. Concurrency — dedupe file reads ───────────────────
+  const _origOpenFileInEditor = openFileInEditor;
+  const _fileReadLock = concurrencyApi.createMutex("file-open");
+  const _dedupeOpenFile = concurrencyApi.dedupe(
+    (uri: string) => {
+      _origOpenFileInEditor(uri, DEMO_FILES);
+      return Promise.resolve();
+    },
+    (uri) => uri,
+  );
+  // Expose concurrency for dev console
+  (window as Record<string, unknown>).__concurrencyApi = concurrencyApi;
+
+  // ── 28. SaaS Tenant — configure demo tenant ──────────────
+  saasTenantApi.setTenant({
+    id: "demo-tenant",
+    name: "Demo Workspace",
+    plan: "pro",
+    config: { maxUsers: 25, maxStorage: 5120, features: ["ai", "collab", "extensions"] },
+  });
+
+  // ── 29. Streaming — wire for AI response streaming ────────
+  (window as Record<string, unknown>).__streamingApi = streamingApi;
+
+  // ── 30. Fallback — register editor fallback chain ─────────
+  fallbackApi.registerChain({
+    id: "ai-provider",
+    providers: [
+      { id: "openai", fn: async () => ({ result: "OpenAI response" }), priority: 1 },
+      { id: "anthropic", fn: async () => ({ result: "Anthropic response" }), priority: 2 },
+      { id: "local", fn: async () => ({ result: "Local model response" }), priority: 3 },
+    ],
+  });
+
+  // ── 31. Resource — track model resources ──────────────────
+  for (const [uri] of models) {
+    resourceApi.register({ id: `model:${uri}`, type: "monaco-model", dispose: () => { models.get(uri)?.dispose(); } });
+  }
+
+  // ── 32. Worker — expose API for dev console ───────────────
+  (window as Record<string, unknown>).__workerApi = workerApi;
+
+  // ── Expose all module APIs for dev console ────────────────
+  (window as Record<string, unknown>).__apis = {
+    telemetry: telemetryApi, audit: auditApi, snapshot: snapshotApi,
+    predictive: predictiveApi, storage: storageApi, workspace: workspaceApi,
+    security: securityApi, policy: policyApi, secrets: secretsApi,
+    profiler: profilerApi, task: taskApi, test: testApi, notebook: notebookApi,
+    agent: agentApi, memory: memoryApi, aiMemory: aiMemoryApi,
+    contextFusion: contextFusionApi, eval: evalApi, intent: intentApi,
+    knowledgeGraph: knowledgeGraphApi, rag: ragApi, ai: aiApi,
+    collab: collabApi, review: reviewApi, billing: billingApi,
+    deepLink: deepLinkApi, embed: embedApi, webview: webviewApi,
+    featureFlag: featureFlagApi, crashRecovery: crashRecoveryApi,
+    performance: performanceApi, resource: resourceApi,
+    concurrency: concurrencyApi, streaming: streamingApi,
+    fallback: fallbackApi, worker: workerApi,
+    saaTenant: saasTenantApi, apiStability: apiStabilityApi,
+    contextEngine: contextEngineApi, realtime: realtimeApi,
+    indexer: indexerApi,
+  };
 
   notificationApi.show({
     type: "info",

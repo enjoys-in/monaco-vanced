@@ -4,19 +4,14 @@ import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
 import type { WireframeAPIs, VirtualFile } from "./types";
 import type { MockFsAPI } from "../mock-fs";
 import type { SidebarExtras } from "./layout/sidebar/index";
-import { FileEvents, SettingsEvents, TabEvents, WelcomeEvents } from "@enjoys/monaco-vanced/core/events";
+import { FileEvents, SettingsEvents, TabEvents, WelcomeEvents, TitlebarEvents } from "@enjoys/monaco-vanced/core/events";
 
 // Layout
 import { buildReactShell, unmountReactShell } from "../components/mount";
-import { wireActivityBar } from "./layout/activity-bar";
+import { wireSidebarVisibility } from "./layout/sidebar-visibility";
 import { wireSidebar, wireResizeHandle } from "./layout/sidebar/index";
-import { wireTitleBar, wireStatusBar } from "./layout/bars";
 
 // Panels
-import { wireNotifications } from "./panels/notifications";
-import { wireContextMenu, wireCommandPalette, wireBottomPanel } from "./panels/overlays";
-import { wireSettingsWebview } from "./panels/settings-webview";
-import { wireWelcomePage } from "./panels/welcome-page";
 
 export type { WireframeAPIs, VirtualFile } from "./types";
 
@@ -42,7 +37,7 @@ function wireReactPanelVisibility(
     dom.settingsWebview.style.display = "none";
     dom.tabBar.style.display = "none";
     dom.breadcrumbBar.style.display = "none";
-    dom.titleCenter.textContent = "Welcome";
+    eventBus.emit(TitlebarEvents.Update, { fileName: "Welcome" });
     document.title = "Welcome — Monaco Vanced";
   }
 
@@ -106,7 +101,6 @@ export function mountWireframe(
   files: VirtualFile[],
   mockFs?: MockFsAPI,
   extras?: SidebarExtras,
-  options?: { useReactPanels?: boolean },
 ): {
   editorContainer: HTMLElement;
   settingsEl: HTMLElement;
@@ -119,29 +113,23 @@ export function mountWireframe(
   sidebarEl: HTMLElement;
   destroy: () => void;
 } {
-  const dom = buildReactShell(root, eventBus);
+  const dom = buildReactShell(root, eventBus, {
+    authApi: extras?.authApi,
+    commandApi: apis.command,
+    statusbarApi: apis.statusbar,
+    contextMenuApi: apis.contextMenu,
+    files,
+  });
   const disposers: (() => void)[] = [];
   const on = (ev: string, fn: (p: unknown) => void) => {
     eventBus.on(ev, fn);
     disposers.push(() => eventBus.off(ev, fn));
   };
 
-  wireActivityBar(dom, apis, eventBus, on, extras);
+  wireSidebarVisibility(dom, on);
   wireSidebar(dom, apis, eventBus, on, files, mockFs, extras);
-  wireTitleBar(dom, apis, eventBus, on);
-  wireStatusBar(dom, apis, on);
-  wireBottomPanel(dom, eventBus, on, files);
-  wireNotifications(dom, apis, on);
-  wireContextMenu(dom, apis, on);
-  wireCommandPalette(dom, apis, on);
 
-  if (options?.useReactPanels) {
-    // React handles settings & welcome — just wire show/hide
-    wireReactPanelVisibility(dom, eventBus, on, files);
-  } else {
-    wireSettingsWebview(dom, apis, eventBus, on);
-    wireWelcomePage(dom, eventBus, on, files);
-  }
+  wireReactPanelVisibility(dom, eventBus, on, files);
 
   wireResizeHandle(dom);
 

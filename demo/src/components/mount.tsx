@@ -4,6 +4,7 @@ import { createRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { flushSync } from "react-dom";
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
+import { TitlebarEvents } from "@enjoys/monaco-vanced/core/events";
 import type { ExplorerIconAPI } from "../explorer";
 import type { MockFsAPI } from "../mock-fs";
 import type { DOMRefs } from "../wireframe/types";
@@ -70,7 +71,7 @@ export function mountReactComponents({
           eventBus={eventBus}
           iconApi={iconApi}
           onActiveChange={(_uri, label) => {
-            if (titleCenterEl) titleCenterEl.textContent = label;
+            eventBus.emit(TitlebarEvents.Update, { fileName: label });
           }}
         />
       </ThemeProvider>,
@@ -104,7 +105,17 @@ export function unmountReactComponents() {
 // ── React Shell — renders the IDE chrome as React ────────────
 let shellRoot: Root | null = null;
 
-export function buildReactShell(rootEl: HTMLElement, eventBus: InstanceType<typeof EventBus>): DOMRefs {
+export function buildReactShell(
+  rootEl: HTMLElement,
+  eventBus: InstanceType<typeof EventBus>,
+  extras?: {
+    authApi?: { isAuthenticated(): boolean; getSession(): { user?: { name?: string; email?: string } } | null; login(provider: string): Promise<void>; logout(): void };
+    commandApi?: { execute(id: string, ...args: unknown[]): void; search?(query: string): { id: string; label?: string }[]; getAll?(): { id: string; label?: string }[] | string[] };
+    statusbarApi?: { getItems(align: "left" | "right"): { id: string; label: string; tooltip?: string; alignment?: "left" | "right"; command?: string; visible?: boolean }[] };
+    contextMenuApi?: { dismiss(): void };
+    files?: { uri: string; name: string }[];
+  },
+): DOMRefs {
   rootEl.innerHTML = "";
   rootEl.style.cssText = "display:flex;flex-direction:column;height:100%;width:100%;overflow:hidden;";
 
@@ -118,7 +129,16 @@ export function buildReactShell(rootEl: HTMLElement, eventBus: InstanceType<type
   flushSync(() => {
     shellRoot!.render(
       <ThemeProvider eventBus={eventBus}>
-        <Shell ref={shellRef} rootEl={rootEl} />
+        <Shell
+          ref={shellRef}
+          rootEl={rootEl}
+          eventBus={eventBus}
+          authApi={extras?.authApi}
+          commandApi={extras?.commandApi}
+          statusbarApi={extras?.statusbarApi}
+          contextMenuApi={extras?.contextMenuApi}
+          files={extras?.files}
+        />
       </ThemeProvider>,
     );
   });
