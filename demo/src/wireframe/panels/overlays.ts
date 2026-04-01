@@ -215,8 +215,8 @@ export function wireBottomPanel(dom: DOMRefs, eventBus: EventBus, on: OnHandler,
     const grouped = new Map<string, monaco.editor.IMarker[]>();
     for (const m of allMarkers) {
       const uri = m.resource.path.replace(/^\//, "");
-      // Skip internal/special URIs
-      if (uri.startsWith("__") || !uri) continue;
+      // Skip internal/special URIs and inmemory models
+      if (uri.startsWith("__") || !uri || m.resource.scheme === "inmemory") continue;
       const arr = grouped.get(uri) ?? [];
       arr.push(m);
       grouped.set(uri, arr);
@@ -227,8 +227,8 @@ export function wireBottomPanel(dom: DOMRefs, eventBus: EventBus, on: OnHandler,
   function renderProblems() {
     dom.bottomPanelContent.innerHTML = "";
 
-    // Check if any models exist (files are open)
-    const models = monaco.editor.getModels();
+    // Check if any real models exist (files are open) — skip inmemory models
+    const models = monaco.editor.getModels().filter((m) => m.uri.scheme !== "inmemory");
     if (models.length === 0) {
       dom.bottomPanelContent.innerHTML = `<div style="color:${C.fgDim};font-size:13px;display:flex;align-items:center;gap:6px;padding:8px 12px;">
         No files are open. Open a file to check for problems.
@@ -516,6 +516,8 @@ export function wireBottomPanel(dom: DOMRefs, eventBus: EventBus, on: OnHandler,
 
   // Also listen for new models being created
   monaco.editor.onDidCreateModel((model) => {
+    // Skip internal inmemory models (Monaco internal, TS worker can't handle them)
+    if (model.uri.scheme === "inmemory") return;
     model.onDidChangeContent(() => {
       const uri = model.uri.path.replace(/^\//, "");
       symbolVersions.delete(uri);

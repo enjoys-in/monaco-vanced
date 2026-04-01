@@ -341,8 +341,7 @@ async function bootstrap() {
     monaco,
     plugins: allPlugins,
     language: defaultFile.language,
-    value: "",
-    editorOptions: editorOptions as Record<string, unknown>,
+    editorOptions: { ...editorOptions as Record<string, unknown>, model: null },
     eventBus,
   });
 
@@ -761,8 +760,8 @@ const actions: monaco.editor.IActionDescriptor[] = [
       // Show blank editor — do nothing
       break;
     case "newUntitledFile":
-      // Create an empty untitled model
-      ide.editor.setModel(monaco.editor.createModel("", "plaintext"));
+      // Create an empty untitled model with a proper file:// URI to avoid inmemory:// TS worker errors
+      ide.editor.setModel(monaco.editor.createModel("", "plaintext", monaco.Uri.parse("file:///untitled-1")));
       break;
     case "readme": {
       const readmeFile = DEMO_FILES.find((f) => f.uri.toLowerCase() === "readme.md");
