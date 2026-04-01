@@ -25,6 +25,7 @@ export enum FileEvents {
   DownloadRequest = "file:download-request",
   DownloadProgress = "file:download-progress",
   Downloaded = "file:downloaded",
+  Modified = "file:modified",
   Error = "file:error",
   StatRequest = "file:stat-request",
   Stat = "file:stat",

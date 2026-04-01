@@ -3,18 +3,27 @@
 // Exposes a single mount point that returns an HTMLElement.
 
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
+import { ExplorerAction, SettingsEvents, ThemeEvents } from "@enjoys/monaco-vanced/core/events";
 import type { MockFsAPI } from "../mock-fs";
 import type { TreeNode } from "./ExplorerTypes";
 import type { ExplorerItemCallbacks } from "./ExplorerItem";
+import { C } from "../wireframe/types";
 import { ExplorerService } from "./ExplorerService";
 import { ExplorerContextMenu } from "./ExplorerContextMenu";
 import { renderTree } from "./ExplorerTree";
+
+/** Minimal icon API subset required by Explorer */
+export interface ExplorerIconAPI {
+  getFileIcon(filename: string, isDirectory?: boolean, isOpen?: boolean): string;
+}
 
 export interface ExplorerOptions {
   fs: MockFsAPI;
   eventBus: EventBus;
   rootLabel?: string;
   onNotify?: (message: string, type?: string) => void;
+  /** Icon module API for vscode-icons file/folder icons */
+  iconApi?: ExplorerIconAPI;
 }
 
 export class Explorer {
@@ -24,6 +33,7 @@ export class Explorer {
   private treeContainer: HTMLElement;
   private options: ExplorerOptions;
   private unsub: (() => void) | null = null;
+  private eventDisposers: (() => void)[] = [];
 
   constructor(options: ExplorerOptions) {
     this.options = options;
@@ -44,6 +54,9 @@ export class Explorer {
     // Subscribe to state changes
     this.unsub = this.service.subscribe(() => this.render());
 
+    // Wire settings + theme change events
+    this.wireSettingsEvents();
+
     // Initial render
     this.render();
   }
@@ -58,14 +71,18 @@ export class Explorer {
     return this.service;
   }
 
-  /** Toolbar: new file in project root */
+  /** Toolbar: new file — uses active file's parent or selected folder as context */
   newFile(): void {
-    this.service.startInlineInput("", "file", 1);
+    const parentPath = this.resolveNewItemParent();
+    const depth = parentPath ? parentPath.split("/").length + 1 : 1;
+    this.service.startInlineInput(parentPath, "file", depth);
   }
 
-  /** Toolbar: new folder in project root */
+  /** Toolbar: new folder — uses active file's parent or selected folder as context */
   newFolder(): void {
-    this.service.startInlineInput("", "folder", 1);
+    const parentPath = this.resolveNewItemParent();
+    const depth = parentPath ? parentPath.split("/").length + 1 : 1;
+    this.service.startInlineInput(parentPath, "folder", depth);
   }
 
   /** Toolbar: collapse all */
@@ -80,8 +97,54 @@ export class Explorer {
 
   dispose(): void {
     this.unsub?.();
+    for (const d of this.eventDisposers) d();
     this.contextMenu.dispose();
     this.service.dispose();
+  }
+
+  // ── Smart path resolution ───────────────────────────────
+
+  /** Resolve the best parent path for a new file/folder based on active context */
+  private resolveNewItemParent(): string {
+    const state = this.service.getState();
+    const selected = state.selectedPath;
+    if (!selected) return "";
+
+    // Check if selectedPath is a directory in the FS
+    const stat = this.options.fs.stat(selected);
+    if (stat && stat.type === "directory") return selected;
+
+    // It's a file — use its parent directory
+    const slashIdx = selected.lastIndexOf("/");
+    return slashIdx >= 0 ? selected.slice(0, slashIdx) : "";
+  }
+
+  // ── Settings / Theme event wiring ─────────────────────
+
+  private wireSettingsEvents(): void {
+    const eb = this.options.eventBus;
+
+    const onSettingsChange = (p: unknown) => {
+      const payload = p as { id?: string; key?: string; value?: unknown };
+      const key = payload.id ?? payload.key ?? "";
+      // Explorer-related settings that need re-render
+      const explorerKeys = ["explorer.sortOrder", "explorer.compactFolders", "files.exclude", "explorer.showHiddenFiles"];
+      if (explorerKeys.includes(key)) {
+        this.render();
+      }
+    };
+
+    const onThemeChange = () => {
+      // Theme changed — re-render explorer to pick up new colors
+      this.render();
+    };
+
+    eb.on(SettingsEvents.Change, onSettingsChange);
+    eb.on(ThemeEvents.Changed, onThemeChange);
+    this.eventDisposers.push(
+      () => eb.off(SettingsEvents.Change, onSettingsChange),
+      () => eb.off(ThemeEvents.Changed, onThemeChange),
+    );
   }
 
   // ── Render ──────────────────────────────────────────────
@@ -92,19 +155,20 @@ export class Explorer {
 
     // Root project node header
     const rootHeader = document.createElement("div");
-    rootHeader.style.cssText = "display:flex;align-items:center;height:22px;padding:0 8px;font-size:11px;font-weight:600;letter-spacing:.5px;color:#858585;text-transform:uppercase;user-select:none;";
+    rootHeader.style.cssText = `display:flex;align-items:center;height:22px;padding:0 8px;font-size:11px;font-weight:600;letter-spacing:.5px;color:${C.fgDim};text-transform:uppercase;user-select:none;`;
     rootHeader.textContent = state.rootLabel;
     this.treeContainer.appendChild(rootHeader);
 
-    // Build callbacks
+    // Build callbacks (includes icon resolver if available)
     const callbacks: ExplorerItemCallbacks = {
-      onFileClick: (path) => this.service.openFile(path),
-      onFolderToggle: (path) => this.service.toggleFolder(path),
-      onContextMenu: (e, node) => this.contextMenu.show(e, node),
+      onFileClick: (path) => { this.service.setSelectedPath(path); this.service.openFile(path); },
+      onFolderToggle: (path) => { this.service.setSelectedPath(path); this.service.toggleFolder(path); },
+      onContextMenu: (e, node) => { this.service.setSelectedPath(node.path); this.contextMenu.show(e, node); },
       onRenameConfirm: (newName) => this.service.confirmRename(newName),
       onRenameCancel: () => this.service.cancelRename(),
       onInlineConfirm: (name) => this.service.confirmInlineInput(name),
       onInlineCancel: () => this.service.cancelInlineInput(),
+      getFileIcon: this.options.iconApi?.getFileIcon.bind(this.options.iconApi),
     };
 
     const fragment = renderTree(state.tree, state, 1, callbacks, "");
@@ -113,38 +177,57 @@ export class Explorer {
 
   // ── Context menu action handler ─────────────────────────
 
-  private handleContextAction(action: string, node: TreeNode): void {
+  private handleContextAction(action: ExplorerAction, node: TreeNode): void {
     const notify = this.options.onNotify;
     switch (action) {
-      case "open":
+      case ExplorerAction.Open:
         if (!node.isDirectory) this.service.openFile(node.path);
         break;
-      case "openSide":
-        // Emit open (in real VS Code this would go to a side editor group)
+      case ExplorerAction.OpenSide:
         if (!node.isDirectory) this.service.openFile(node.path);
         break;
-      case "newFile":
+      case ExplorerAction.NewFile:
         this.service.startInlineInput(node.path, "file", this.getDepth(node.path) + 1);
         break;
-      case "newFolder":
+      case ExplorerAction.NewFolder:
         this.service.startInlineInput(node.path, "folder", this.getDepth(node.path) + 1);
         break;
-      case "rename":
+      case ExplorerAction.Rename:
         this.service.startRename(node.path);
         break;
-      case "delete":
+      case ExplorerAction.Delete:
         this.service.deleteItem(node.path);
         notify?.(`Deleted ${node.name}`, "info");
         break;
-      case "copyPath":
+      case ExplorerAction.CopyPath:
         this.service.copyPath(node.path);
         notify?.("Copied path to clipboard", "info");
         break;
-      case "copyRelPath":
+      case ExplorerAction.CopyRelativePath:
         this.service.copyPath(node.path);
         notify?.("Copied relative path", "info");
         break;
-      case "collapse":
+      case ExplorerAction.CopyContent:
+        if (!node.isDirectory) {
+          const content = this.options.fs.readFile(node.path);
+          if (content != null) {
+            navigator.clipboard.writeText(content).catch(() => {});
+            notify?.("Copied file content to clipboard", "info");
+          }
+        }
+        break;
+      case ExplorerAction.Duplicate:
+        if (!node.isDirectory) {
+          const ext = node.name.includes(".") ? node.name.slice(node.name.lastIndexOf(".")) : "";
+          const base = node.name.includes(".") ? node.name.slice(0, node.name.lastIndexOf(".")) : node.name;
+          const parentDir = node.path.includes("/") ? node.path.slice(0, node.path.lastIndexOf("/")) : "";
+          const dupPath = parentDir ? `${parentDir}/${base}-copy${ext}` : `${base}-copy${ext}`;
+          const content = this.options.fs.readFile(node.path) ?? "";
+          this.service.createFile(dupPath, content);
+          notify?.(`Duplicated as ${base}-copy${ext}`, "info");
+        }
+        break;
+      case ExplorerAction.CollapseFolder:
         if (node.isDirectory) this.service.toggleFolder(node.path);
         break;
     }

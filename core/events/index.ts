@@ -19,6 +19,7 @@ export * from "./editor.events";
 export * from "./embed.events";
 export * from "./eval.events";
 export * from "./extension.events";
+export * from "./explorer.events";
 export * from "./feature-flag.events";
 export * from "./file.events";
 export * from "./git.events";

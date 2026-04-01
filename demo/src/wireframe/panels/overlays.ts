@@ -3,9 +3,9 @@
 import type { MenuItem } from "@enjoys/monaco-vanced/layout/context-menu-module";
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
 import { ContextMenuEvents, HeaderEvents, PanelEvents } from "@enjoys/monaco-vanced/core/events";
-import type { DOMRefs, WireframeAPIs, OnHandler } from "./types";
-import { C } from "./types";
-import { el, escapeHtml } from "./utils";
+import type { DOMRefs, WireframeAPIs, OnHandler } from "../types";
+import { C } from "../types";
+import { el, escapeHtml } from "../utils";
 
 // ── Context menu ────────────────────────────────────────────
 

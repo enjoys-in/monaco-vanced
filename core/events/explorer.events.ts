@@ -1,0 +1,29 @@
+export enum ExplorerEvents {
+  FileOpen = "explorer:file-open",
+  FileCreate = "explorer:file-create",
+  FileDelete = "explorer:file-delete",
+  FileRename = "explorer:file-rename",
+  FolderCreate = "explorer:folder-create",
+  FolderCollapse = "explorer:collapse-all",
+  TreeRefresh = "explorer:tree-refresh",
+}
+
+export enum ExplorerAction {
+  Open = "explorer:open",
+  OpenSide = "explorer:open-side",
+  NewFile = "explorer:new-file",
+  NewFolder = "explorer:new-folder",
+  Rename = "explorer:rename",
+  Delete = "explorer:delete",
+  CopyPath = "explorer:copy-path",
+  CopyRelativePath = "explorer:copy-relative-path",
+  CopyContent = "explorer:copy-content",
+  Cut = "explorer:cut",
+  Paste = "explorer:paste",
+  Duplicate = "explorer:duplicate",
+  RevealInSidebar = "explorer:reveal-in-sidebar",
+  CollapseFolder = "explorer:collapse-folder",
+  CollapseAll = "explorer:collapse-all",
+  ExpandAll = "explorer:expand-all",
+  Refresh = "explorer:refresh",
+}

@@ -1,8 +1,8 @@
 // ── Build the full IDE chrome DOM (VS Code layout) ──────────
 
-import type { DOMRefs } from "./types";
-import { C } from "./types";
-import { el } from "./utils";
+import type { DOMRefs } from "../types";
+import { C } from "../types";
+import { el } from "../utils";
 
 export function buildShell(root: HTMLElement): DOMRefs {
   root.innerHTML = "";

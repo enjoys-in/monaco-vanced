@@ -106,7 +106,7 @@ const { plugin: dialogPlugin, api: dialogApi } = createDialogPlugin();
 
 // Theming
 const { plugin: themePlugin } = createThemePlugin();
-const { plugin: iconPlugin } = createIconPlugin();
+const { plugin: iconPlugin, api: iconApi } = createIconPlugin();
 
 // Layout
 const { plugin: layoutPlugin, api: layoutApi } = createLayoutPlugin();
@@ -267,7 +267,9 @@ async function bootstrap() {
   }
 
   // ── Mount Wireframe ──────────────────────────────────────
-  const { editorContainer } = mountWireframe(appRoot, apis, eventBus, DEMO_FILES, mockFs);
+  const { editorContainer } = mountWireframe(appRoot, apis, eventBus, DEMO_FILES, mockFs, {
+    iconApi: iconApi,
+  });
 
   const defaultFile = DEMO_FILES.find((f) => f.uri === "src/app.tsx")
     ?? DEMO_FILES.find((f) => f.uri === "src/main.tsx")
@@ -306,7 +308,7 @@ async function bootstrap() {
     if (!model) return;
     const uri = model.uri.path.replace(/^\//, "");
     mockFs.writeFile(uri, model.getValue());
-    eventBus.emit("explorer:file-modified", { uri });
+    eventBus.emit(FileEvents.Modified, { uri });
   });
 
   // ── Wire settings changes → Monaco editor options ────────
@@ -351,7 +353,7 @@ async function bootstrap() {
   statusbarApi.register({ id: "spaces", label: "Spaces: 2", alignment: "right", priority: 80, tooltip: "Select Indentation" });
   statusbarApi.register({ id: "encoding", label: "UTF-8", alignment: "right", priority: 75 });
   statusbarApi.register({ id: "eol", label: "LF", alignment: "right", priority: 70 });
-  statusbarApi.register({ id: "language", label: "TypeScript React", alignment: "right", priority: 65, command: "editor.action.changeLanguageMode" });
+  statusbarApi.register({ id: "language", label: "TypeScript React", alignment: "right", priority: 65 });
   statusbarApi.register({ id: "prettier", label: "$(check) Prettier", alignment: "right", priority: 50 });
   statusbarApi.register({ id: "feedback", label: "$(feedback)", alignment: "right", priority: 10, tooltip: "Submit Feedback" });
   statusbarApi.register({ id: "bell", label: "$(bell)", alignment: "right", priority: 5, tooltip: "No Notifications" });
@@ -449,253 +451,7 @@ async function bootstrap() {
   //   (omit)           → palette-only, no context menu entry
   // ══════════════════════════════════════════════════════════
 
-  const actions: monaco.editor.IActionDescriptor[] = [
-    // ── navigation group ──────────────────────────────────
-    {
-      id: "antigravity.goToDefinition",
-      label: "Go to Definition",
-      contextMenuGroupId: "navigation",
-      contextMenuOrder: 1,
-      keybindings: [monaco.KeyCode.F12],
-      precondition: "editorTextFocus",
-      run: (ed) => { ed.getAction("editor.action.revealDefinition")?.run(); },
-    },
-    {
-      id: "antigravity.goToReferences",
-      label: "Go to References",
-      contextMenuGroupId: "navigation",
-      contextMenuOrder: 2,
-      keybindings: [monaco.KeyMod.Shift | monaco.KeyCode.F12],
-      precondition: "editorTextFocus",
-      run: (ed) => { ed.getAction("editor.action.goToReferences")?.run(); },
-    },
-    {
-      id: "antigravity.peekDefinition",
-      label: "Peek Definition",
-      contextMenuGroupId: "navigation",
-      contextMenuOrder: 3,
-      keybindings: [monaco.KeyMod.Alt | monaco.KeyCode.F12],
-      precondition: "editorTextFocus",
-      run: (ed) => { ed.getAction("editor.action.peekDefinition")?.run(); },
-    },
-    {
-      id: "antigravity.goToLine",
-      label: "Go to Line...",
-      contextMenuGroupId: "navigation",
-      contextMenuOrder: 4,
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyG],
-      run: (ed) => { ed.getAction("editor.action.gotoLine")?.run(); },
-    },
-
-    // ── 1_modification group ──────────────────────────────
-    {
-      id: "antigravity.formatDocument",
-      label: "Format Document",
-      contextMenuGroupId: "1_modification",
-      contextMenuOrder: 1,
-      keybindings: [monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyF],
-      precondition: "!editorReadonly",
-      run: (ed) => { ed.getAction("editor.action.formatDocument")?.run(); },
-    },
-    {
-      id: "antigravity.toggleComment",
-      label: "Toggle Line Comment",
-      contextMenuGroupId: "1_modification",
-      contextMenuOrder: 2,
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Slash],
-      precondition: "!editorReadonly",
-      run: (ed) => { ed.getAction("editor.action.commentLine")?.run(); },
-    },
-    {
-      id: "antigravity.toggleBlockComment",
-      label: "Toggle Block Comment",
-      contextMenuGroupId: "1_modification",
-      contextMenuOrder: 3,
-      keybindings: [monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyA],
-      precondition: "!editorReadonly",
-      run: (ed) => { ed.getAction("editor.action.blockComment")?.run(); },
-    },
-    {
-      id: "antigravity.rename",
-      label: "Rename Symbol",
-      contextMenuGroupId: "1_modification",
-      contextMenuOrder: 4,
-      keybindings: [monaco.KeyCode.F2],
-      precondition: "editorTextFocus && !editorReadonly",
-      run: (ed) => { ed.getAction("editor.action.rename")?.run(); },
-    },
-
-    // ── 9_cutcopypaste group ──────────────────────────────
-    {
-      id: "antigravity.cut",
-      label: "Cut",
-      contextMenuGroupId: "9_cutcopypaste",
-      contextMenuOrder: 1,
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyX],
-      run: (ed) => { ed.trigger("menu", "editor.action.clipboardCutAction", null); },
-    },
-    {
-      id: "antigravity.copy",
-      label: "Copy",
-      contextMenuGroupId: "9_cutcopypaste",
-      contextMenuOrder: 2,
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC],
-      run: (ed) => { ed.trigger("menu", "editor.action.clipboardCopyAction", null); },
-    },
-    {
-      id: "antigravity.paste",
-      label: "Paste",
-      contextMenuGroupId: "9_cutcopypaste",
-      contextMenuOrder: 3,
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV],
-      run: (ed) => { ed.focus(); document.execCommand("paste"); },
-    },
-
-    // ── z_commands group ──────────────────────────────────
-    {
-      id: "antigravity.commandPalette",
-      label: "Command Palette...",
-      contextMenuGroupId: "z_commands",
-      contextMenuOrder: 1,
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyP],
-      run: () => { eventBus.emit("header:command-open", {}); },
-    },
-    {
-      id: "antigravity.toggleSidebar",
-      label: "Toggle Sidebar",
-      contextMenuGroupId: "z_commands",
-      contextMenuOrder: 2,
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyB],
-      run: () => { eventBus.emit(SidebarEvents.Toggle, {}); },
-    },
-    {
-      id: "antigravity.togglePanel",
-      label: "Toggle Panel",
-      contextMenuGroupId: "z_commands",
-      contextMenuOrder: 3,
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyJ],
-      run: () => { eventBus.emit(PanelEvents.BottomToggle, {}); },
-    },
-    {
-      id: "antigravity.openSettings",
-      label: "Open Settings",
-      contextMenuGroupId: "z_commands",
-      contextMenuOrder: 4,
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Comma],
-      run: () => { eventBus.emit("settings:ui-open", {}); },
-    },
-
-    // ── Palette-only (no contextMenuGroupId) ──────────────
-    {
-      id: "antigravity.find",
-      label: "Find",
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF],
-      run: (ed) => { ed.getAction("actions.find")?.run(); },
-    },
-    {
-      id: "antigravity.findReplace",
-      label: "Find and Replace",
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyH],
-      run: (ed) => { ed.getAction("editor.action.startFindReplaceAction")?.run(); },
-    },
-    {
-      id: "antigravity.selectAll",
-      label: "Select All",
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyA],
-      run: (ed) => { ed.getAction("editor.action.selectAll")?.run(); },
-    },
-    {
-      id: "antigravity.expandSelection",
-      label: "Expand Selection",
-      run: (ed) => { ed.getAction("editor.action.smartSelect.expand")?.run(); },
-    },
-    {
-      id: "antigravity.undo",
-      label: "Undo",
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyZ],
-      run: (ed) => { ed.trigger("menu", "undo", null); },
-    },
-    {
-      id: "antigravity.redo",
-      label: "Redo",
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyY],
-      run: (ed) => { ed.trigger("menu", "redo", null); },
-    },
-    // Sidebar views
-    {
-      id: "antigravity.showExplorer",
-      label: "Show Explorer",
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyE],
-      run: () => { eventBus.emit(SidebarEvents.ViewActivate, { viewId: "explorer" }); },
-    },
-    {
-      id: "antigravity.showSearch",
-      label: "Show Search",
-      run: () => { eventBus.emit(SidebarEvents.ViewActivate, { viewId: "search" }); },
-    },
-    {
-      id: "antigravity.showSourceControl",
-      label: "Show Source Control",
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyG],
-      run: () => { eventBus.emit(SidebarEvents.ViewActivate, { viewId: "scm" }); },
-    },
-    {
-      id: "antigravity.showDebug",
-      label: "Show Run and Debug",
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyD],
-      run: () => { eventBus.emit(SidebarEvents.ViewActivate, { viewId: "debug" }); },
-    },
-    {
-      id: "antigravity.showExtensions",
-      label: "Show Extensions",
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyX],
-      run: () => { eventBus.emit(SidebarEvents.ViewActivate, { viewId: "extensions" }); },
-    },
-    // File
-    {
-      id: "antigravity.saveFile",
-      label: "Save File",
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS],
-      run: () => { notificationApi.show({ type: "success", message: "File saved.", duration: 2000 }); },
-    },
-    {
-      id: "antigravity.newFile",
-      label: "New File",
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyN],
-      run: () => { notificationApi.show({ type: "info", message: "Use Explorer > New File toolbar button.", duration: 3000 }); },
-    },
-    // Help
-    {
-      id: "antigravity.welcome",
-      label: "Welcome",
-      run: () => { notificationApi.show({ type: "info", message: "Welcome to Antigravity — Monaco Vanced IDE", duration: 4000 }); },
-    },
-    {
-      id: "antigravity.about",
-      label: "About",
-      run: () => { notificationApi.show({ type: "info", message: "Monaco Vanced v0.2.0 — Plugin-based IDE Architecture", duration: 4000 }); },
-    },
-    // Language
-    {
-      id: "antigravity.changeLanguageMode",
-      label: "Change Language Mode",
-      run: () => { notificationApi.show({ type: "info", message: "Language mode selection coming soon.", duration: 3000 }); },
-    },
-  ];
-
-  // Register all actions with Monaco — appears in both palette + context menu
-  for (const action of actions) {
-    // ide.editor.addAction(action);
-  }
-
-  // Also register with command module for wireframe palette
-  for (const action of actions) {
-    commandApi.register({
-      id: action.id,
-      label: action.label,
-      handler: () => action.run(ide.editor, undefined as never),
-    });
-  }
+  
 
   // ══════════════════════════════════════════════════════════
   // Open default file + welcome notification

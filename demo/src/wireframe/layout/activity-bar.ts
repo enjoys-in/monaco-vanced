@@ -2,9 +2,9 @@
 
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
 import { SidebarEvents } from "@enjoys/monaco-vanced/core/events";
-import type { DOMRefs, WireframeAPIs, OnHandler } from "./types";
-import { C } from "./types";
-import { el } from "./utils";
+import type { DOMRefs, WireframeAPIs, OnHandler } from "../types";
+import { C } from "../types";
+import { el } from "../utils";
 
 // VS Code codicon-style SVG icons (16×16 viewBox)
 const ICONS: { id: string; label: string; svg: string }[] = [

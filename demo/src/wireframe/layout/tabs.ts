@@ -2,9 +2,9 @@
 
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
 import { TabEvents, FileEvents } from "@enjoys/monaco-vanced/core/events";
-import type { DOMRefs, OnHandler, VirtualFile } from "./types";
-import { C } from "./types";
-import { el, fileIconSvg, getExt } from "./utils";
+import type { DOMRefs, OnHandler, VirtualFile } from "../types";
+import { C } from "../types";
+import { el, fileIconSvg, getExt } from "../utils";
 
 const openTabs = new Map<string, { el: HTMLElement; label: string }>();
 let activeTabUri: string | null = null;

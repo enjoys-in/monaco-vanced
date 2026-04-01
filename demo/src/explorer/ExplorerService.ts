@@ -5,8 +5,7 @@ import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
 import { FileEvents } from "@enjoys/monaco-vanced/core/events";
 import type { MockFsAPI } from "../mock-fs";
 import type { TreeNode, ExplorerState, InlineInputState } from "./ExplorerTypes";
-import { EXPLORER_EVENTS } from "./ExplorerTypes";
-
+ 
 export type StateListener = () => void;
 
 export class ExplorerService {
@@ -24,6 +23,7 @@ export class ExplorerService {
       rootLabel,
       tree: [],
       activeFileUri: null,
+      selectedPath: null,
       openFileUris: new Set(),
       modifiedFileUris: new Set(),
       expandedPaths: new Set(),
@@ -109,8 +109,16 @@ export class ExplorerService {
 
   setActiveFile(uri: string | null): void {
     this.state.activeFileUri = uri;
-    if (uri) this.state.openFileUris.add(uri);
+    if (uri) {
+      this.state.openFileUris.add(uri);
+      this.state.selectedPath = uri;
+    }
     this.notify();
+  }
+
+  /** Track the last-clicked node (file or folder) for smart new-item placement */
+  setSelectedPath(path: string): void {
+    this.state.selectedPath = path;
   }
 
   markModified(uri: string): void {
@@ -281,7 +289,7 @@ export class ExplorerService {
     this.eventBus.on(FileEvents.Renamed, onRenamed);
     this.eventBus.on(FileEvents.Open, onFileOpen);
     this.eventBus.on("tab:switch", onTabSwitch);
-    this.eventBus.on("explorer:file-modified", onFileModified);
+    this.eventBus.on(FileEvents.Modified, onFileModified);
     this.eventBus.on(FileEvents.Saved, onFileSaved);
 
     this.disposers.push(
@@ -290,7 +298,7 @@ export class ExplorerService {
       () => this.eventBus.off(FileEvents.Renamed, onRenamed),
       () => this.eventBus.off(FileEvents.Open, onFileOpen),
       () => this.eventBus.off("tab:switch", onTabSwitch),
-      () => this.eventBus.off("explorer:file-modified", onFileModified),
+      () => this.eventBus.off(FileEvents.Modified, onFileModified),
       () => this.eventBus.off(FileEvents.Saved, onFileSaved),
     );
   }

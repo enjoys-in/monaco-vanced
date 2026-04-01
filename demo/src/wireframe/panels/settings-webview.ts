@@ -6,9 +6,9 @@
 
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
 import { FileEvents, SidebarEvents } from "@enjoys/monaco-vanced/core/events";
-import type { DOMRefs, WireframeAPIs, OnHandler } from "./types";
-import { C } from "./types";
-import { el } from "./utils";
+import type { DOMRefs, WireframeAPIs, OnHandler } from "../types";
+import { C } from "../types";
+import { el } from "../utils";
 
 // ── Settings URI sentinel ────────────────────────────────────
 export const SETTINGS_URI = "__settings__";

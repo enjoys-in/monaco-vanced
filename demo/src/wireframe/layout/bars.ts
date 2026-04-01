@@ -3,9 +3,9 @@
 import type { StatusbarItem } from "@enjoys/monaco-vanced/layout/statusbar-module";
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
 import { StatusbarEvents, HeaderEvents, TitlebarEvents, PanelEvents, FileEvents, SidebarEvents, ContextMenuEvents } from "@enjoys/monaco-vanced/core/events";
-import type { DOMRefs, WireframeAPIs, OnHandler } from "./types";
-import { C } from "./types";
-import { el } from "./utils";
+import type { DOMRefs, WireframeAPIs, OnHandler } from "../types";
+import { C } from "../types";
+import { el } from "../utils";
 
 // ── Codicon SVG map (subset used in status bar) ─────────────
 const CODICONS: Record<string, string> = {

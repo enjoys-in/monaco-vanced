@@ -2,11 +2,16 @@
 
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
 import { SidebarEvents, FileEvents } from "@enjoys/monaco-vanced/core/events";
-import type { DOMRefs, WireframeAPIs, OnHandler, VirtualFile } from "./types";
-import { C } from "./types";
-import { el, fileIconSvg, getExt } from "./utils";
-import type { MockFsAPI } from "../mock-fs";
-import { Explorer } from "../explorer";
+import type { DOMRefs, WireframeAPIs, OnHandler, VirtualFile } from "../types";
+import { C } from "../types";
+import { el, fileIconSvg, getExt } from "../utils";
+import type { MockFsAPI } from "../../mock-fs";
+import { Explorer } from "../../explorer";
+import type { ExplorerIconAPI } from "../../explorer";
+
+export interface SidebarExtras {
+  iconApi?: ExplorerIconAPI;
+}
 
 // ── View title mapping ──────────────────────────────────────
 const VIEW_TITLES: Record<string, string> = {
@@ -149,6 +154,7 @@ export function wireSidebar(
   on: OnHandler,
   files: VirtualFile[],
   mockFs?: MockFsAPI,
+  extras?: SidebarExtras,
 ) {
   let activeViewId = "explorer";
   const viewContainers: Record<string, HTMLElement> = {};
@@ -161,6 +167,7 @@ export function wireSidebar(
       eventBus,
       rootLabel: "MONACO-VANCED",
       onNotify: (message, type) => apis.notification?.show({ type: type as "info" | "success" ?? "info", message, duration: 3000 }),
+      iconApi: extras?.iconApi,
     });
   }
 

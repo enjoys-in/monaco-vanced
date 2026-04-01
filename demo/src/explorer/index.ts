@@ -1,7 +1,7 @@
 // ── Explorer module barrel export ────────────────────────────
 
 export { Explorer } from "./Explorer";
-export type { ExplorerOptions } from "./Explorer";
+export type { ExplorerOptions, ExplorerIconAPI } from "./Explorer";
 export { ExplorerService } from "./ExplorerService";
 export { ExplorerContextMenu } from "./ExplorerContextMenu";
 export { renderTree } from "./ExplorerTree";
@@ -12,6 +12,6 @@ export type {
   ExplorerState,
   InlineInputState,
   ContextMenuAction,
-  ExplorerEvents,
 } from "./ExplorerTypes";
-export { EXPLORER_EVENTS, getExtColor, getFolderColor } from "./ExplorerTypes";
+// Re-exported from core — consumers can also import from @enjoys/monaco-vanced/core/events
+export { ExplorerAction, ExplorerEvents, getExtColor, getFolderColor } from "./ExplorerTypes";

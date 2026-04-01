@@ -1,22 +1,10 @@
 // ── Explorer Item — renders a single file or folder row ──────
 // Stateless component: receives data, returns DOM element.
+// Uses theme colors from wireframe types + optional icon API.
 
 import type { TreeNode } from "./ExplorerTypes";
 import { getExtColor, getFolderColor } from "./ExplorerTypes";
-
-const C = {
-  fg: "#cccccc",
-  fgDim: "#858585",
-  fgBright: "#e0e0e0",
-  accent: "#007acc",
-  listHover: "rgba(255,255,255,0.04)",
-  listActive: "rgba(255,255,255,0.08)",
-  inputBg: "#3c3c3c",
-  inputBorder: "#3c3c3c",
-  focusBorder: "#007fd4",
-  modifiedDot: "#e2c08d",
-  openDot: "#007acc",
-};
+import { C } from "../wireframe/types";
 
 // ── SVG icon builders ───────────────────────────────────────
 
@@ -107,6 +95,8 @@ export interface ExplorerItemCallbacks {
   onRenameCancel: () => void;
   onInlineConfirm?: (name: string) => void;
   onInlineCancel?: () => void;
+  /** Icon API from icon-module — returns CDN URL for file/folder icons */
+  getFileIcon?: (filename: string, isDirectory?: boolean, isOpen?: boolean) => string;
 }
 
 // ── Render File Row ─────────────────────────────────────────
@@ -130,7 +120,12 @@ export function renderFileItem(
 
   // Icon
   const icon = el("span", { style: "margin-right:6px;display:inline-flex;align-items:center;flex-shrink:0;" });
-  icon.innerHTML = fileIconSvg(ext);
+  if (callbacks.getFileIcon) {
+    const iconUrl = callbacks.getFileIcon(node.name, false, false);
+    icon.innerHTML = `<img src="${iconUrl}" width="16" height="16" style="display:block;" alt="" />`;
+  } else {
+    icon.innerHTML = fileIconSvg(ext);
+  }
 
   if (isRenaming) {
     // Inline rename input
@@ -159,10 +154,10 @@ export function renderFileItem(
 
     // Status indicators
     if (isModified) {
-      const dot = el("span", { style: `width:6px;height:6px;border-radius:50%;background:${C.modifiedDot};margin-left:auto;flex-shrink:0;`, title: "Modified" });
+      const dot = el("span", { style: `width:6px;height:6px;border-radius:50%;background:${C.warningYellow};margin-left:auto;flex-shrink:0;`, title: "Modified" });
       row.appendChild(dot);
     } else if (isOpen) {
-      const dot = el("span", { style: `width:5px;height:5px;border-radius:50%;background:${C.openDot};margin-left:auto;flex-shrink:0;opacity:.6;`, title: "Open in editor" });
+      const dot = el("span", { style: `width:5px;height:5px;border-radius:50%;background:${C.accent};margin-left:auto;flex-shrink:0;opacity:.6;`, title: "Open in editor" });
       row.appendChild(dot);
     }
 
@@ -197,7 +192,12 @@ export function renderFolderItem(
 
   // Folder icon
   const folderIcon = el("span", { style: `margin-right:4px;display:inline-flex;align-items:center;flex-shrink:0;` });
-  folderIcon.innerHTML = isExpanded ? folderOpenSvg(folderColor) : folderClosedSvg(folderColor);
+  if (callbacks.getFileIcon) {
+    const iconUrl = callbacks.getFileIcon(node.name, true, isExpanded);
+    folderIcon.innerHTML = `<img src="${iconUrl}" width="16" height="16" style="display:block;" alt="" />`;
+  } else {
+    folderIcon.innerHTML = isExpanded ? folderOpenSvg(folderColor) : folderClosedSvg(folderColor);
+  }
 
   // Label
   const label = el("span", { style: `color:${C.fg};font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;` }, node.name);
@@ -213,7 +213,12 @@ export function renderFolderItem(
     callbacks.onFolderToggle(node.path);
     const expanded = !isExpanded;
     chevron.style.transform = `rotate(${expanded ? "90deg" : "0"})`;
-    folderIcon.innerHTML = expanded ? folderOpenSvg(folderColor) : folderClosedSvg(folderColor);
+    if (callbacks.getFileIcon) {
+      const iconUrl = callbacks.getFileIcon(node.name, true, expanded);
+      folderIcon.innerHTML = `<img src="${iconUrl}" width="16" height="16" style="display:block;" alt="" />`;
+    } else {
+      folderIcon.innerHTML = expanded ? folderOpenSvg(folderColor) : folderClosedSvg(folderColor);
+    }
     childContainer.style.display = expanded ? "" : "none";
   });
 

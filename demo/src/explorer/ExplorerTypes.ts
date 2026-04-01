@@ -1,5 +1,9 @@
 // ── Explorer Types ──────────────────────────────────────────
 
+// Re-export core enums so local imports keep working
+export { ExplorerAction, ExplorerEvents } from "@enjoys/monaco-vanced/core/events";
+import { ExplorerAction } from "@enjoys/monaco-vanced/core/events";
+
 export interface TreeNode {
   name: string;
   path: string;
@@ -12,6 +16,8 @@ export interface ExplorerState {
   rootLabel: string;
   tree: TreeNode[];
   activeFileUri: string | null;
+  /** Last clicked node path (file or folder) — used for smart new file/folder placement */
+  selectedPath: string | null;
   openFileUris: Set<string>;
   modifiedFileUris: Set<string>;
   expandedPaths: Set<string>;
@@ -29,29 +35,9 @@ export interface InlineInputState {
 export interface ContextMenuAction {
   label: string;
   icon: string;
-  action: string;
+  action: ExplorerAction;
   separator?: boolean;
 }
-
-export interface ExplorerEvents {
-  fileOpen: string;
-  fileCreate: string;
-  fileDelete: string;
-  fileRename: string;
-  folderCreate: string;
-  folderCollapse: string;
-  treeRefresh: string;
-}
-
-export const EXPLORER_EVENTS: ExplorerEvents = {
-  fileOpen: "explorer:file-open",
-  fileCreate: "explorer:file-create",
-  fileDelete: "explorer:file-delete",
-  fileRename: "explorer:file-rename",
-  folderCreate: "explorer:folder-create",
-  folderCollapse: "explorer:collapse-all",
-  treeRefresh: "explorer:tree-refresh",
-};
 
 /** Map file extension → icon color */
 const EXT_COLORS: Record<string, string> = {

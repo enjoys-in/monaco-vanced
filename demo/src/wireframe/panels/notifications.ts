@@ -2,8 +2,8 @@
 
 import type { Notification } from "@enjoys/monaco-vanced/infrastructure/notification-module";
 import { NotificationEvents } from "@enjoys/monaco-vanced/core/events";
-import type { DOMRefs, WireframeAPIs, OnHandler } from "./types";
-import { el } from "./utils";
+import type { DOMRefs, WireframeAPIs, OnHandler } from "../types";
+import { el } from "../utils";
 
 const activeToasts = new Map<string, HTMLElement>();
 

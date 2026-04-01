@@ -3,16 +3,23 @@
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
 import type { WireframeAPIs, VirtualFile } from "./types";
 import type { MockFsAPI } from "../mock-fs";
-import { buildShell } from "./shell";
-import { wireActivityBar } from "./activity-bar";
-import { wireSidebar, wireResizeHandle } from "./sidebar";
-import { wireTabs } from "./tabs";
-import { wireTitleBar, wireStatusBar } from "./bars";
-import { wireNotifications } from "./notifications";
-import { wireContextMenu, wireCommandPalette, wireBottomPanel } from "./overlays";
-import { wireSettingsWebview } from "./settings-webview";
+import type { SidebarExtras } from "./layout/sidebar";
+
+// Layout
+import { buildShell } from "./layout/shell";
+import { wireActivityBar } from "./layout/activity-bar";
+import { wireSidebar, wireResizeHandle } from "./layout/sidebar";
+import { wireTabs } from "./layout/tabs";
+import { wireTitleBar, wireStatusBar } from "./layout/bars";
+
+// Panels
+import { wireNotifications } from "./panels/notifications";
+import { wireContextMenu, wireCommandPalette, wireBottomPanel } from "./panels/overlays";
+import { wireSettingsWebview } from "./panels/settings-webview";
 
 export type { WireframeAPIs, VirtualFile } from "./types";
+
+export type { SidebarExtras as WireframeExtras } from "./layout/sidebar";
 
 export function mountWireframe(
   root: HTMLElement,
@@ -20,6 +27,7 @@ export function mountWireframe(
   eventBus: InstanceType<typeof EventBus>,
   files: VirtualFile[],
   mockFs?: MockFsAPI,
+  extras?: SidebarExtras,
 ): { editorContainer: HTMLElement; destroy: () => void } {
   const dom = buildShell(root);
   const disposers: (() => void)[] = [];
@@ -29,7 +37,7 @@ export function mountWireframe(
   };
 
   wireActivityBar(dom, apis, eventBus, on);
-  wireSidebar(dom, apis, eventBus, on, files, mockFs);
+  wireSidebar(dom, apis, eventBus, on, files, mockFs, extras);
   wireTabs(dom, eventBus, on, files);
   wireTitleBar(dom, apis, eventBus, on);
   wireStatusBar(dom, apis, on);

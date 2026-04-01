@@ -1,45 +1,41 @@
 // ── Explorer Context Menu — right-click actions ─────────────
 // Reusable, positioned near cursor, closes on outside click.
+// Uses theme colors from wireframe types + ExplorerAction enum.
 
 import type { TreeNode } from "./ExplorerTypes";
-
-const C = {
-  bg: "#252526",
-  border: "#454545",
-  fg: "#cccccc",
-  fgDim: "#858585",
-  hover: "rgba(255,255,255,0.06)",
-  accent: "#007acc",
-  separator: "#3c3c3c",
-  shadow: "0 4px 16px rgba(0,0,0,.4)",
-};
+import { ExplorerAction } from "@enjoys/monaco-vanced/core/events";
+import { C } from "../wireframe/types";
 
 interface MenuOption {
   label: string;
   icon: string;
-  action: string;
+  action: ExplorerAction;
+  shortcut?: string;
   separator?: boolean;
   disabled?: boolean;
 }
 
-export type ContextMenuHandler = (action: string, node: TreeNode) => void;
+export type ContextMenuHandler = (action: ExplorerAction, node: TreeNode) => void;
 
 const FILE_MENU: MenuOption[] = [
-  { label: "Open File", icon: openIcon(), action: "open" },
-  { label: "Open to the Side", icon: splitIcon(), action: "openSide", separator: true },
-  { label: "Rename…", icon: renameIcon(), action: "rename" },
-  { label: "Delete", icon: deleteIcon(), action: "delete", separator: true },
-  { label: "Copy Path", icon: copyIcon(), action: "copyPath" },
-  { label: "Copy Relative Path", icon: copyIcon(), action: "copyRelPath" },
+  { label: "Open File", icon: openIcon(), action: ExplorerAction.Open },
+  { label: "Open to the Side", icon: splitIcon(), action: ExplorerAction.OpenSide, separator: true },
+  { label: "Copy Path", icon: copyIcon(), action: ExplorerAction.CopyPath, shortcut: "Shift+Alt+C" },
+  { label: "Copy Relative Path", icon: copyIcon(), action: ExplorerAction.CopyRelativePath, shortcut: "Shift+Alt+R" },
+  { label: "Copy Content", icon: copyIcon(), action: ExplorerAction.CopyContent, separator: true },
+  { label: "Rename…", icon: renameIcon(), action: ExplorerAction.Rename, shortcut: "F2" },
+  { label: "Delete", icon: deleteIcon(), action: ExplorerAction.Delete, shortcut: "Del" },
+  { label: "Duplicate…", icon: duplicateIcon(), action: ExplorerAction.Duplicate },
 ];
 
 const FOLDER_MENU: MenuOption[] = [
-  { label: "New File…", icon: newFileIcon(), action: "newFile" },
-  { label: "New Folder…", icon: newFolderIcon(), action: "newFolder", separator: true },
-  { label: "Rename…", icon: renameIcon(), action: "rename" },
-  { label: "Delete", icon: deleteIcon(), action: "delete", separator: true },
-  { label: "Copy Path", icon: copyIcon(), action: "copyPath" },
-  { label: "Collapse Folder", icon: collapseIcon(), action: "collapse" },
+  { label: "New File…", icon: newFileIcon(), action: ExplorerAction.NewFile },
+  { label: "New Folder…", icon: newFolderIcon(), action: ExplorerAction.NewFolder, separator: true },
+  { label: "Copy Path", icon: copyIcon(), action: ExplorerAction.CopyPath, shortcut: "Shift+Alt+C" },
+  { label: "Copy Relative Path", icon: copyIcon(), action: ExplorerAction.CopyRelativePath, separator: true },
+  { label: "Rename…", icon: renameIcon(), action: ExplorerAction.Rename, shortcut: "F2" },
+  { label: "Delete", icon: deleteIcon(), action: ExplorerAction.Delete, shortcut: "Del", separator: true },
+  { label: "Collapse Folder", icon: collapseIcon(), action: ExplorerAction.CollapseFolder },
 ];
 
 export class ExplorerContextMenu {
@@ -54,8 +50,8 @@ export class ExplorerContextMenu {
     this.el.className = "explorer-context-menu";
     this.el.style.cssText = `
       position:fixed;z-index:10000;display:none;
-      background:${C.bg};border:1px solid ${C.border};border-radius:6px;
-      box-shadow:${C.shadow};padding:4px 0;min-width:180px;
+      background:${C.menuBg};border:1px solid ${C.borderLight};border-radius:6px;
+      box-shadow:0 4px 16px rgba(0,0,0,.4);padding:4px 0;min-width:200px;
       font-size:13px;font-family:inherit;
     `;
     document.body.appendChild(this.el);
@@ -116,16 +112,22 @@ export class ExplorerContextMenu {
     const row = document.createElement("div");
     row.className = "explorer-ctx-item";
     row.style.cssText = `display:flex;align-items:center;gap:8px;padding:4px 12px;cursor:pointer;color:${option.disabled ? C.fgDim : C.fg};border-radius:3px;margin:0 4px;`;
-    row.innerHTML = `<span style="display:inline-flex;align-items:center;color:${C.fgDim};width:16px;height:16px;">${option.icon}</span><span>${option.label}</span>`;
+
+    const iconSpan = `<span style="display:inline-flex;align-items:center;color:${C.fgDim};width:16px;height:16px;">${option.icon}</span>`;
+    const labelSpan = `<span style="flex:1;">${option.label}</span>`;
+    const shortcutSpan = option.shortcut ? `<span style="color:${C.fgDim};font-size:11px;margin-left:auto;">${option.shortcut}</span>` : "";
+    row.innerHTML = `${iconSpan}${labelSpan}${shortcutSpan}`;
 
     if (!option.disabled) {
-      row.addEventListener("mouseenter", () => { row.style.background = C.hover; row.style.color = "#fff"; });
+      row.addEventListener("mouseenter", () => { row.style.background = C.listHover; row.style.color = C.fgBright; });
       row.addEventListener("mouseleave", () => { row.style.background = "transparent"; row.style.color = C.fg; });
       row.addEventListener("click", (e) => {
         e.stopPropagation();
+        const node = this.currentNode;
+        const handler = this.handler;
         this.hide();
-        if (this.currentNode && this.handler) {
-          this.handler(option.action, this.currentNode);
+        if (node && handler) {
+          handler(option.action, node);
         }
       });
     }
@@ -135,7 +137,7 @@ export class ExplorerContextMenu {
 
   private createSeparator(): HTMLElement {
     const sep = document.createElement("div");
-    sep.style.cssText = `height:1px;background:${C.separator};margin:4px 8px;`;
+    sep.style.cssText = `height:1px;background:${C.borderLight};margin:4px 8px;`;
     return sep;
   }
 
@@ -177,4 +179,8 @@ function copyIcon(): string {
 
 function collapseIcon(): string {
   return `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M9 9H4v1h5V9zM9 4H4v1h5V4z"/><path d="M1 2.5l.5-.5h12l.5.5v10l-.5.5h-12l-.5-.5v-10zm1 0v10h12v-10H2z"/></svg>`;
+}
+
+function duplicateIcon(): string {
+  return `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 4h8v8H4V4zm1 1v6h6V5H5zM2 2h8v1H3v7H2V2z"/></svg>`;
 }
