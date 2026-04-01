@@ -1,50 +1,81 @@
-// ── Extensions View — Marketplace powered via VSIX pipeline ──
+// ── Extensions View — Open VSX Registry powered ─────────────
 
 import { C } from "../../types";
 import { el } from "../../utils";
 import type { ViewContext } from "./types";
 import { ExtensionEvents, VsixEvents, MarketplaceEvents } from "@enjoys/monaco-vanced/core/events";
-import type { MarketplaceEntry } from "@enjoys/monaco-vanced/extensions/marketplace-module";
 
-// ── Marketplace extension catalog (simulates real registry) ──
-const MARKETPLACE_EXTENSIONS: MarketplaceEntry[] = [
-  { id: "esbenp.prettier-vscode", name: "Prettier", publisher: "Prettier", version: "11.0.0", description: "Code formatter using Prettier", downloads: 48_200_000, rating: 4.2, categories: ["Formatters"] },
-  { id: "dbaeumer.vscode-eslint", name: "ESLint", publisher: "Microsoft", version: "3.0.10", description: "Integrates ESLint JavaScript into VS Code", downloads: 38_700_000, rating: 4.3, categories: ["Linters"] },
-  { id: "ms-python.python", name: "Python", publisher: "Microsoft", version: "2025.4.0", description: "IntelliSense, linting, debugging for Python", downloads: 120_000_000, rating: 4.5, categories: ["Programming Languages"] },
-  { id: "bradlc.vscode-tailwindcss", name: "Tailwind CSS IntelliSense", publisher: "Tailwind Labs", version: "0.14.1", description: "Intelligent Tailwind CSS tooling", downloads: 15_600_000, rating: 4.4, categories: ["Other"] },
-  { id: "ms-vscode.vscode-typescript-next", name: "TypeScript Nightly", publisher: "Microsoft", version: "5.8.20260401", description: "Enables typescript@next as VS Code's built-in TS version", downloads: 5_200_000, rating: 4.1, categories: ["Programming Languages"] },
-  { id: "eamodio.gitlens", name: "GitLens", publisher: "GitKraken", version: "16.4.0", description: "Supercharge Git — Visualize authorship, explore history", downloads: 35_100_000, rating: 4.4, categories: ["SCM Providers"] },
-  { id: "ms-azuretools.vscode-docker", name: "Docker", publisher: "Microsoft", version: "1.30.0", description: "Docker container management", downloads: 28_300_000, rating: 4.3, categories: ["Other"] },
-  { id: "formulahendry.auto-rename-tag", name: "Auto Rename Tag", publisher: "Jun Han", version: "0.1.10", description: "Auto rename paired HTML/XML tag", downloads: 17_500_000, rating: 3.8, categories: ["Other"] },
-  { id: "ritwickdey.liveserver", name: "Live Server", publisher: "Ritwick Dey", version: "5.7.9", description: "Launch a local dev server with live reload", downloads: 46_000_000, rating: 4.3, categories: ["Other"] },
-  { id: "pkief.material-icon-theme", name: "Material Icon Theme", publisher: "Philipp Kief", version: "5.14.1", description: "Material Design icons for files and folders", downloads: 26_800_000, rating: 4.6, categories: ["Themes"] },
-  { id: "github.copilot", name: "GitHub Copilot", publisher: "GitHub", version: "1.250.0", description: "AI pair programmer — code suggestions powered by AI", downloads: 22_000_000, rating: 4.1, categories: ["Machine Learning"] },
-  { id: "ms-vscode-remote.remote-ssh", name: "Remote - SSH", publisher: "Microsoft", version: "0.116.0", description: "Open folders on remote machines via SSH", downloads: 18_900_000, rating: 4.0, categories: ["Other"] },
-  { id: "usernamehw.errorlens", name: "Error Lens", publisher: "Alexander", version: "3.20.0", description: "Improve highlighting of errors and warnings inline", downloads: 12_400_000, rating: 4.7, categories: ["Other"] },
-  { id: "christian-kohler.path-intellisense", name: "Path Intellisense", publisher: "Christian Kohler", version: "2.9.0", description: "Autocomplete filenames in your code", downloads: 14_800_000, rating: 4.2, categories: ["Other"] },
-  { id: "mikestead.dotenv", name: "DotENV", publisher: "mikestead", version: "1.0.1", description: "Support for .env file syntax", downloads: 11_200_000, rating: 4.0, categories: ["Programming Languages"] },
-  { id: "yzhang.markdown-all-in-one", name: "Markdown All in One", publisher: "Yu Zhang", version: "3.6.2", description: "All you need for Markdown writing", downloads: 10_700_000, rating: 4.4, categories: ["Programming Languages"] },
-  { id: "wayou.vscode-todo-highlight", name: "TODO Highlight", publisher: "Wayou Liu", version: "1.0.5", description: "Highlight TODO, FIXME and other annotations", downloads: 7_600_000, rating: 4.2, categories: ["Other"] },
-  { id: "vscodevim.vim", name: "Vim", publisher: "vscodevim", version: "1.28.1", description: "Vim emulation for VS Code", downloads: 9_200_000, rating: 3.7, categories: ["Keymaps"] },
-  { id: "ms-vscode.cpptools", name: "C/C++", publisher: "Microsoft", version: "1.22.6", description: "C/C++ IntelliSense, debugging, and code browsing", downloads: 62_000_000, rating: 4.0, categories: ["Programming Languages"] },
-  { id: "redhat.java", name: "Language Support for Java", publisher: "Red Hat", version: "1.38.0", description: "Java linting, IntelliSense, formatting", downloads: 22_500_000, rating: 4.1, categories: ["Programming Languages"] },
-  { id: "rust-lang.rust-analyzer", name: "rust-analyzer", publisher: "rust-lang", version: "0.4.2200", description: "Rust language support for VS Code", downloads: 8_700_000, rating: 4.6, categories: ["Programming Languages"] },
-  { id: "golang.go", name: "Go", publisher: "Go Team at Google", version: "0.44.0", description: "Rich Go language support", downloads: 15_300_000, rating: 4.3, categories: ["Programming Languages"] },
-  { id: "svelte.svelte-vscode", name: "Svelte for VS Code", publisher: "Svelte", version: "108.5.3", description: "Svelte language support", downloads: 4_200_000, rating: 4.2, categories: ["Programming Languages"] },
-  { id: "vue.volar", name: "Vue - Official", publisher: "Vue", version: "2.2.6", description: "Official Vue.js language features extension", downloads: 11_800_000, rating: 4.0, categories: ["Programming Languages"] },
-  { id: "astro-build.astro-vscode", name: "Astro", publisher: "Astro", version: "2.16.4", description: "Astro language support", downloads: 3_800_000, rating: 4.3, categories: ["Programming Languages"] },
-  { id: "biomejs.biome", name: "Biome", publisher: "biomejs", version: "2025.3.281", description: "Biome — formatter, linter, bundler in one", downloads: 2_100_000, rating: 4.5, categories: ["Formatters", "Linters"] },
-  { id: "ms-playwright.playwright", name: "Playwright Test", publisher: "Microsoft", version: "1.1.7", description: "Run Playwright tests inside VS Code", downloads: 3_500_000, rating: 4.4, categories: ["Testing"] },
-  { id: "vitest.explorer", name: "Vitest", publisher: "Vitest", version: "1.8.0", description: "Run and debug Vitest tests", downloads: 2_800_000, rating: 4.3, categories: ["Testing"] },
-  { id: "prisma.prisma", name: "Prisma", publisher: "Prisma", version: "5.22.0", description: "Prisma schema language support", downloads: 5_400_000, rating: 4.5, categories: ["Programming Languages"] },
-  { id: "denoland.vscode-deno", name: "Deno", publisher: "Deno Land", version: "3.42.0", description: "Deno language support", downloads: 2_200_000, rating: 4.1, categories: ["Programming Languages"] },
-];
+// ── Types ────────────────────────────────────────────────────
+interface ExtEntry {
+  id: string;
+  name: string;
+  publisher: string;
+  version: string;
+  description: string;
+  downloads: number;
+  rating: number;
+  categories: string[];
+  iconUrl?: string;
+}
 
-// ── Category colors ──────────────────────────────────────────
+// ── Open VSX API ─────────────────────────────────────────────
+const OPENVSX = "https://open-vsx.org/api";
+
+interface OpenVSXSearchResult {
+  totalSize: number;
+  extensions: {
+    name: string;
+    namespace: string;
+    version: string;
+    displayName?: string;
+    description?: string;
+    downloadCount?: number;
+    averageRating?: number;
+    categories?: string[];
+    files?: { icon?: string };
+  }[];
+}
+
+function mapEntry(e: OpenVSXSearchResult["extensions"][0]): ExtEntry {
+  return {
+    id: `${e.namespace}.${e.name}`,
+    name: e.displayName || e.name,
+    publisher: e.namespace,
+    version: e.version ?? "0.0.0",
+    description: e.description ?? "",
+    downloads: e.downloadCount ?? 0,
+    rating: e.averageRating ?? 0,
+    categories: e.categories ?? [],
+    iconUrl: e.files?.icon,
+  };
+}
+
+let _cache: { key: string; data: ExtEntry[]; ts: number } | null = null;
+const CACHE_TTL = 5 * 60_000; // 5 min
+
+async function fetchOpenVSX(query: string, size = 50, category?: string): Promise<{ entries: ExtEntry[]; total: number }> {
+  const cacheKey = `${query}|${size}|${category ?? ""}`;
+  if (_cache && _cache.key === cacheKey && Date.now() - _cache.ts < CACHE_TTL) {
+    return { entries: _cache.data, total: _cache.data.length };
+  }
+  const params = new URLSearchParams({ size: String(size), sortBy: "downloadCount", sortOrder: "desc" });
+  if (query) params.set("query", query);
+  if (category) params.set("category", category);
+  const res = await fetch(`${OPENVSX}/-/search?${params}`);
+  if (!res.ok) throw new Error(`Open VSX ${res.status}`);
+  const data: OpenVSXSearchResult = await res.json();
+  const entries = data.extensions.map(mapEntry);
+  _cache = { key: cacheKey, data: entries, ts: Date.now() };
+  return { entries, total: data.totalSize };
+}
+
+// ── Helpers ──────────────────────────────────────────────────
 const CAT_COLORS: Record<string, string> = {
   "Formatters": "#c586c0", "Linters": "#f14c4c", "Programming Languages": "#569cd6",
   "Other": "#9cdcfe", "SCM Providers": "#ce9178", "Themes": "#dcdcaa",
   "Machine Learning": "#b5cea8", "Keymaps": "#4ec9b0", "Testing": "#89d185",
+  "Snippets": "#d7ba7d", "Debuggers": "#f48771", "Extension Packs": "#4fc1ff",
+  "Language Packs": "#c586c0", "Visualization": "#b5cea8", "Data Science": "#89d185",
 };
 
 function catColor(cats: string[]): string {
@@ -59,11 +90,19 @@ function formatDownloads(n: number): string {
 }
 
 function renderStars(rating: number): string {
+  if (!rating) return "☆☆☆☆☆";
   const full = Math.floor(rating);
   const half = rating - full >= 0.3 ? 1 : 0;
   const empty = 5 - full - half;
   return "★".repeat(full) + (half ? "½" : "") + "☆".repeat(empty);
 }
+
+// ── Category list for filter pills ───────────────────────────
+const FILTER_CATEGORIES = [
+  "Programming Languages", "Themes", "Snippets", "Linters", "Formatters",
+  "Keymaps", "SCM Providers", "Debuggers", "Testing", "Extension Packs",
+  "Language Packs", "Machine Learning", "Data Science", "Visualization", "Other",
+];
 
 export function buildExtensionsView(ctx: ViewContext): HTMLElement {
   const { apis, eventBus, vsixApi, marketplaceApi } = ctx;
@@ -71,51 +110,116 @@ export function buildExtensionsView(ctx: ViewContext): HTMLElement {
   const installedIds = new Set<string>();
   const installingIds = new Set<string>();
 
+  // ── State ──────────────────────────────────────────────────
+  let currentExts: ExtEntry[] = [];
+  let totalResults = 0;
+  let loading = false;
+  let activeFilter = "all";
+  let currentPage = 0;
+  const PAGE_SIZE = 50;
+
   // ── Container ──────────────────────────────────────────────
   const container = el("div", { style: "overflow-y:auto;height:100%;display:flex;flex-direction:column;" });
 
   // ── Search ─────────────────────────────────────────────────
   const searchWrap = el("div", { style: "padding:10px 12px 6px;" });
-  const searchInput = el("input", { type: "text", placeholder: "Search Marketplace…", class: "vsc-input" }) as HTMLInputElement;
+  const searchInput = el("input", { type: "text", placeholder: "Search Extensions in Open VSX Registry…", class: "vsc-input" }) as HTMLInputElement;
   searchWrap.appendChild(searchInput);
+
+  // ── Result count ───────────────────────────────────────────
+  const resultInfo = el("div", { style: `font-size:11px;color:${C.fgDim};padding:0 12px 4px;` });
 
   // ── Filters ────────────────────────────────────────────────
   const filterRow = el("div", { style: "display:flex;gap:4px;padding:4px 12px 10px;flex-wrap:wrap;" });
-  let activeFilter = "all";
-  const allCats = [...new Set(MARKETPLACE_EXTENSIONS.flatMap((e) => e.categories))].sort();
-  const filters = [
-    { id: "all", label: `All (${MARKETPLACE_EXTENSIONS.length})` },
+  const staticFilters = [
+    { id: "all", label: "All" },
     { id: "installed", label: "Installed" },
-    { id: "popular", label: "Popular" },
-    ...allCats.map((c) => ({ id: c, label: c })),
+  ];
+  const filters = [
+    ...staticFilters,
+    ...FILTER_CATEGORIES.map((c) => ({ id: c, label: c })),
   ];
   const filterEls: HTMLElement[] = [];
   for (const f of filters) {
     const pill = el("div", { class: "vsc-tab-pill", "data-active": f.id === activeFilter ? "true" : "false" }, f.label);
-    pill.addEventListener("click", () => { activeFilter = f.id; filterEls.forEach((fe) => fe.dataset.active = "false"); pill.dataset.active = "true"; renderList(); });
+    pill.addEventListener("click", () => {
+      activeFilter = f.id;
+      filterEls.forEach((fe) => fe.dataset.active = "false");
+      pill.dataset.active = "true";
+      currentPage = 0;
+      loadExtensions();
+    });
     filterEls.push(pill);
     filterRow.appendChild(pill);
   }
 
-  // ── List ───────────────────────────────────────────────────
+  // ── List + loading ─────────────────────────────────────────
   const extList = el("div", { style: "flex:1;overflow-y:auto;padding:0 12px;" });
+  const loadingEl = el("div", { style: `text-align:center;padding:24px;color:${C.fgDim};font-size:12px;display:none;` });
+  loadingEl.innerHTML = `<div style="display:inline-block;width:20px;height:20px;border:2px solid ${C.fgDim};border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;"></div><div style="margin-top:8px;">Loading extensions…</div>`;
 
-  // ── Marketplace search (with local fallback) ───────────────
-  async function searchMarketplace(query: string): Promise<MarketplaceEntry[]> {
-    if (marketplaceApi) {
-      try {
-        return await marketplaceApi.search({ query, limit: 30 });
-      } catch { /* fallback below */ }
+  // ── Load extensions from Open VSX ──────────────────────────
+  async function loadExtensions() {
+    if (loading) return;
+
+    // Installed filter — client-side only
+    if (activeFilter === "installed") {
+      const installed = currentExts.filter((e) => installedIds.has(e.id));
+      resultInfo.textContent = `${installed.length} installed`;
+      renderList(installed);
+      return;
     }
-    // Local fallback
-    const q = query.toLowerCase();
-    return MARKETPLACE_EXTENSIONS.filter((e) =>
-      e.name.toLowerCase().includes(q) || e.description.toLowerCase().includes(q) || e.publisher.toLowerCase().includes(q) || e.id.toLowerCase().includes(q),
-    );
+
+    loading = true;
+    loadingEl.style.display = "";
+    extList.innerHTML = "";
+    extList.appendChild(loadingEl);
+
+    const query = searchInput.value.trim();
+    const category = activeFilter !== "all" ? activeFilter : undefined;
+
+    try {
+      // Try marketplace API first (if wired), then Open VSX direct
+      if (marketplaceApi) {
+        try {
+          const results = await marketplaceApi.search({ query, limit: PAGE_SIZE, category } as any);
+          currentExts = results.map((r: any) => ({
+            id: r.id, name: r.name, publisher: r.publisher, version: r.version,
+            description: r.description, downloads: r.downloads ?? 0,
+            rating: r.rating ?? 0, categories: r.categories ?? [], iconUrl: r.icon,
+          }));
+          totalResults = currentExts.length;
+        } catch {
+          // Fall through to Open VSX
+          const result = await fetchOpenVSX(query, PAGE_SIZE, category);
+          currentExts = result.entries;
+          totalResults = result.total;
+        }
+      } else {
+        const result = await fetchOpenVSX(query, PAGE_SIZE, category);
+        currentExts = result.entries;
+        totalResults = result.total;
+      }
+
+      resultInfo.textContent = totalResults > 0
+        ? `${totalResults.toLocaleString()} extensions found${query ? ` for "${query}"` : ""}${category ? ` in ${category}` : ""}`
+        : "No extensions found.";
+      renderList(currentExts);
+    } catch (err) {
+      extList.innerHTML = "";
+      const errorMsg = el("div", { style: `color:${C.fgDim};font-size:12px;padding:24px;text-align:center;` });
+      errorMsg.innerHTML = `<div style="color:#f14c4c;margin-bottom:8px;">Failed to load extensions</div><div>${(err as Error).message}</div><div style="margin-top:12px;"><button class="vsc-btn vsc-btn-primary" style="font-size:11px;padding:4px 14px;">Retry</button></div>`;
+      errorMsg.querySelector("button")?.addEventListener("click", () => loadExtensions());
+      extList.appendChild(errorMsg);
+      resultInfo.textContent = "";
+    } finally {
+      loading = false;
+      loadingEl.style.display = "none";
+    }
   }
 
   // ── Install via marketplace / VSIX pipeline ────────────────
-  async function installExtension(ext: MarketplaceEntry, btn: HTMLButtonElement) {
+  async function installExtension(ext: ExtEntry, btn: HTMLButtonElement) {
     if (installingIds.has(ext.id)) return;
     installingIds.add(ext.id);
     btn.textContent = "Installing…";
@@ -139,18 +243,17 @@ export function buildExtensionsView(ctx: ViewContext): HTMLElement {
       eventBus.emit(ExtensionEvents.Installed, { id: ext.id, name: ext.name });
       eventBus.emit(MarketplaceEvents.InstallComplete, { id: ext.id });
     } catch {
-      // Demo fallback — simulate successful install
       installedIds.add(ext.id);
       btn.textContent = "Uninstall";
       btn.removeAttribute("disabled");
-      apis.notification?.show({ type: "success", message: `${ext.name} installed.`, duration: 3000 });
+      apis.notification?.show({ type: "success", message: `${ext.name} installed (demo).`, duration: 3000 });
       eventBus.emit(ExtensionEvents.Installed, { id: ext.id, name: ext.name });
     } finally {
       installingIds.delete(ext.id);
     }
   }
 
-  function uninstallExtension(ext: MarketplaceEntry, btn: HTMLButtonElement) {
+  function uninstallExtension(ext: ExtEntry, btn: HTMLButtonElement) {
     installedIds.delete(ext.id);
     if (vsixApi) vsixApi.uninstall(ext.id);
     btn.textContent = "Install";
@@ -160,20 +263,14 @@ export function buildExtensionsView(ctx: ViewContext): HTMLElement {
   }
 
   // ── Render list ────────────────────────────────────────────
-  let currentExts = MARKETPLACE_EXTENSIONS;
-
-  function renderList() {
+  function renderList(list: ExtEntry[]) {
     extList.innerHTML = "";
-    const q = searchInput.value.trim().toLowerCase();
-
-    let list = currentExts;
-    if (activeFilter === "installed") list = list.filter((e) => installedIds.has(e.id));
-    else if (activeFilter === "popular") list = [...list].sort((a, b) => b.downloads - a.downloads).slice(0, 15);
-    else if (activeFilter !== "all") list = list.filter((e) => e.categories.includes(activeFilter));
-    if (q) list = list.filter((e) => e.name.toLowerCase().includes(q) || e.description.toLowerCase().includes(q) || e.publisher.toLowerCase().includes(q));
 
     if (list.length === 0) {
-      extList.appendChild(el("div", { style: `color:${C.fgDim};font-size:12px;padding:16px 0;text-align:center;` }, q ? "No extensions match your search." : "No extensions found."));
+      const emptyMsg = searchInput.value.trim()
+        ? "No extensions match your search. Try different keywords."
+        : "No extensions found.";
+      extList.appendChild(el("div", { style: `color:${C.fgDim};font-size:12px;padding:24px 0;text-align:center;` }, emptyMsg));
       return;
     }
 
@@ -183,9 +280,19 @@ export function buildExtensionsView(ctx: ViewContext): HTMLElement {
 
       const row = el("div", { class: "vsc-file-item", style: "display:flex;align-items:flex-start;gap:10px;padding:10px 6px;cursor:pointer;" });
 
-      // Icon — first letter
-      const icon = el("div", { style: `width:40px;height:40px;min-width:40px;display:flex;align-items:center;justify-content:center;border-radius:6px;background:${color}18;flex-shrink:0;font-size:18px;font-weight:700;color:${color};` });
-      icon.textContent = ext.name.charAt(0).toUpperCase();
+      // Icon — real icon from Open VSX or first-letter fallback
+      const iconWrap = el("div", { style: `width:40px;height:40px;min-width:40px;display:flex;align-items:center;justify-content:center;border-radius:6px;background:${color}18;flex-shrink:0;overflow:hidden;` });
+      if (ext.iconUrl) {
+        const img = document.createElement("img");
+        img.src = ext.iconUrl;
+        img.width = 40; img.height = 40;
+        img.style.cssText = "border-radius:6px;object-fit:cover;";
+        img.onerror = () => { img.remove(); iconWrap.textContent = ext.name.charAt(0).toUpperCase(); iconWrap.style.cssText += `font-size:18px;font-weight:700;color:${color};`; };
+        iconWrap.appendChild(img);
+      } else {
+        iconWrap.textContent = ext.name.charAt(0).toUpperCase();
+        iconWrap.style.cssText += `font-size:18px;font-weight:700;color:${color};`;
+      }
 
       // Info
       const info = el("div", { style: "flex:1;min-width:0;" });
@@ -205,14 +312,18 @@ export function buildExtensionsView(ctx: ViewContext): HTMLElement {
         el("span", {}, ext.publisher),
         el("span", { style: "opacity:.5;" }, "·"),
         el("span", {}, `${formatDownloads(ext.downloads)} installs`),
-        el("span", { style: "opacity:.5;" }, "·"),
-        el("span", { style: "color:#dcdcaa;" }, renderStars(ext.rating)),
       );
+      if (ext.rating) {
+        metaRow.append(
+          el("span", { style: "opacity:.5;" }, "·"),
+          el("span", { style: "color:#dcdcaa;" }, renderStars(ext.rating)),
+        );
+      }
 
       const descEl = el("div", { style: `font-size:11px;color:${C.fgDim};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px;` }, ext.description);
 
       const tagsRow = el("div", { style: "display:flex;gap:4px;margin-top:4px;flex-wrap:wrap;" });
-      for (const cat of ext.categories) {
+      for (const cat of ext.categories.slice(0, 3)) {
         tagsRow.appendChild(el("span", { style: `font-size:9px;padding:1px 5px;border-radius:3px;background:${catColor([cat])}18;color:${catColor([cat])};` }, cat));
       }
 
@@ -228,14 +339,42 @@ export function buildExtensionsView(ctx: ViewContext): HTMLElement {
         e.stopPropagation();
         if (isInstalled) {
           uninstallExtension(ext, btn);
-          renderList();
+          renderList(currentExts.filter((x) => activeFilter !== "installed" || installedIds.has(x.id)));
         } else {
           installExtension(ext, btn);
         }
       });
 
-      row.append(icon, info, btn);
+      row.append(iconWrap, info, btn);
       extList.appendChild(row);
+    }
+
+    // "Load more" if total > current page
+    if (totalResults > list.length) {
+      const more = el("div", { style: `text-align:center;padding:12px;` });
+      const moreBtn = el("button", { class: "vsc-btn vsc-btn-secondary", style: "font-size:11px;padding:4px 16px;" }, `Load more (${(totalResults - list.length).toLocaleString()} remaining)`);
+      moreBtn.addEventListener("click", async () => {
+        moreBtn.textContent = "Loading…";
+        moreBtn.setAttribute("disabled", "true");
+        currentPage++;
+        try {
+          const query = searchInput.value.trim();
+          const category = activeFilter !== "all" && activeFilter !== "installed" ? activeFilter : undefined;
+          const offset = currentPage * PAGE_SIZE;
+          const params = new URLSearchParams({ size: String(PAGE_SIZE), offset: String(offset), sortBy: "downloadCount", sortOrder: "desc" });
+          if (query) params.set("query", query);
+          if (category) params.set("category", category);
+          const res = await fetch(`${OPENVSX}/-/search?${params}`);
+          if (res.ok) {
+            const data: OpenVSXSearchResult = await res.json();
+            const newEntries = data.extensions.map(mapEntry);
+            currentExts = [...currentExts, ...newEntries];
+            renderList(currentExts);
+          }
+        } catch { /* ignore */ }
+      });
+      more.appendChild(moreBtn);
+      extList.appendChild(more);
     }
   }
 
@@ -243,18 +382,35 @@ export function buildExtensionsView(ctx: ViewContext): HTMLElement {
   let searchTimer: ReturnType<typeof setTimeout>;
   searchInput.addEventListener("input", () => {
     clearTimeout(searchTimer);
-    const q = searchInput.value.trim();
-    searchTimer = setTimeout(async () => {
-      if (q.length >= 2) {
-        currentExts = await searchMarketplace(q);
-      } else {
-        currentExts = MARKETPLACE_EXTENSIONS;
-      }
-      renderList();
-    }, 200);
+    searchTimer = setTimeout(() => {
+      currentPage = 0;
+      _cache = null;
+      loadExtensions();
+    }, 300);
   });
 
-  container.append(searchWrap, filterRow, extList);
-  requestAnimationFrame(renderList);
+  // Keyboard — Enter triggers search immediately
+  searchInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      clearTimeout(searchTimer);
+      currentPage = 0;
+      _cache = null;
+      loadExtensions();
+    }
+  });
+
+  // ── Spinner keyframe ───────────────────────────────────────
+  if (!document.getElementById("vsc-spin-keyframe")) {
+    const style = document.createElement("style");
+    style.id = "vsc-spin-keyframe";
+    style.textContent = `@keyframes spin { to { transform: rotate(360deg); } }`;
+    document.head.appendChild(style);
+  }
+
+  container.append(searchWrap, resultInfo, filterRow, extList);
+
+  // Initial load — fetch popular extensions
+  requestAnimationFrame(() => loadExtensions());
+
   return container;
 }
