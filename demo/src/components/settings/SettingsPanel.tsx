@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useTheme } from "../theme";
 import { SearchInput, TabPill, CollapsibleSection } from "../shared";
-import { SettingsEvents, ThemeEvents } from "@enjoys/monaco-vanced/core/events";
+import { SettingsEvents, ThemeEvents, ExtensionEvents, NotificationEvents } from "@enjoys/monaco-vanced/core/events";
 import {
   EDITOR_SETTINGS, WORKBENCH_SETTINGS, FILES_SETTINGS,
   FEATURES_SETTINGS, WINDOW_SETTINGS, PLUGIN_CATALOG,
@@ -13,12 +13,13 @@ import {
 
 type Emit = (ev: string, payload: unknown) => void;
 type ThemeAPI = { apply(id: string): Promise<void>; getIndex(): { id: string; file: string }[]; getThemes(): { id: string; name: string; type: string; colors: Record<string, string> }[]; getCurrent(): string };
+type ExtensionAPI = { enable(id: string): void; disable(id: string): void } | undefined;
 
 // ══════════════════════════════════════════════════════════════
 // Entry point
 // ══════════════════════════════════════════════════════════════
 
-export function SettingsPanel({ emit, themeApi }: { emit: Emit; themeApi?: ThemeAPI }) {
+export function SettingsPanel({ emit, themeApi, extensionApi }: { emit: Emit; themeApi?: ThemeAPI; extensionApi?: ExtensionAPI }) {
   const { tokens: t } = useTheme();
   const [search, setSearch] = useState("");
   const [activeCat, setActiveCat] = useState("commonly-used");
@@ -87,7 +88,7 @@ export function SettingsPanel({ emit, themeApi }: { emit: Emit; themeApi?: Theme
           ) : activeCat === "features" ? (
             <SettingsList title="Features" settings={FEATURES_SETTINGS} onChange={handleSettingChange} />
           ) : activeCat === "plugins" ? (
-            <PluginsConfig emit={emit} />
+            <PluginsConfig emit={emit} extensionApi={extensionApi} />
           ) : activeCat === "themes" ? (
             <ThemesConfig emit={emit} themeApi={themeApi} />
           ) : activeCat === "keybindings" ? (
@@ -368,7 +369,7 @@ function SettingItem({
 // Plugins Config
 // ══════════════════════════════════════════════════════════════
 
-function PluginsConfig({ emit }: { emit: Emit }) {
+function PluginsConfig({ emit, extensionApi }: { emit: Emit; extensionApi?: ExtensionAPI }) {
   const { tokens: t } = useTheme();
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
@@ -407,15 +408,26 @@ function PluginsConfig({ emit }: { emit: Emit }) {
       {filtered.length === 0 ? (
         <div style={{ color: t.fgDim, padding: 16, fontSize: 13 }}>No plugins match the filter.</div>
       ) : (
-        filtered.map((p) => <PluginCard key={p.id} plugin={p} emit={emit} />)
+        filtered.map((p) => <PluginCard key={p.id} plugin={p} emit={emit} extensionApi={extensionApi} />)
       )}
     </div>
   );
 }
 
-function PluginCard({ plugin, emit }: { plugin: PluginInfo; emit: Emit }) {
+function PluginCard({ plugin, emit, extensionApi }: { plugin: PluginInfo; emit: Emit; extensionApi?: ExtensionAPI }) {
   const { tokens: t } = useTheme();
   const [expanded, setExpanded] = useState(false);
+  const [enabled, setEnabled] = useState(plugin.installed);
+
+  const handleToggle = useCallback(() => {
+    const next = !enabled;
+    setEnabled(next);
+    if (extensionApi) {
+      if (next) extensionApi.enable(plugin.id);
+      else extensionApi.disable(plugin.id);
+    }
+    emit(next ? ExtensionEvents.Enabled : ExtensionEvents.Disabled, { id: plugin.id, name: plugin.name });
+  }, [enabled, extensionApi, plugin, emit]);
 
   return (
     <div style={{
@@ -423,6 +435,8 @@ function PluginCard({ plugin, emit }: { plugin: PluginInfo; emit: Emit }) {
       border: `1px solid ${t.border}`,
       borderRadius: 6, overflow: "hidden",
       background: t.cardBg,
+      opacity: enabled ? 1 : 0.6,
+      transition: "opacity .15s",
     }}>
       <div
         onClick={() => setExpanded(!expanded)}
@@ -448,6 +462,25 @@ function PluginCard({ plugin, emit }: { plugin: PluginInfo; emit: Emit }) {
             )}
           </div>
           <div style={{ fontSize: 12, color: t.fgDim, marginTop: 2 }}>{plugin.desc}</div>
+        </div>
+        {/* Enable / Disable toggle */}
+        <div
+          onClick={(e) => { e.stopPropagation(); handleToggle(); }}
+          title={enabled ? "Disable plugin" : "Enable plugin"}
+          style={{
+            width: 36, height: 20, borderRadius: 10, cursor: "pointer",
+            background: enabled ? t.accent : t.inputBg,
+            border: `1px solid ${enabled ? t.accent : t.inputBorder}`,
+            position: "relative", transition: "background .2s, border-color .2s",
+            flexShrink: 0,
+          }}
+        >
+          <div style={{
+            width: 14, height: 14, borderRadius: "50%",
+            background: "#fff", position: "absolute",
+            top: 2, left: enabled ? 19 : 2,
+            transition: "left .2s",
+          }} />
         </div>
         <span style={{
           fontSize: 10, padding: "2px 6px", borderRadius: 3,
@@ -521,13 +554,21 @@ function ThemesConfig({ emit, themeApi }: { emit: Emit; themeApi?: ThemeAPI }) {
 
   const handleApply = useCallback(async (theme: ThemeInfo) => {
     if (themeApi) {
-      setLoading(true);
+      if (theme.remote) {
+        setLoading(true);
+        emit(NotificationEvents.Show, { type: "info", message: `Fetching "${theme.name}" from CDN…`, duration: 4000 });
+      }
       try {
         await themeApi.apply(theme.id);
+        if (theme.remote) {
+          emit(NotificationEvents.Show, { type: "success", message: `Theme "${theme.name}" activated.`, duration: 3000 });
+        }
       } catch {
-        // Fallback to event-based flow
         const monacoTheme = theme.type === "light" ? "vs" : theme.type === "contrast" ? "hc-black" : "vs-dark";
         emit(ThemeEvents.Changed, { name: theme.name, type: theme.type, monacoTheme });
+        if (theme.remote) {
+          emit(NotificationEvents.Show, { type: "warning", message: `Failed to fetch "${theme.name}". Using fallback.`, duration: 3000 });
+        }
       } finally {
         setLoading(false);
       }

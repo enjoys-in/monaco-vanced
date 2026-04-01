@@ -363,6 +363,7 @@ async function bootstrap() {
     iconApi,
     fsApi: mockFs,
     themeApi,
+    extensionApi,
   });
 
   // Pre-create all models so file switching is instant
