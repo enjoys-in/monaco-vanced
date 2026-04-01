@@ -43,6 +43,7 @@ export interface DOMRefs {
   tabList: HTMLElement;
   tabActions: HTMLElement;
   editorContainer: HTMLElement;
+  settingsWebview: HTMLElement;
   breadcrumbBar: HTMLElement;
   // Bottom panel
   bottomPanel: HTMLElement;
@@ -54,6 +55,7 @@ export interface DOMRefs {
   statusLeft: HTMLElement;
   statusRight: HTMLElement;
   // Overlays
+  sidebarBackdrop: HTMLElement;
   toastContainer: HTMLElement;
   contextMenuEl: HTMLElement;
   commandPalette: HTMLElement;

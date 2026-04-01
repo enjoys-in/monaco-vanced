@@ -124,6 +124,33 @@ export function wireTabs(
       if (entry) dom.tabList.appendChild(entry.el);
     });
   });
+
+  // ── Special tabs (Settings, Welcome, etc.) ─────────────────
+  on("tab:open-special", (p) => {
+    const { uri, label } = p as { uri: string; label: string };
+    if (!openTabs.has(uri)) {
+      const tab = createSpecialTabElement(uri, label, eventBus);
+      dom.tabList.appendChild(tab);
+      openTabs.set(uri, { el: tab, label });
+    }
+    activateSpecialTab(uri);
+  });
+
+  function activateSpecialTab(uri: string) {
+    activeTabUri = uri;
+    openTabs.forEach((t, tabUri) => {
+      const isActive = tabUri === uri;
+      t.el.style.background = isActive ? C.tabActiveBg : C.tabInactiveBg;
+      t.el.style.color = isActive ? C.fgBright : C.fgDim;
+      t.el.style.borderBottom = isActive ? `1px solid ${C.tabActiveBg}` : "1px solid transparent";
+      t.el.style.borderTop = isActive ? `1px solid ${C.accent}` : "1px solid transparent";
+    });
+    const entry = openTabs.get(uri);
+    dom.titleCenter.textContent = entry?.label ?? uri;
+    dom.breadcrumbBar.innerHTML = "";
+    const crumb = el("span", { style: `color:${C.fg};font-size:12px;` }, entry?.label ?? uri);
+    dom.breadcrumbBar.appendChild(crumb);
+  }
 }
 
 function createTabElement(uri: string, label: string, eventBus: EventBus): HTMLElement {
@@ -176,6 +203,51 @@ function createTabElement(uri: string, label: string, eventBus: EventBus): HTMLE
   });
 
   tab.append(icon, labelSpan, dirty, closeBtn);
+  return tab;
+}
+
+function createSpecialTabElement(uri: string, label: string, eventBus: EventBus): HTMLElement {
+  const tab = el("div", {
+    "data-uri": uri,
+    style: `display:flex;align-items:center;gap:6px;padding:0 10px;height:100%;cursor:pointer;border-right:1px solid ${C.border};font-size:13px;white-space:nowrap;background:${C.tabInactiveBg};color:${C.fgDim};position:relative;min-width:0;border-top:1px solid transparent;border-bottom:1px solid transparent;`,
+  });
+
+  tab.addEventListener("click", () => eventBus.emit("tab:switch-special", { uri, label }));
+  tab.addEventListener("mouseenter", () => {
+    if (uri !== activeTabUri) tab.style.background = C.hover;
+    const close = tab.querySelector(".tab-close") as HTMLElement;
+    if (close) close.style.opacity = "1";
+  });
+  tab.addEventListener("mouseleave", () => {
+    if (uri !== activeTabUri) tab.style.background = C.tabInactiveBg;
+    const close = tab.querySelector(".tab-close") as HTMLElement;
+    if (close) close.style.opacity = "0";
+  });
+
+  // Gear icon for settings tab
+  const icon = el("span", { style: `display:inline-flex;align-items:center;flex-shrink:0;color:${C.fgDim};` });
+  icon.innerHTML = `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M9.1 4.4L8.6 2H7.4l-.5 2.4-.7.3-2-1.3-.9.8 1.3 2-.3.7-2.4.5v1.2l2.4.5.3.7-1.3 2 .8.8 2-1.3.7.3.5 2.4h1.2l.5-2.4.7-.3 2 1.3.9-.8-1.3-2 .3-.7 2.4-.5V6.8l-2.4-.5-.3-.7 1.3-2-.8-.8-2 1.3-.7-.3zM8 10a2 2 0 110-4 2 2 0 010 4z"/></svg>`;
+
+  const labelSpan = el("span", { style: "overflow:hidden;text-overflow:ellipsis;" }, label);
+
+  // Close button
+  const closeBtn = el("span", {
+    class: "tab-close",
+    style: `font-size:14px;line-height:1;cursor:pointer;opacity:0;padding:2px;border-radius:3px;display:flex;align-items:center;justify-content:center;width:18px;height:18px;flex-shrink:0;color:${C.fgDim};`,
+  });
+  closeBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 16 16"><path d="M8 8.707l3.646 3.647.708-.707L8.707 8l3.647-3.646-.707-.708L8 7.293 4.354 3.646l-.707.708L7.293 8l-3.646 3.646.707.708L8 8.707z" fill="currentColor"/></svg>`;
+  closeBtn.addEventListener("mouseenter", () => { closeBtn.style.background = "rgba(255,255,255,0.1)"; });
+  closeBtn.addEventListener("mouseleave", () => { closeBtn.style.background = "transparent"; });
+  closeBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    eventBus.emit(TabEvents.Close, { uri });
+  });
+
+  tab.addEventListener("auxclick", (e) => {
+    if (e.button === 1) { e.preventDefault(); eventBus.emit(TabEvents.Close, { uri }); }
+  });
+
+  tab.append(icon, labelSpan, closeBtn);
   return tab;
 }
 

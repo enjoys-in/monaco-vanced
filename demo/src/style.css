@@ -1,1 +1,98 @@
 @import "tailwindcss";
+
+/* ── Scrollbar styling ─────────────────────────────────────── */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(121, 121, 121, 0.4); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(121, 121, 121, 0.7); }
+::-webkit-scrollbar-corner { background: transparent; }
+
+/* ── Base ──────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+/* ── Tablet: ≤1024px ───────────────────────────────────────── */
+@media (max-width: 1024px) {
+  /* Shrink sidebar to 200px */
+  .vsc-sidebar { width: 200px !important; min-width: 140px !important; }
+
+  /* Narrower title menu items */
+  .vsc-menu-item { padding: 2px 5px !important; font-size: 11px !important; }
+
+  /* Command palette — fit smaller screens */
+  .vsc-command-palette { width: 500px !important; max-width: 90vw !important; }
+
+  /* Status bar items tighter */
+  .vsc-status-item { padding: 0 4px !important; }
+
+  /* Bottom panel shorter default */
+  .vsc-bottom-panel { height: 160px !important; }
+
+  /* Notifications narrower */
+  .vsc-toast-container { right: 8px !important; max-width: calc(100vw - 16px) !important; }
+}
+
+/* ── Small Tablet / Large Phone: ≤768px ────────────────────── */
+@media (max-width: 768px) {
+  /* Hide sidebar by default — toggle via button */
+  .vsc-sidebar { display: none !important; }
+  .vsc-sidebar.vsc-sidebar--visible { display: flex !important; position: absolute !important; top: 0 !important; left: 48px !important; bottom: 0 !important; z-index: 50 !important; width: 240px !important; box-shadow: 4px 0 16px rgba(0,0,0,0.5) !important; }
+
+  /* Backdrop behind sidebar overlay */
+  .vsc-sidebar-backdrop { display: none; position: fixed; inset: 0; z-index: 49; background: rgba(0,0,0,0.35); }
+  .vsc-sidebar-backdrop--visible { display: block; }
+
+  /* Activity bar slimmer */
+  .vsc-activity-bar { width: 40px !important; min-width: 40px !important; }
+  .vsc-activity-btn { width: 40px !important; height: 40px !important; }
+  .vsc-activity-btn svg { width: 18px !important; height: 18px !important; }
+
+  /* Hide title menu text, keep only icons */
+  .vsc-title-text { display: none !important; }
+  .vsc-title-menu { gap: 0 !important; }
+
+  /* Hide breadcrumbs on small screens */
+  .vsc-breadcrumb-bar { display: none !important; }
+
+  /* Bottom panel: full width, lower height */
+  .vsc-bottom-panel { height: 140px !important; min-height: 80px !important; }
+
+  /* Command palette full width */
+  .vsc-command-palette { width: 100vw !important; max-width: 100vw !important; left: 0 !important; transform: none !important; border-radius: 0 !important; }
+
+  /* Tab bar: scroll horizontally, smaller tabs */
+  .vsc-tab-bar { scroll-snap-type: x mandatory; }
+  .vsc-tab-bar > * { scroll-snap-align: start; flex-shrink: 0; }
+
+  /* Toast notifications: full width at bottom */
+  .vsc-toast-container { left: 8px !important; right: 8px !important; bottom: 28px !important; }
+}
+
+/* ── Phone: ≤480px ─────────────────────────────────────────── */
+@media (max-width: 480px) {
+  /* Hide activity bar — use overlay sidebar only */
+  .vsc-activity-bar { display: none !important; }
+  .vsc-sidebar.vsc-sidebar--visible { left: 0 !important; width: 100vw !important; }
+
+  /* Title bar: just center + actions */
+  .vsc-title-menu { display: none !important; }
+
+  /* Smaller header action buttons */
+  .vsc-title-actions > div { width: 24px !important; height: 20px !important; }
+  .vsc-title-actions svg { width: 12px !important; height: 12px !important; }
+
+  /* Status bar: hide less important items */
+  .vsc-status-item[data-id="sync"],
+  .vsc-status-item[data-id="prettier"],
+  .vsc-status-item[data-id="encoding"],
+  .vsc-status-item[data-id="eol"],
+  .vsc-status-item[data-id="feedback"] { display: none !important; }
+}
+
+/* ── Touch: larger hit targets ─────────────────────────────── */
+@media (pointer: coarse) {
+  .vsc-activity-btn { min-height: 44px !important; }
+  .vsc-file-item { min-height: 28px !important; }
+  .vsc-tab-bar > * { min-height: 38px !important; }
+  .vsc-status-item { min-height: 28px !important; padding: 0 6px !important; }
+  .vsc-menu-item { min-height: 32px !important; }
+}

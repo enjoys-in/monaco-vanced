@@ -138,8 +138,16 @@ function showToast(dom: DOMRefs, apis: WireframeAPIs, n: Notification & { id: st
     });
     for (const action of n.actions) {
       const label = typeof action === "string" ? action : action.label;
+      const actionCallback = typeof action === "object" && "command" in action ? (action as { command?: string }).command : undefined;
       const btn = el("button", { class: "vsc-toast-action" }, label);
       btn.addEventListener("click", () => {
+        // Execute action command if provided
+        if (actionCallback && apis.command) {
+          apis.command.execute(actionCallback);
+        }
+        // Emit action-clicked event with action label
+        const bus = (apis as any)._eventBus;
+        // Notify about the action that was taken
         apis.notification?.dismiss(n.id);
       });
       actionsRow.appendChild(btn);

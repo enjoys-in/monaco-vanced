@@ -166,7 +166,7 @@ export function wireSidebar(
     viewContainers.debug = buildDebugView();
     viewContainers.extensions = buildExtensionsView();
     viewContainers.accounts = buildAccountsView();
-    viewContainers["settings-gear"] = buildSettingsView();
+    viewContainers["settings-gear"] = buildSettingsRedirect();
     for (const [id, container] of Object.entries(viewContainers)) {
       container.style.display = id === activeViewId ? "" : "none";
       container.dataset.viewId = id;
@@ -199,11 +199,11 @@ export function wireSidebar(
       ],
     };
     for (const { title, svg } of toolbarDefs[viewId] ?? []) {
-      dom.sidebarToolbar.appendChild(makeToolbarBtn(title, svg));
+      dom.sidebarToolbar.appendChild(makeToolbarBtn(title, svg, viewId));
     }
   }
 
-  function makeToolbarBtn(title: string, svg: string): HTMLElement {
+  function makeToolbarBtn(title: string, svg: string, viewId: string): HTMLElement {
     const btn = el("div", {
       title,
       style: `width:22px;height:22px;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:4px;color:${C.fgDim};transition:all .12s;`,
@@ -211,7 +211,58 @@ export function wireSidebar(
     btn.innerHTML = svg;
     btn.addEventListener("mouseenter", () => { btn.style.background = "rgba(255,255,255,0.08)"; btn.style.color = C.fg; });
     btn.addEventListener("mouseleave", () => { btn.style.background = "transparent"; btn.style.color = C.fgDim; });
+    btn.addEventListener("click", () => {
+      if (viewId === "explorer") {
+        if (title === "New File") promptNewFile();
+        else if (title === "New Folder") promptNewFolder();
+        else if (title === "Collapse All") collapseAllFolders();
+      } else if (viewId === "search" && title === "Clear Results") {
+        const searchInput = viewContainers.search?.querySelector("input") as HTMLInputElement | null;
+        if (searchInput) { searchInput.value = ""; searchInput.dispatchEvent(new Event("input")); }
+      }
+    });
     return btn;
+  }
+
+  function promptNewFile() {
+    const name = prompt("Enter file name (e.g. src/utils.ts):");
+    if (!name?.trim()) return;
+    const path = name.trim();
+    const fileName = path.split("/").pop() ?? path;
+    // Add to files array
+    const ext = fileName.includes(".") ? fileName.split(".").pop()!.toLowerCase() : "";
+    const langMap: Record<string, string> = { ts: "typescript", tsx: "typescriptreact", js: "javascript", jsx: "javascriptreact", json: "json", css: "css", html: "html", md: "markdown" };
+    const newFile: VirtualFile = { uri: path, name: fileName, language: langMap[ext] ?? "plaintext", content: "" };
+    files.push(newFile);
+    rebuildExplorer();
+    eventBus.emit(FileEvents.Open, { uri: path, label: fileName });
+    apis.notification?.show({ type: "success", message: `Created ${path}`, duration: 3000 });
+  }
+
+  function promptNewFolder() {
+    const name = prompt("Enter folder path (e.g. src/components):");
+    if (!name?.trim()) return;
+    // Create a placeholder file so folder appears
+    const placeholder = name.trim() + "/.gitkeep";
+    files.push({ uri: placeholder, name: ".gitkeep", language: "plaintext", content: "" });
+    rebuildExplorer();
+    apis.notification?.show({ type: "success", message: `Created folder ${name.trim()}`, duration: 3000 });
+  }
+
+  function collapseAllFolders() {
+    const explorerEl = viewContainers.explorer;
+    if (!explorerEl) return;
+    explorerEl.querySelectorAll("[style*='transform: rotate(90deg)']").forEach((chevron) => {
+      (chevron as HTMLElement).click(); // simulate click to toggle
+    });
+  }
+
+  function rebuildExplorer() {
+    const old = viewContainers.explorer;
+    viewContainers.explorer = buildExplorerView(files);
+    viewContainers.explorer.dataset.viewId = "explorer";
+    viewContainers.explorer.style.display = activeViewId === "explorer" ? "" : "none";
+    if (old?.parentNode) old.parentNode.replaceChild(viewContainers.explorer, old);
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -315,23 +366,54 @@ export function wireSidebar(
     replaceWrap.appendChild(el("input", { type: "text", placeholder: "Replace", class: "vsc-input" }));
 
     const optionsRow = el("div", { style: `display:flex;gap:4px;margin-bottom:12px;` });
-    for (const { label, abbr } of [{ label: "Match Case", abbr: "Aa" }, { label: "Whole Word", abbr: "Ab|" }, { label: "Use Regex", abbr: ".*" }]) {
+    let matchCase = false, wholeWord = false, useRegex = false;
+    for (const { label, abbr, key } of [{ label: "Match Case", abbr: "Aa", key: "matchCase" }, { label: "Whole Word", abbr: "Ab|", key: "wholeWord" }, { label: "Use Regex", abbr: ".*", key: "useRegex" }]) {
       const toggle = el("div", { title: label, style: `padding:3px 7px;border:1px solid ${C.borderLight};border-radius:4px;cursor:pointer;font-size:11px;color:${C.fgDim};font-family:monospace;transition:all .12s;` }, abbr);
       let active = false;
-      toggle.addEventListener("click", () => { active = !active; toggle.style.background = active ? C.buttonBg : "transparent"; toggle.style.color = active ? "#fff" : C.fgDim; toggle.style.borderColor = active ? C.accent : C.borderLight; });
+      toggle.addEventListener("click", () => {
+        active = !active;
+        if (key === "matchCase") matchCase = active;
+        else if (key === "wholeWord") wholeWord = active;
+        else if (key === "useRegex") useRegex = active;
+        toggle.style.background = active ? C.buttonBg : "transparent";
+        toggle.style.color = active ? "#fff" : C.fgDim;
+        toggle.style.borderColor = active ? C.accent : C.borderLight;
+        searchInput.dispatchEvent(new Event("input")); // re-run search
+      });
       optionsRow.appendChild(toggle);
     }
 
+    const replaceAllBtn = el("button", { class: "vsc-btn vsc-btn-secondary", style: "font-size:11px;padding:2px 8px;margin-bottom:8px;display:none;" }, "Replace All");
+
     const results = el("div", { style: `color:${C.fgDim};font-size:12px;padding:4px 0;` }, "Type to search across files.");
     searchInput.addEventListener("input", () => {
-      const q = searchInput.value.trim().toLowerCase();
+      const q = searchInput.value.trim();
+      const replaceVal = (replaceWrap.querySelector("input") as HTMLInputElement)?.value ?? "";
       results.innerHTML = "";
+      replaceAllBtn.style.display = q ? "inline-flex" : "none";
       if (!q) { results.textContent = "Type to search across files."; return; }
+
       let matchCount = 0;
       for (const f of files) {
         const lines = f.content.split("\n");
         const matches: { line: number; text: string }[] = [];
-        for (let i = 0; i < lines.length; i++) { if (lines[i].toLowerCase().includes(q)) matches.push({ line: i + 1, text: lines[i].trim() }); }
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          let isMatch = false;
+          if (useRegex) {
+            try { isMatch = new RegExp(q, matchCase ? "" : "i").test(line); } catch { isMatch = false; }
+          } else {
+            const haystack = matchCase ? line : line.toLowerCase();
+            const needle = matchCase ? q : q.toLowerCase();
+            if (wholeWord) {
+              const re = new RegExp(`\\b${needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, matchCase ? "" : "i");
+              isMatch = re.test(line);
+            } else {
+              isMatch = haystack.includes(needle);
+            }
+          }
+          if (isMatch) matches.push({ line: i + 1, text: line.trim() });
+        }
         if (matches.length) {
           matchCount += matches.length;
           const fileRow = el("div", { style: "margin-top:8px;" });
@@ -358,7 +440,30 @@ export function wireSidebar(
       if (matchCount === 0) results.textContent = "No results found.";
       else { const summary = el("div", { style: `font-size:12px;color:${C.fgDim};padding:4px 0;` }, `${matchCount} result${matchCount > 1 ? "s" : ""} in ${results.children.length} file${results.children.length > 1 ? "s" : ""}`); results.insertBefore(summary, results.firstChild); }
     });
-    container.append(searchWrap, replaceWrap, optionsRow, results);
+
+    // Replace All functionality
+    replaceAllBtn.addEventListener("click", () => {
+      const q = searchInput.value.trim();
+      const replaceVal = (replaceWrap.querySelector("input") as HTMLInputElement)?.value ?? "";
+      if (!q) return;
+      let count = 0;
+      for (const f of files) {
+        const before = f.content;
+        if (useRegex) {
+          try { f.content = f.content.replace(new RegExp(q, matchCase ? "g" : "gi"), replaceVal); } catch { /* skip invalid regex */ }
+        } else {
+          const flags = matchCase ? "g" : "gi";
+          const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const pattern = wholeWord ? `\\b${escaped}\\b` : escaped;
+          f.content = f.content.replace(new RegExp(pattern, flags), replaceVal);
+        }
+        if (f.content !== before) count++;
+      }
+      searchInput.dispatchEvent(new Event("input")); // refresh results
+      apis.notification?.show({ type: "success", message: `Replaced in ${count} file(s)`, duration: 3000 });
+    });
+
+    container.append(searchWrap, replaceWrap, optionsRow, replaceAllBtn, results);
     return container;
   }
 
@@ -374,6 +479,16 @@ export function wireSidebar(
     const commitBtn = el("button", { class: "vsc-btn vsc-btn-primary", style: "width:100%;margin-bottom:12px;" });
     commitBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M14.431 3.323l-8.47 10-.79-.036-3.35-4.77.818-.574 2.978 4.24 8.051-9.506.764.646z"/></svg>`;
     commitBtn.appendChild(el("span", {}, "Commit"));
+    commitBtn.addEventListener("click", () => {
+      const msg = commitInput.value.trim();
+      if (!msg) {
+        apis.notification?.show({ type: "warning", message: "Please enter a commit message.", duration: 3000 });
+        commitInput.focus();
+        return;
+      }
+      apis.notification?.show({ type: "success", message: `Committed: "${msg}"`, duration: 4000 });
+      commitInput.value = "";
+    });
     const sections = [
       { title: "Staged Changes", files: files.slice(0, 3), badge: "A" as const, badgeColor: C.successGreen },
       { title: "Changes", files: files.slice(3), badge: "M" as const, badgeColor: "#e2c08d" },
@@ -412,6 +527,9 @@ export function wireSidebar(
     const runBtn = el("button", { class: "vsc-btn vsc-btn-primary", style: "width:100%;margin-bottom:14px;" });
     runBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2l10 6-10 6V2z"/></svg>`;
     runBtn.appendChild(el("span", {}, "Run and Debug"));
+    runBtn.addEventListener("click", () => {
+      apis.notification?.show({ type: "info", message: "Debug session started — Launch Program (Node.js)", duration: 4000 });
+    });
     const configSel = el("div", { class: "vsc-card", style: "margin-bottom:14px;" });
     for (const { name, desc } of [{ name: "Launch Program", desc: "Node.js" }, { name: "Attach to Process", desc: "Node.js" }, { name: "Launch Chrome", desc: "Chrome" }]) {
       const row = el("div", { class: "vsc-file-item", style: `display:flex;align-items:center;gap:8px;padding:6px 10px;cursor:pointer;font-size:13px;` });
@@ -489,6 +607,20 @@ export function wireSidebar(
           if (p.installed) { const check = el("span", { style: `color:${C.successGreen};display:flex;` }); check.innerHTML = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M14.431 3.323l-8.47 10-.79-.036-3.35-4.77.818-.574 2.978 4.24 8.051-9.506.764.646z"/></svg>`; titleRow.appendChild(check); }
           info.append(titleRow, el("div", { style: `font-size:11px;color:${C.fgDim};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;` }, p.desc));
           const action = el("button", { class: `vsc-btn ${p.installed ? "vsc-btn-secondary" : "vsc-btn-primary"}`, style: "font-size:11px;padding:3px 10px;flex-shrink:0;" }, p.installed ? "Installed" : "Install");
+          action.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (!p.installed) {
+              p.installed = true;
+              action.textContent = "Installed";
+              action.className = "vsc-btn vsc-btn-secondary";
+              apis.notification?.show({ type: "success", message: `${p.name} installed successfully.`, duration: 3000 });
+            } else {
+              p.installed = false;
+              action.textContent = "Install";
+              action.className = "vsc-btn vsc-btn-primary";
+              apis.notification?.show({ type: "info", message: `${p.name} uninstalled.`, duration: 3000 });
+            }
+          });
           row.append(iconEl, info, action);
           extList.appendChild(row);
         }
@@ -519,6 +651,12 @@ export function wireSidebar(
       const iconEl = el("span", { style: `display:flex;align-items:center;flex-shrink:0;color:${C.fgDim};` });
       iconEl.innerHTML = icon;
       row.append(iconEl, el("span", {}, label));
+      row.addEventListener("click", () => {
+        if (label.includes("GitHub")) apis.notification?.show({ type: "info", message: "GitHub OAuth: Redirecting to GitHub for authentication...", duration: 4000 });
+        else if (label.includes("Microsoft")) apis.notification?.show({ type: "info", message: "Microsoft OAuth: Redirecting to Microsoft for authentication...", duration: 4000 });
+        else apis.notification?.show({ type: "info", message: "Settings Sync: Enable sync to keep your settings across devices.", duration: 4000 });
+      });
+      row.append(iconEl, el("span", {}, label));
       card.appendChild(row);
     }
     container.append(avatar, name, email, card);
@@ -526,195 +664,44 @@ export function wireSidebar(
   }
 
   // ═══════════════════════════════════════════════════════════
-  // ── Settings View — Tabbed ─────────────────────────────────
+  // ── Settings Redirect (settings opened in editor webview) ──
   // ═══════════════════════════════════════════════════════════
 
-  function buildSettingsView(): HTMLElement {
-    const container = el("div", { style: "overflow-y:auto;height:100%;display:flex;flex-direction:column;" });
-    const tabStrip = el("div", { style: "display:flex;gap:2px;padding:8px 12px;flex-wrap:wrap;border-bottom:1px solid " + C.border + ";" });
-    const TABS = ["Editor", "Themes", "Keybindings", "Extensions", "VSIX"];
-    let activeTab = "Editor";
-    const tabPanels: Record<string, HTMLElement> = {};
-    const tabEls: HTMLElement[] = [];
-    for (const tab of TABS) {
-      const pill = el("div", { class: "vsc-tab-pill", "data-active": tab === activeTab ? "true" : "false" }, tab);
-      pill.addEventListener("click", () => { activeTab = tab; tabEls.forEach((t) => t.dataset.active = "false"); pill.dataset.active = "true"; for (const [id, panel] of Object.entries(tabPanels)) panel.style.display = id === tab ? "" : "none"; });
-      tabEls.push(pill);
-      tabStrip.appendChild(pill);
+  function buildSettingsRedirect(): HTMLElement {
+    const container = el("div", { style: "padding:24px 16px;text-align:center;overflow-y:auto;height:100%;" });
+    const icon = el("div", { style: `color:${C.fgDim};margin-bottom:16px;` });
+    icon.innerHTML = `<svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor"><path d="M19.85 8.75l4.15.83v4.84l-4.15.83 2.35 3.52-3.42 3.42-3.52-2.35-.83 4.16H9.58l-.84-4.15-3.52 2.35-3.42-3.43 2.35-3.52L0 12.42V7.58l4.15-.84L1.8 3.22 5.22 1.8l3.52 2.35L9.58 0h4.84l.84 4.15 3.52-2.35 3.42 3.42-2.35 3.53zM12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z"/></svg>`;
+    container.append(
+      icon,
+      el("div", { style: `font-size:14px;color:${C.fg};margin-bottom:8px;font-weight:500;` }, "Settings"),
+      el("div", { style: `font-size:12px;color:${C.fgDim};margin-bottom:20px;line-height:1.5;` }, "Configure editor, plugins, themes, keybindings, and all workspace preferences."),
+    );
+    const openBtn = el("button", { class: "vsc-btn vsc-btn-primary", style: "font-size:13px;padding:6px 20px;" }, "Open Settings");
+    openBtn.addEventListener("click", () => {
+      eventBus.emit("settings:ui-open", {});
+    });
+    container.appendChild(openBtn);
+
+    const links = el("div", { style: `margin-top:24px;display:flex;flex-direction:column;gap:8px;` });
+    for (const { label, desc, action } of [
+      { label: "Text Editor", desc: "Font, cursor, minimap, formatting", action: "text-editor" },
+      { label: "Workbench", desc: "Appearance, tabs, breadcrumbs", action: "workbench" },
+      { label: "Plugins", desc: "Configure all 81 plugin modules", action: "plugins" },
+      { label: "Themes", desc: "Color themes & icon themes", action: "themes" },
+      { label: "Keybindings", desc: "Keyboard shortcuts", action: "keybindings" },
+    ]) {
+      const row = el("div", { class: "vsc-file-item", style: `display:flex;flex-direction:column;align-items:flex-start;padding:8px 12px;cursor:pointer;border-radius:6px;` });
+      row.append(
+        el("span", { style: `font-size:13px;color:${C.textLink ?? C.accent};` }, label),
+        el("span", { style: `font-size:11px;color:${C.fgDim};` }, desc),
+      );
+      row.addEventListener("click", () => {
+        eventBus.emit("settings:ui-open", { category: action });
+      });
+      links.appendChild(row);
     }
-    const panelContainer = el("div", { style: "flex:1;overflow-y:auto;" });
-    tabPanels.Editor = buildEditorSettingsTab();
-    tabPanels.Themes = buildThemesTab();
-    tabPanels.Keybindings = buildKeybindingsTab();
-    tabPanels.Extensions = buildSettingsExtensionsTab();
-    tabPanels.VSIX = buildVsixTab();
-    for (const [id, panel] of Object.entries(tabPanels)) { panel.style.display = id === activeTab ? "" : "none"; panelContainer.appendChild(panel); }
-    container.append(tabStrip, panelContainer);
+    container.appendChild(links);
     return container;
-  }
-
-  function buildEditorSettingsTab(): HTMLElement {
-    const panel = el("div", { style: "padding:12px;" });
-    const searchInput = el("input", { type: "text", placeholder: "Search settings...", class: "vsc-input", style: "margin-bottom:12px;" }) as HTMLInputElement;
-    const settings = [
-      { id: "editor.fontSize", label: "Font Size", type: "number" as const, value: "14", desc: "Controls the font size in pixels.", group: "Editor" },
-      { id: "editor.fontFamily", label: "Font Family", type: "text" as const, value: "'JetBrains Mono', monospace", desc: "Controls the font family.", group: "Editor" },
-      { id: "editor.tabSize", label: "Tab Size", type: "number" as const, value: "2", desc: "The number of spaces a tab is equal to.", group: "Editor" },
-      { id: "editor.wordWrap", label: "Word Wrap", type: "select" as const, value: "off", options: ["off", "on", "wordWrapColumn", "bounded"], desc: "Controls how lines should wrap.", group: "Editor" },
-      { id: "editor.minimap.enabled", label: "Minimap Enabled", type: "checkbox" as const, value: "true", desc: "Controls whether the minimap is shown.", group: "Editor" },
-      { id: "editor.smoothScrolling", label: "Smooth Scrolling", type: "checkbox" as const, value: "true", desc: "Controls smooth scrolling in the editor.", group: "Editor" },
-      { id: "editor.cursorBlinking", label: "Cursor Blinking", type: "select" as const, value: "smooth", options: ["blink", "smooth", "phase", "expand", "solid"], desc: "Controls the cursor animation style.", group: "Editor" },
-      { id: "editor.bracketPairColorization", label: "Bracket Pair Colors", type: "checkbox" as const, value: "true", desc: "Enable bracket pair colorization.", group: "Editor" },
-      { id: "editor.renderWhitespace", label: "Render Whitespace", type: "select" as const, value: "selection", options: ["none", "boundary", "selection", "trailing", "all"], desc: "Controls how whitespace is rendered.", group: "Editor" },
-      { id: "files.autoSave", label: "Auto Save", type: "select" as const, value: "off", options: ["off", "afterDelay", "onFocusChange", "onWindowChange"], desc: "Controls auto save of editors.", group: "Files" },
-      { id: "files.trimTrailingWhitespace", label: "Trim Trailing Whitespace", type: "checkbox" as const, value: "false", desc: "Trim trailing whitespace on save.", group: "Files" },
-      { id: "workbench.startupEditor", label: "Startup Editor", type: "select" as const, value: "welcomePage", options: ["none", "welcomePage", "newUntitledFile"], desc: "Controls which editor is shown on startup.", group: "Workbench" },
-    ];
-    const list = el("div");
-    function renderSettings(query = "") {
-      list.innerHTML = "";
-      const q = query.toLowerCase();
-      let currentGroup = "";
-      for (const s of settings) {
-        if (q && !s.label.toLowerCase().includes(q) && !s.desc.toLowerCase().includes(q) && !s.id.toLowerCase().includes(q)) continue;
-        if (s.group !== currentGroup) { currentGroup = s.group; list.appendChild(el("div", { style: `font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:${C.fgDim};padding:12px 0 6px;border-bottom:1px solid ${C.separator};margin-bottom:6px;` }, currentGroup)); }
-        const row = el("div", { style: `padding:8px 0;` });
-        row.append(el("div", { style: `font-size:13px;color:${C.fg};margin-bottom:2px;` }, s.label), el("div", { style: `font-size:12px;color:${C.fgDim};margin-bottom:6px;` }, s.desc));
-        if (s.type === "checkbox") { const cb = el("input", { type: "checkbox", style: `accent-color:${C.accent};width:16px;height:16px;cursor:pointer;` }) as HTMLInputElement; cb.checked = s.value === "true"; row.appendChild(cb); }
-        else if (s.type === "select") { const sel = el("select", { class: "vsc-input", style: "width:auto;min-width:160px;padding:4px 8px;" }) as HTMLSelectElement; for (const opt of s.options ?? []) { const o = el("option", { value: opt }, opt) as HTMLOptionElement; if (opt === s.value) o.selected = true; sel.appendChild(o); } row.appendChild(sel); }
-        else { row.appendChild(el("input", { type: s.type, value: s.value, class: "vsc-input", style: "width:120px;" })); }
-        list.appendChild(row);
-      }
-    }
-    searchInput.addEventListener("input", () => renderSettings(searchInput.value));
-    panel.append(searchInput, list);
-    requestAnimationFrame(() => renderSettings());
-    return panel;
-  }
-
-  function buildThemesTab(): HTMLElement {
-    const panel = el("div", { style: "padding:12px;" });
-    panel.appendChild(el("div", { style: `font-size:12px;color:${C.fgDim};margin-bottom:12px;` }, "Select a color theme for the editor:"));
-    const grid = el("div", { style: "display:grid;grid-template-columns:1fr 1fr;gap:8px;" });
-    let activeTheme = "Dark+ (Default)";
-    for (const theme of THEMES) {
-      const card = el("div", { class: "vsc-card", style: `padding:0;cursor:pointer;overflow:hidden;border:2px solid ${theme.name === activeTheme ? C.accent : "transparent"};transition:border-color .15s;` });
-      const preview = el("div", { style: `height:48px;background:${theme.colors.bg};display:flex;overflow:hidden;` });
-      const miniSidebar = el("div", { style: `width:24px;background:${theme.colors.sidebar};border-right:1px solid rgba(255,255,255,0.06);` });
-      const miniEditor = el("div", { style: "flex:1;padding:6px 8px;" });
-      miniEditor.innerHTML = `<div style="width:60%;height:4px;background:${theme.colors.fg}30;border-radius:2px;margin-bottom:3px;"></div><div style="width:80%;height:4px;background:${theme.colors.fg}20;border-radius:2px;margin-bottom:3px;"></div><div style="width:40%;height:4px;background:${theme.colors.accent}60;border-radius:2px;"></div>`;
-      const miniStatus = el("div", { style: `height:3px;background:${theme.colors.accent};` });
-      preview.append(miniSidebar, miniEditor);
-      preview.appendChild(miniStatus);
-      const label = el("div", { style: `padding:6px 8px;font-size:12px;color:${C.fg};display:flex;align-items:center;justify-content:space-between;` });
-      label.append(el("span", {}, theme.name), el("span", { class: "vsc-tag" }, theme.type));
-      card.append(preview, label);
-      card.addEventListener("click", () => { activeTheme = theme.name; grid.querySelectorAll(".vsc-card").forEach((c) => { (c as HTMLElement).style.borderColor = "transparent"; }); card.style.borderColor = C.accent; });
-      grid.appendChild(card);
-    }
-    panel.appendChild(grid);
-    return panel;
-  }
-
-  function buildKeybindingsTab(): HTMLElement {
-    const panel = el("div", { style: "padding:12px;" });
-    const searchInput = el("input", { type: "text", placeholder: "Search keybindings...", class: "vsc-input", style: "margin-bottom:12px;" }) as HTMLInputElement;
-    const keybindings = [
-      { command: "Open Command Palette", key: "Ctrl+Shift+P", when: "" },
-      { command: "Quick Open File", key: "Ctrl+P", when: "" },
-      { command: "Toggle Sidebar", key: "Ctrl+B", when: "" },
-      { command: "Toggle Terminal", key: "Ctrl+`", when: "" },
-      { command: "Find", key: "Ctrl+F", when: "editorFocus" },
-      { command: "Replace", key: "Ctrl+H", when: "editorFocus" },
-      { command: "Go to Line", key: "Ctrl+G", when: "" },
-      { command: "Save File", key: "Ctrl+S", when: "" },
-      { command: "Save All", key: "Ctrl+K S", when: "" },
-      { command: "Close Tab", key: "Ctrl+W", when: "" },
-      { command: "Split Editor", key: "Ctrl+\\", when: "" },
-      { command: "Toggle Word Wrap", key: "Alt+Z", when: "editorFocus" },
-      { command: "Format Document", key: "Shift+Alt+F", when: "editorFocus" },
-      { command: "Go to Definition", key: "F12", when: "editorFocus" },
-      { command: "Peek Definition", key: "Alt+F12", when: "editorFocus" },
-      { command: "Rename Symbol", key: "F2", when: "editorFocus" },
-      { command: "Toggle Comment", key: "Ctrl+/", when: "editorFocus" },
-      { command: "Zoom In", key: "Ctrl+=", when: "" },
-      { command: "Zoom Out", key: "Ctrl+-", when: "" },
-    ];
-    const header = el("div", { style: `display:flex;padding:4px 8px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:${C.fgDim};border-bottom:1px solid ${C.border};margin-bottom:4px;` });
-    header.append(el("span", { style: "flex:1;" }, "Command"), el("span", { style: "width:120px;text-align:center;" }, "Keybinding"), el("span", { style: "width:80px;" }, "When"));
-    const list = el("div");
-    function renderKeybindings(q = "") {
-      list.innerHTML = "";
-      const filtered = q ? keybindings.filter((k) => k.command.toLowerCase().includes(q.toLowerCase()) || k.key.toLowerCase().includes(q.toLowerCase())) : keybindings;
-      for (const kb of filtered) {
-        const row = el("div", { class: "vsc-file-item", style: `display:flex;align-items:center;padding:4px 8px;height:28px;font-size:13px;cursor:pointer;` });
-        const cmdSpan = el("span", { style: `flex:1;color:${C.fg};` }, kb.command);
-        const keySpan = el("span", { style: "width:120px;text-align:center;display:flex;align-items:center;justify-content:center;gap:2px;" });
-        const parts = kb.key.split("+");
-        for (let i = 0; i < parts.length; i++) {
-          if (i > 0) keySpan.appendChild(el("span", { style: `color:${C.fgDim};font-size:10px;` }, "+"));
-          keySpan.appendChild(el("span", { style: `display:inline-block;padding:1px 5px;background:${C.cardBg};border:1px solid ${C.borderLight};border-radius:3px;font-size:11px;color:${C.fg};font-family:monospace;` }, parts[i].trim()));
-        }
-        const whenSpan = el("span", { style: `width:80px;font-size:11px;color:${C.fgDim};` }, kb.when);
-        row.append(cmdSpan, keySpan, whenSpan);
-        list.appendChild(row);
-      }
-    }
-    searchInput.addEventListener("input", () => renderKeybindings(searchInput.value));
-    panel.append(searchInput, header, list);
-    requestAnimationFrame(() => renderKeybindings());
-    return panel;
-  }
-
-  function buildSettingsExtensionsTab(): HTMLElement {
-    const panel = el("div", { style: "padding:12px;" });
-    panel.appendChild(el("div", { style: `font-size:12px;color:${C.fgDim};margin-bottom:12px;` }, "Manage installed extensions:"));
-    const installed = PLUGIN_CATALOG.filter((p) => p.installed);
-    const notInstalled = PLUGIN_CATALOG.filter((p) => !p.installed);
-    const installedList = el("div");
-    installedList.appendChild(el("div", { style: `font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:${C.fgDim};padding:4px 0;margin-bottom:4px;` }, `Enabled (${installed.length})`));
-    for (const p of installed) installedList.appendChild(makeCompactPluginRow(p, true));
-    installedList.appendChild(el("div", { class: "vsc-separator" }));
-    installedList.appendChild(el("div", { style: `font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:${C.fgDim};padding:4px 0;margin-bottom:4px;` }, `Available (${notInstalled.length})`));
-    for (const p of notInstalled.slice(0, 15)) installedList.appendChild(makeCompactPluginRow(p, false));
-    if (notInstalled.length > 15) installedList.appendChild(el("div", { style: `font-size:12px;color:${C.textLink};cursor:pointer;padding:8px 0;` }, `+ ${notInstalled.length - 15} more available...`));
-    panel.appendChild(installedList);
-    return panel;
-  }
-
-  function makeCompactPluginRow(p: PluginInfo, isInstalled: boolean): HTMLElement {
-    const row = el("div", { class: "vsc-file-item", style: `display:flex;align-items:center;gap:8px;padding:5px 4px;cursor:pointer;` });
-    row.append(
-      el("div", { style: `width:8px;height:8px;border-radius:50%;background:${p.color};flex-shrink:0;` }),
-      el("span", { style: `flex:1;font-size:13px;color:${C.fg};` }, p.name),
-      el("span", { class: "vsc-tag" }, p.category),
-      el("span", { style: `font-size:11px;color:${isInstalled ? C.successGreen : C.textLink};cursor:pointer;padding:2px 6px;` }, isInstalled ? "✓ Enabled" : "Install"),
-    );
-    return row;
-  }
-
-  function buildVsixTab(): HTMLElement {
-    const panel = el("div", { style: "padding:12px;" });
-    panel.append(
-      el("div", { style: `font-size:13px;color:${C.fg};margin-bottom:8px;font-weight:500;` }, "Install from VSIX"),
-      el("div", { style: `font-size:12px;color:${C.fgDim};margin-bottom:14px;line-height:1.5;` }, "Install extensions from .vsix packages. Drag and drop a .vsix file or click to browse."),
-    );
-    const dropZone = el("div", { style: `border:2px dashed ${C.borderLight};border-radius:8px;padding:32px 16px;text-align:center;cursor:pointer;transition:all .2s;` });
-    dropZone.innerHTML = `<div style="margin-bottom:12px;color:${C.fgDim};"><svg width="40" height="40" viewBox="0 0 16 16" fill="${C.fgDim}"><path d="M11.5 1h-7l-.5.5v4H1.5l-.5.5v8l.5.5h13l.5-.5v-8l-.5-.5H12V1.5l-.5-.5zM5 2h6v3.5H5V2zM14 13H2V6h3v1.5l.5.5h5l.5-.5V6h3v7z"/></svg></div><div style="font-size:13px;color:${C.fg};margin-bottom:6px;">Drop .vsix file here</div><div style="font-size:12px;color:${C.fgDim};margin-bottom:12px;">or</div><button class="vsc-btn vsc-btn-primary" style="font-size:12px;">Browse Files...</button>`;
-    dropZone.addEventListener("dragover", (e) => { e.preventDefault(); dropZone.style.borderColor = C.accent; dropZone.style.background = `${C.accent}10`; });
-    dropZone.addEventListener("dragleave", () => { dropZone.style.borderColor = C.borderLight; dropZone.style.background = "transparent"; });
-    dropZone.addEventListener("drop", (e) => { e.preventDefault(); dropZone.style.borderColor = C.borderLight; dropZone.style.background = "transparent"; });
-    const recentHeader = el("div", { style: `font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:${C.fgDim};padding:16px 0 6px;` }, "Recently Installed");
-    const recentList = el("div", { class: "vsc-card" });
-    for (const { name, version, size } of [{ name: "my-custom-theme-1.0.0.vsix", version: "1.0.0", size: "24 KB" }, { name: "local-snippets-2.1.3.vsix", version: "2.1.3", size: "8 KB" }]) {
-      const row = el("div", { class: "vsc-file-item", style: `display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer;` });
-      const icon = el("span", { style: `color:${C.accent};display:flex;` });
-      icon.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M13.5 1.5L15 0h7.5L24 1.5V9l-1.5 1.5H15L13.5 9V1.5zM0 15l1.5-1.5H9L10.5 15v7.5L9 24H1.5L0 22.5V15zm0-12L1.5 1.5H9L10.5 3v7.5L9 12H1.5L0 10.5V3zm13.5 12L15 13.5h7.5L24 15v7.5L22.5 24H15l-1.5-1.5V15z"/></svg>`;
-      row.append(icon, el("span", { style: `flex:1;font-size:13px;color:${C.fg};` }, name), el("span", { class: "vsc-tag" }, version), el("span", { style: `font-size:11px;color:${C.fgDim};` }, size));
-      recentList.appendChild(row);
-    }
-    panel.append(dropZone, recentHeader, recentList);
-    return panel;
   }
 
   // ═══════════════════════════════════════════════════════════

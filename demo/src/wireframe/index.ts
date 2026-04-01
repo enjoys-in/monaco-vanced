@@ -9,13 +9,14 @@ import { wireTabs } from "./tabs";
 import { wireTitleBar, wireStatusBar } from "./bars";
 import { wireNotifications } from "./notifications";
 import { wireContextMenu, wireCommandPalette, wireBottomPanel } from "./overlays";
+import { wireSettingsWebview } from "./settings-webview";
 
 export type { WireframeAPIs, VirtualFile } from "./types";
 
 export function mountWireframe(
   root: HTMLElement,
   apis: WireframeAPIs,
-  eventBus: EventBus,
+  eventBus: InstanceType<typeof EventBus>,
   files: VirtualFile[],
 ): { editorContainer: HTMLElement; destroy: () => void } {
   const dom = buildShell(root);
@@ -30,10 +31,11 @@ export function mountWireframe(
   wireTabs(dom, eventBus, on, files);
   wireTitleBar(dom, apis, eventBus, on);
   wireStatusBar(dom, apis, on);
-  wireBottomPanel(dom, eventBus, on);
+  wireBottomPanel(dom, eventBus, on, files);
   wireNotifications(dom, apis, on);
   wireContextMenu(dom, apis, on);
   wireCommandPalette(dom, apis, on);
+  wireSettingsWebview(dom, apis, eventBus, on);
   wireResizeHandle(dom);
 
   return {

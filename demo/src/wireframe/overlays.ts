@@ -106,10 +106,11 @@ export function wireCommandPalette(dom: DOMRefs, apis: WireframeAPIs, on: OnHand
       const id = typeof cmd === "string" ? cmd : (cmd as { id: string }).id;
 
       const row = el("div", {
+        "data-idx": String(i),
         style: `display:flex;align-items:center;padding:4px 14px;cursor:pointer;font-size:13px;min-height:28px;color:${C.fg};background:${i === 0 ? C.listActive : "transparent"};`,
       });
       row.addEventListener("mouseenter", () => {
-        dom.commandList.querySelectorAll("div").forEach((r) => { (r as HTMLElement).style.background = "transparent"; });
+        dom.commandList.querySelectorAll("div[data-idx]").forEach((r) => { (r as HTMLElement).style.background = "transparent"; });
         row.style.background = C.listActive;
         highlightIdx = i;
       });
@@ -122,8 +123,20 @@ export function wireCommandPalette(dom: DOMRefs, apis: WireframeAPIs, on: OnHand
   dom.commandInput.addEventListener("input", () => renderResults(dom.commandInput.value));
   dom.commandInput.addEventListener("keydown", (e) => {
     if (e.key === "Escape") close();
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const items = dom.commandList.querySelectorAll("div[data-idx]");
+      if (!items.length) return;
+      const current = dom.commandList.querySelector(`div[data-idx][style*="background: ${C.listActive}"], div[data-idx][style*="background:${C.listActive}"]`) as HTMLElement | null;
+      let idx = current ? Number(current.dataset.idx) : -1;
+      if (e.key === "ArrowDown") idx = Math.min(idx + 1, items.length - 1);
+      else idx = Math.max(idx - 1, 0);
+      items.forEach((r) => { (r as HTMLElement).style.background = "transparent"; });
+      (items[idx] as HTMLElement).style.background = C.listActive;
+      (items[idx] as HTMLElement).scrollIntoView({ block: "nearest" });
+    }
     if (e.key === "Enter") {
-      const active = dom.commandList.querySelector(`div[style*="background: ${C.listActive}"]`) as HTMLElement | null;
+      const active = dom.commandList.querySelector(`div[data-idx][style*="background: ${C.listActive}"], div[data-idx][style*="background:${C.listActive}"]`) as HTMLElement | null;
       (active ?? dom.commandList.firstElementChild as HTMLElement | null)?.click();
     }
   });
@@ -146,7 +159,7 @@ export function wireCommandPalette(dom: DOMRefs, apis: WireframeAPIs, on: OnHand
 
 const PANEL_TABS = ["Problems", "Output", "Terminal", "Debug Console"];
 
-export function wireBottomPanel(dom: DOMRefs, eventBus: EventBus, on: OnHandler) {
+export function wireBottomPanel(dom: DOMRefs, eventBus: EventBus, on: OnHandler, files: { uri: string; name: string }[] = []) {
   let activeTab = "Terminal";
 
   // Render tabs
@@ -183,13 +196,66 @@ export function wireBottomPanel(dom: DOMRefs, eventBus: EventBus, on: OnHandler)
   function renderPanelContent(tab: string) {
     dom.bottomPanelContent.innerHTML = "";
     if (tab === "Terminal") {
-      dom.bottomPanelContent.innerHTML = `<div style="color:${C.fgDim};font-size:13px;">$ <span style="color:#89d185;">Welcome to Monaco Vanced Terminal</span><br><span style="color:${C.fgDim};">Type commands here...</span><br><br><span style="color:${C.fg};">user@monaco-vanced</span>:<span style="color:#569cd6;">~/project</span>$ <span class="cursor" style="display:inline-block;width:7px;height:14px;background:${C.fg};animation:blink 1s step-end infinite;"></span></div>`;
+      const termContainer = el("div", { style: `color:${C.fg};font-size:13px;` });
+      const outputDiv = el("div", { style: "white-space:pre-wrap;" });
+      outputDiv.innerHTML = `<span style="color:#89d185;">Welcome to Monaco Vanced Terminal</span>\n<span style="color:${C.fgDim};">Type commands here. Try: help, ls, pwd, echo, clear</span>\n\n`;
+
+      const inputRow = el("div", { style: "display:flex;align-items:center;gap:0;margin-top:4px;" });
+      const prompt = el("span", { style: `color:${C.fg};white-space:nowrap;` });
+      prompt.innerHTML = `<span style="color:#89d185;">user@antigravity</span>:<span style="color:#569cd6;">~/project</span>$ `;
+      const input = el("input", {
+        type: "text",
+        style: `flex:1;background:transparent;border:none;outline:none;color:${C.fg};font-family:inherit;font-size:13px;padding:0;`,
+        spellcheck: "false",
+        autocomplete: "off",
+      }) as HTMLInputElement;
+
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          const cmd = input.value.trim();
+          outputDiv.innerHTML += `<span style="color:#89d185;">user@antigravity</span>:<span style="color:#569cd6;">~/project</span>$ ${escapeHtml(cmd)}\n`;
+          if (cmd) {
+            const output = handleTerminalCommand(cmd);
+            if (output) outputDiv.innerHTML += output + "\n";
+          }
+          input.value = "";
+          outputDiv.scrollTop = outputDiv.scrollHeight;
+          termContainer.scrollTop = termContainer.scrollHeight;
+        }
+      });
+
+      inputRow.append(prompt, input);
+      termContainer.append(outputDiv, inputRow);
+      dom.bottomPanelContent.appendChild(termContainer);
+      requestAnimationFrame(() => input.focus());
     } else if (tab === "Problems") {
       dom.bottomPanelContent.innerHTML = `<div style="color:${C.fgDim};font-size:13px;display:flex;align-items:center;gap:4px;">No problems have been detected in the workspace.</div>`;
     } else if (tab === "Output") {
-      dom.bottomPanelContent.innerHTML = `<div style="color:${C.fgDim};font-size:13px;">[monaco-vanced] IDE ready</div>`;
+      const outputEl = el("div", { style: `color:${C.fgDim};font-size:13px;` });
+      outputEl.innerHTML = `[${new Date().toLocaleTimeString()}] [monaco-vanced] IDE ready\n[${new Date().toLocaleTimeString()}] [monaco-vanced] ${files.length} files loaded\n[${new Date().toLocaleTimeString()}] [monaco-vanced] All plugins mounted successfully`;
+      dom.bottomPanelContent.appendChild(outputEl);
     } else {
-      dom.bottomPanelContent.innerHTML = `<div style="color:${C.fgDim};font-size:13px;">${tab} panel</div>`;
+      dom.bottomPanelContent.innerHTML = `<div style="color:${C.fgDim};font-size:13px;">${tab} — No active session. Start a debug session to see output here.</div>`;
+    }
+  }
+
+  function handleTerminalCommand(cmd: string): string {
+    const parts = cmd.split(" ");
+    const base = parts[0];
+    switch (base) {
+      case "help": return `<span style="color:${C.fgDim};">Available commands: help, ls, pwd, echo, clear, date, whoami, cat, node -v, npm -v</span>`;
+      case "clear": dom.bottomPanelContent.querySelector("div")!.innerHTML = ""; return "";
+      case "ls": return `<span style="color:#569cd6;">src/</span>  <span style="color:#569cd6;">public/</span>  <span style="color:${C.fg};">package.json</span>  <span style="color:${C.fg};">tsconfig.json</span>  <span style="color:${C.fg};">README.md</span>  <span style="color:${C.fg};">vite.config.ts</span>`;
+      case "pwd": return "/home/user/project";
+      case "echo": return parts.slice(1).join(" ");
+      case "date": return new Date().toString();
+      case "whoami": return "user";
+      case "cat": return parts[1] ? `<span style="color:${C.fgDim};">cat: ${parts[1]}: Use the editor to view files</span>` : `<span style="color:${C.errorRed};">cat: missing operand</span>`;
+      case "node": return "v22.0.0";
+      case "npm": return "10.9.0";
+      case "bun": return "1.2.0";
+      case "git": return parts[1] === "status" ? `<span style="color:#89d185;">On branch main\nYour branch is up to date.</span>` : `<span style="color:${C.fgDim};">git: command simulated</span>`;
+      default: return `<span style="color:${C.errorRed};">bash: ${escapeHtml(base)}: command not found</span>`;
     }
   }
 

@@ -37,6 +37,8 @@ import { createMarketplacePlugin } from "@enjoys/monaco-vanced/extensions/market
 import { createVSIXPlugin } from "@enjoys/monaco-vanced/extensions/vsix-module";
 
 // ── Plugins: Filesystem ──────────────────────────────────────
+import { createFSPlugin } from "@enjoys/monaco-vanced/filesystem/fs-module";
+import type { FSAdapter, DirEntry, FileStat, WatchCallback } from "@enjoys/monaco-vanced/filesystem/fs-module";
 import { createSearchPlugin } from "@enjoys/monaco-vanced/filesystem/search-module";
 
 // ── Plugins: SCM ─────────────────────────────────────────────
@@ -45,6 +47,9 @@ import { createGitPlugin } from "@enjoys/monaco-vanced/scm/git-module";
 // ── Plugins: Devtools ────────────────────────────────────────
 import { createTerminalPlugin } from "@enjoys/monaco-vanced/devtools/terminal-module";
 import { createDebugPlugin } from "@enjoys/monaco-vanced/devtools/debugger-module";
+
+// ── Events ───────────────────────────────────────────────────
+import { FileEvents, PanelEvents, SidebarEvents } from "@enjoys/monaco-vanced/core/events";
 
 // ── Monaco Workers ────────────────────────────────────────────
 
@@ -64,246 +69,33 @@ self.MonacoEnvironment = {
   },
 };
 
+// ── Mock File System ─────────────────────────────────────────
+import { createMockFs, seedDemoProject, type MockFsAPI } from "./mock-fs";
+
 // ── Wireframe ────────────────────────────────────────────────
 import { mountWireframe, type WireframeAPIs, type VirtualFile } from "./wireframe";
 
-// ── Virtual file system (demo) ──────────────────────────────
+// ── Build VirtualFile list from mock FS ──────────────────────
 
-const DEMO_FILES: VirtualFile[] = [
-  {
-    uri: "src/main.ts", name: "main.ts", language: "typescript",
-    content: [
-      "import { createApp } from './app';",
-      "import { setupRouter } from './router';",
-      "import { initStore } from './store';",
-      "",
-      "async function bootstrap() {",
-      "  const app = createApp();",
-      "  const router = setupRouter();",
-      "  const store = initStore();",
-      "",
-      "  app.use(router);",
-      "  app.use(store);",
-      "",
-      "  await router.isReady();",
-      "  app.mount('#app');",
-      "",
-      "  console.log('App mounted successfully! 🚀');",
-      "}",
-      "",
-      "bootstrap();",
-    ].join("\n"),
-  },
-  {
-    uri: "src/app.ts", name: "app.ts", language: "typescript",
-    content: [
-      "export interface AppConfig {",
-      "  name: string;",
-      "  version: string;",
-      "  debug: boolean;",
-      "}",
-      "",
-      "export function createApp(config?: Partial<AppConfig>) {",
-      "  const defaultConfig: AppConfig = {",
-      "    name: 'Monaco Vanced',",
-      "    version: '1.0.0',",
-      "    debug: false,",
-      "    ...config,",
-      "  };",
-      "",
-      "  const plugins: unknown[] = [];",
-      "",
-      "  return {",
-      "    config: defaultConfig,",
-      "    use(plugin: unknown) { plugins.push(plugin); return this; },",
-      "    mount(selector: string) {",
-      "      const el = document.querySelector(selector);",
-      "      if (!el) throw new Error(`Element ${selector} not found`);",
-      "      console.log(`[${defaultConfig.name}] Mounted on ${selector}`);",
-      "    },",
-      "  };",
-      "}",
-    ].join("\n"),
-  },
-  {
-    uri: "src/router.ts", name: "router.ts", language: "typescript",
-    content: [
-      "interface Route {",
-      "  path: string;",
-      "  component: string;",
-      "  meta?: Record<string, unknown>;",
-      "}",
-      "",
-      "const routes: Route[] = [",
-      "  { path: '/', component: 'Home' },",
-      "  { path: '/about', component: 'About', meta: { requiresAuth: false } },",
-      "  { path: '/dashboard', component: 'Dashboard', meta: { requiresAuth: true } },",
-      "  { path: '/settings', component: 'Settings', meta: { requiresAuth: true } },",
-      "];",
-      "",
-      "export function setupRouter() {",
-      "  let currentRoute: Route | null = null;",
-      "",
-      "  return {",
-      "    routes,",
-      "    navigate(path: string) {",
-      "      currentRoute = routes.find(r => r.path === path) ?? null;",
-      "      console.log('Navigating to:', path);",
-      "    },",
-      "    getCurrentRoute() { return currentRoute; },",
-      "    async isReady() { return true; },",
-      "  };",
-      "}",
-    ].join("\n"),
-  },
-  {
-    uri: "src/store.ts", name: "store.ts", language: "typescript",
-    content: [
-      "interface State {",
-      "  count: number;",
-      "  user: { name: string; email: string } | null;",
-      "  theme: 'light' | 'dark';",
-      "}",
-      "",
-      "export function initStore() {",
-      "  const state: State = {",
-      "    count: 0,",
-      "    user: null,",
-      "    theme: 'dark',",
-      "  };",
-      "",
-      "  const listeners = new Set<() => void>();",
-      "",
-      "  return {",
-      "    getState: () => ({ ...state }),",
-      "    dispatch(action: string, payload?: unknown) {",
-      "      switch (action) {",
-      "        case 'INCREMENT': state.count++; break;",
-      "        case 'DECREMENT': state.count--; break;",
-      "        case 'SET_USER': state.user = payload as State['user']; break;",
-      "        case 'SET_THEME': state.theme = payload as State['theme']; break;",
-      "      }",
-      "      listeners.forEach(fn => fn());",
-      "    },",
-      "    subscribe(fn: () => void) {",
-      "      listeners.add(fn);",
-      "      return () => listeners.delete(fn);",
-      "    },",
-      "  };",
-      "}",
-    ].join("\n"),
-  },
-  {
-    uri: "src/styles/global.css", name: "global.css", language: "css",
-    content: [
-      ":root {",
-      "  --bg-primary: #1e1e1e;",
-      "  --bg-secondary: #252526;",
-      "  --text-primary: #cccccc;",
-      "  --text-accent: #007acc;",
-      "  --border-color: #3c3c3c;",
-      "}",
-      "",
-      "* { box-sizing: border-box; margin: 0; padding: 0; }",
-      "",
-      "body {",
-      "  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;",
-      "  background: var(--bg-primary);",
-      "  color: var(--text-primary);",
-      "  line-height: 1.5;",
-      "}",
-      "",
-      ".container {",
-      "  max-width: 1200px;",
-      "  margin: 0 auto;",
-      "  padding: 0 16px;",
-      "}",
-    ].join("\n"),
-  },
-  {
-    uri: "src/components/Header.tsx", name: "Header.tsx", language: "typescriptreact",
-    content: [
-      "interface HeaderProps {",
-      "  title: string;",
-      "  showNav?: boolean;",
-      "}",
-      "",
-      "export function Header({ title, showNav = true }: HeaderProps) {",
-      "  return (",
-      "    <header className=\"app-header\">",
-      "      <h1>{title}</h1>",
-      "      {showNav && (",
-      "        <nav>",
-      "          <a href=\"/\">Home</a>",
-      "          <a href=\"/about\">About</a>",
-      "          <a href=\"/dashboard\">Dashboard</a>",
-      "        </nav>",
-      "      )}",
-      "    </header>",
-      "  );",
-      "}",
-    ].join("\n"),
-  },
-  {
-    uri: "package.json", name: "package.json", language: "json",
-    content: JSON.stringify({
-      name: "demo-project",
-      version: "1.0.0",
-      private: true,
-      scripts: { dev: "vite", build: "tsc && vite build", preview: "vite preview" },
-      dependencies: { "monaco-editor": "^0.55.1" },
-      devDependencies: { typescript: "^6.0.0", vite: "^8.0.0" },
-    }, null, 2),
-  },
-  {
-    uri: "README.md", name: "README.md", language: "markdown",
-    content: [
-      "# Demo Project",
-      "",
-      "A sample project to demonstrate **Monaco Vanced** — the plugin-based IDE.",
-      "",
-      "## Features",
-      "",
-      "- 🔌 Plugin-based architecture",
-      "- 🎨 VS Code dark theme",
-      "- 📁 Multi-file editing with tabs",
-      "- ⌨️ Command palette (Ctrl+Shift+P)",
-      "- 🔍 Breadcrumb navigation",
-      "",
-      "## Getting Started",
-      "",
-      "```bash",
-      "bun install",
-      "bun run dev",
-      "```",
-    ].join("\n"),
-  },
-  {
-    uri: "tsconfig.json", name: "tsconfig.json", language: "json",
-    content: JSON.stringify({
-      compilerOptions: {
-        target: "ESNext", module: "ESNext", moduleResolution: "bundler",
-        strict: true, jsx: "preserve", esModuleInterop: true,
-        lib: ["ESNext", "DOM"],
-      },
-      include: ["src"],
-    }, null, 2),
-  },
-  {
-    uri: "settings.json", name: "settings.json", language: "json",
-    content: JSON.stringify({
-      "editor.fontSize": 14,
-      "editor.fontFamily": "'JetBrains Mono', monospace",
-      "editor.tabSize": 2,
-      "editor.minimap.enabled": true,
-      "editor.bracketPairColorization.enabled": true,
-      "workbench.colorTheme": "Default Dark+",
-      "terminal.integrated.fontSize": 13,
-    }, null, 2),
-  },
-];
+function buildVirtualFiles(fs: MockFsAPI): VirtualFile[] {
+  const result: VirtualFile[] = [];
+  const EXT_LANG: Record<string, string> = {
+    ts: "typescript", tsx: "typescriptreact", js: "javascript", jsx: "javascriptreact",
+    json: "json", css: "css", html: "html", md: "markdown", yaml: "yaml", yml: "yaml",
+    py: "python", rs: "rust", go: "go", sh: "shell", sql: "sql", toml: "toml",
+    mjs: "javascript", mts: "typescript",
+  };
+  for (const [path, content] of fs.getAllFiles()) {
+    const name = path.split("/").pop() ?? path;
+    const ext = name.includes(".") ? name.split(".").pop()!.toLowerCase() : "";
+    result.push({ uri: path, name, language: EXT_LANG[ext] ?? "plaintext", content });
+  }
+  return result;
+}
 
-// ── Create plugins ──────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+// Create plugin instances
+// ══════════════════════════════════════════════════════════════
 
 // Infrastructure
 const { plugin: commandPlugin, api: commandApi } = createCommandPlugin();
@@ -313,12 +105,12 @@ const { plugin: notificationPlugin, api: notificationApi } = createNotificationP
 const { plugin: dialogPlugin, api: dialogApi } = createDialogPlugin();
 
 // Theming
-const { plugin: themePlugin, api: themeApi } = createThemePlugin();
+const { plugin: themePlugin } = createThemePlugin();
 const { plugin: iconPlugin } = createIconPlugin();
 
 // Layout
 const { plugin: layoutPlugin, api: layoutApi } = createLayoutPlugin();
-const { plugin: headerPlugin, api: headerApi } = createHeaderPlugin({ title: "Monaco Vanced" });
+const { plugin: headerPlugin, api: headerApi } = createHeaderPlugin({ title: "Antigravity" });
 const { plugin: sidebarPlugin, api: sidebarApi } = createSidebarPlugin();
 const { plugin: statusbarPlugin, api: statusbarApi } = createStatusbarPlugin();
 const { plugin: titlePlugin, api: titleApi } = createTitlePlugin();
@@ -326,26 +118,68 @@ const { plugin: navigationPlugin } = createNavigationPlugin();
 const { plugin: uiPlugin } = createUIPlugin();
 const { plugin: contextMenuPlugin, api: contextMenuApi } = createContextMenuPlugin();
 
-// Editor (bare MonacoPlugin, no api wrapper)
+// Editor
 const editorPlugin = createEditorPlugin({ defaultLanguage: "typescript" });
 const tabsPlugin = createTabsPlugin();
 
-// Extensions
+// Extensions / FS / SCM / Devtools
 const { plugin: extensionPlugin } = createExtensionPlugin();
 const { plugin: marketplacePlugin } = createMarketplacePlugin();
 const { plugin: vsixPlugin } = createVSIXPlugin();
 
-// Filesystem
+// In-memory FS adapter backed by the demo's mock filesystem
+const memoryStore = new Map<string, Uint8Array>();
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+const inMemoryAdapter: FSAdapter = {
+  name: "memory",
+  type: "local",
+  capabilities: { indexing: true, watch: false, search: true, streaming: false, vectorIndex: false, symbolGraph: false },
+  async read(path) {
+    const data = memoryStore.get(path);
+    if (!data) throw new Error(`ENOENT: ${path}`);
+    return data;
+  },
+  async write(path, data) { memoryStore.set(path, data); },
+  async delete(path) { memoryStore.delete(path); },
+  async rename(from, to) {
+    const data = memoryStore.get(from);
+    if (data) { memoryStore.set(to, data); memoryStore.delete(from); }
+  },
+  async copy(from, to) {
+    const data = memoryStore.get(from);
+    if (data) memoryStore.set(to, new Uint8Array(data));
+  },
+  async move(from, to) { await this.rename(from, to); },
+  async list(dir) {
+    const entries: DirEntry[] = [];
+    const prefix = dir.endsWith("/") ? dir : dir + "/";
+    for (const [p] of memoryStore) {
+      if (p.startsWith(prefix)) {
+        const rest = p.slice(prefix.length);
+        const name = rest.split("/")[0];
+        if (!entries.some((e) => e.name === name)) {
+          entries.push({ name, path: prefix + name, isDirectory: rest.includes("/"), size: 0, modified: Date.now() });
+        }
+      }
+    }
+    return entries;
+  },
+  async mkdir() { /* no-op for in-memory */ },
+  async exists(path) { return memoryStore.has(path); },
+  async stat(path) {
+    const data = memoryStore.get(path);
+    return { size: data?.byteLength ?? 0, modified: Date.now(), created: Date.now(), isDirectory: false };
+  },
+  watch() { return { dispose() {} }; },
+};
+const fsPlugin = createFSPlugin({ adapter: inMemoryAdapter });
+
 const { plugin: searchPlugin } = createSearchPlugin();
-
-// SCM
 const { plugin: gitPlugin } = createGitPlugin();
-
-// Devtools
 const { plugin: terminalPlugin } = createTerminalPlugin();
 const { plugin: debugPlugin } = createDebugPlugin();
 
-// ── All plugins ──────────────────────────────────────────────
 const allPlugins = [
   commandPlugin, keybindingPlugin, settingsPlugin, notificationPlugin, dialogPlugin,
   themePlugin, iconPlugin,
@@ -353,18 +187,19 @@ const allPlugins = [
   navigationPlugin, uiPlugin, contextMenuPlugin,
   editorPlugin, tabsPlugin,
   extensionPlugin, marketplacePlugin, vsixPlugin,
-  searchPlugin, gitPlugin,
+  fsPlugin, searchPlugin, gitPlugin,
   terminalPlugin, debugPlugin,
 ];
 
-// ── API bag for the wireframe ────────────────────────────────
 const apis: WireframeAPIs = {
   header: headerApi, sidebar: sidebarApi, statusbar: statusbarApi,
   title: titleApi, layout: layoutApi, notification: notificationApi,
   command: commandApi, contextMenu: contextMenuApi, dialog: dialogApi,
 };
 
-// ── Default editor options ───────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+// Editor options
+// ══════════════════════════════════════════════════════════════
 
 const editorOptions: monaco.editor.IStandaloneEditorConstructionOptions = {
   language: "typescript",
@@ -389,11 +224,11 @@ const editorOptions: monaco.editor.IStandaloneEditorConstructionOptions = {
   fixedOverflowWidgets: true,
 };
 
-// ── Bootstrap ─────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+// Bootstrap
+// ══════════════════════════════════════════════════════════════
 
 let ide: MonacoVancedInstance;
-
-// Monaco model cache: uri → model
 const models = new Map<string, monaco.editor.ITextModel>();
 
 function getOrCreateModel(file: VirtualFile): monaco.editor.ITextModel {
@@ -406,26 +241,39 @@ function getOrCreateModel(file: VirtualFile): monaco.editor.ITextModel {
   return model;
 }
 
-function openFileInEditor(uri: string) {
-  const file = DEMO_FILES.find((f) => f.uri === uri);
+function openFileInEditor(uri: string, files: VirtualFile[]) {
+  const file = files.find((f) => f.uri === uri);
   if (!file || !ide) return;
   const model = getOrCreateModel(file);
-  ide.editor.setModel(model);
+  if (ide.editor.getModel() !== model) {
+    ide.editor.setModel(model);
+  }
 }
 
 async function bootstrap() {
   const appRoot = document.getElementById("app");
   if (!appRoot) throw new Error("Missing #app element");
 
-  // Create shared event bus
   const eventBus = new EventBus();
 
-  // Mount the wireframe shell with the virtual file list
+  // ── Mock File System ─────────────────────────────────────
+  const mockFs = createMockFs(eventBus);
+  seedDemoProject(mockFs);
+  const DEMO_FILES = buildVirtualFiles(mockFs);
+
+  // Seed the in-memory FS adapter from mock files
+  for (const [path, content] of mockFs.getAllFiles()) {
+    memoryStore.set(path, encoder.encode(content));
+  }
+
+  // ── Mount Wireframe ──────────────────────────────────────
   const { editorContainer } = mountWireframe(appRoot, apis, eventBus, DEMO_FILES);
 
-  // Get the default file content
-  const defaultFile = DEMO_FILES[0];
+  const defaultFile = DEMO_FILES.find((f) => f.uri === "src/app.tsx")
+    ?? DEMO_FILES.find((f) => f.uri === "src/main.tsx")
+    ?? DEMO_FILES[0];
 
+  // ── Create IDE ───────────────────────────────────────────
   ide = await createMonacoIDE({
     container: editorContainer,
     monaco,
@@ -438,36 +286,81 @@ async function bootstrap() {
 
   console.log("[monaco-vanced] IDE ready:", ide.engine.getRegisteredIds());
 
-  // Create models for all files upfront
-  for (const file of DEMO_FILES) {
-    getOrCreateModel(file);
-  }
+  // Pre-create all models so file switching is instant
+  for (const file of DEMO_FILES) getOrCreateModel(file);
 
-  // ── Wire file:open → switch Monaco model + open tab ────────
-  eventBus.on("file:open", (payload: unknown) => {
-    const { uri } = payload as { uri: string; label?: string };
-    openFileInEditor(uri);
+  // Set the default file model (replace the anonymous model from createMonacoIDE)
+  const defaultModel = getOrCreateModel(defaultFile);
+  ide.editor.setModel(defaultModel);
+
+  // ── Wire file:open → switch Monaco model ─────────────────
+  eventBus.on(FileEvents.Open, (payload: unknown) => {
+    const { uri } = payload as { uri: string };
+    console.log("[monaco-vanced] file:open →", uri);
+    openFileInEditor(uri, DEMO_FILES);
   });
 
-  // ── Register default statusbar items ───────────────────────
+  // ── Wire editor content changes → mock FS ────────────────
+  ide.editor.onDidChangeModelContent(() => {
+    const model = ide.editor.getModel();
+    if (!model) return;
+    const uri = model.uri.path.replace(/^\//, "");
+    mockFs.writeFile(uri, model.getValue());
+  });
+
+  // ── Wire settings changes → Monaco editor options ────────
+  eventBus.on("settings:change", (payload: unknown) => {
+    const { id, value } = payload as { id: string; value: unknown };
+    const optMap: Record<string, string> = {
+      "editor.fontSize": "fontSize",
+      "editor.fontFamily": "fontFamily",
+      "editor.tabSize": "tabSize",
+      "editor.wordWrap": "wordWrap",
+      "editor.minimap.enabled": "minimap.enabled",
+      "editor.smoothScrolling": "smoothScrolling",
+      "editor.cursorBlinking": "cursorBlinking",
+      "editor.bracketPairColorization": "bracketPairColorization.enabled",
+      "editor.renderWhitespace": "renderWhitespace",
+    };
+    const opt = optMap[id];
+    if (!opt) return;
+    if (opt.includes(".")) {
+      const [parent, child] = opt.split(".");
+      ide.editor.updateOptions({ [parent]: { [child]: value } });
+    } else {
+      ide.editor.updateOptions({ [opt]: value });
+    }
+  });
+
+  // ── Wire theme changes → Monaco ──────────────────────────
+  eventBus.on("theme:change", (payload: unknown) => {
+    const { monacoTheme } = payload as { name: string; type: string; monacoTheme: string };
+    monaco.editor.setTheme(monacoTheme);
+  });
+
+  // ══════════════════════════════════════════════════════════
+  // Status Bar — fully dynamic
+  // ══════════════════════════════════════════════════════════
+
   statusbarApi.register({ id: "branch", label: "$(git-branch) main", alignment: "left", priority: 100 });
   statusbarApi.register({ id: "sync", label: "$(sync) 0↓ 0↑", alignment: "left", priority: 95, tooltip: "Synchronize Changes" });
   statusbarApi.register({ id: "errors", label: "$(error) 0  $(warning) 0", alignment: "left", priority: 90, tooltip: "No Problems" });
   statusbarApi.register({ id: "line-col", label: "Ln 1, Col 1", alignment: "right", priority: 100 });
-  statusbarApi.register({ id: "selection", label: "", alignment: "right", priority: 95 });
-  statusbarApi.register({ id: "encoding", label: "UTF-8", alignment: "right", priority: 80 });
-  statusbarApi.register({ id: "eol", label: "LF", alignment: "right", priority: 75 });
-  statusbarApi.register({ id: "language", label: "TypeScript", alignment: "right", priority: 70 });
-  statusbarApi.register({ id: "spaces", label: "Spaces: 2", alignment: "right", priority: 60, tooltip: "Select Indentation" });
+  statusbarApi.register({ id: "selection", label: "", alignment: "right", priority: 95, visible: false });
+  statusbarApi.register({ id: "spaces", label: "Spaces: 2", alignment: "right", priority: 80, tooltip: "Select Indentation" });
+  statusbarApi.register({ id: "encoding", label: "UTF-8", alignment: "right", priority: 75 });
+  statusbarApi.register({ id: "eol", label: "LF", alignment: "right", priority: 70 });
+  statusbarApi.register({ id: "language", label: "TypeScript React", alignment: "right", priority: 65, command: "editor.action.changeLanguageMode" });
   statusbarApi.register({ id: "prettier", label: "$(check) Prettier", alignment: "right", priority: 50 });
-  statusbarApi.register({ id: "feedback", label: "$(feedback)", alignment: "right", priority: 10 });
+  statusbarApi.register({ id: "feedback", label: "$(feedback)", alignment: "right", priority: 10, tooltip: "Submit Feedback" });
   statusbarApi.register({ id: "bell", label: "$(bell)", alignment: "right", priority: 5, tooltip: "No Notifications" });
 
-  // ── Track cursor position + selection for statusbar ────────
+  // ── Track cursor position ────────────────────────────────
   ide.editor.onDidChangeCursorPosition((e) => {
     statusbarApi.update("line-col", { label: `Ln ${e.position.lineNumber}, Col ${e.position.column}` });
   });
 
+  // ── Track selection ──────────────────────────────────────
   ide.editor.onDidChangeCursorSelection((e) => {
     const sel = e.selection;
     if (sel.isEmpty()) {
@@ -475,41 +368,347 @@ async function bootstrap() {
     } else {
       const lines = Math.abs(sel.endLineNumber - sel.startLineNumber);
       const text = ide.editor.getModel()?.getValueInRange(sel) ?? "";
-      const chars = text.length;
       statusbarApi.update("selection", {
-        label: lines > 0 ? `${lines + 1} lines, ${chars} chars selected` : `${chars} chars selected`,
+        label: lines > 0 ? `${lines + 1} lines, ${text.length} chars selected` : `${text.length} selected`,
         visible: true,
       });
     }
   });
 
-  // Track language changes in statusbar when model switches
-  ide.editor.onDidChangeModel((e) => {
-    if (e.newModelUrl) {
-      const model = monaco.editor.getModel(e.newModelUrl);
-      if (model) {
-        const lang = model.getLanguageId();
-        const langMap: Record<string, string> = {
-          typescript: "TypeScript", typescriptreact: "TypeScript React",
-          javascript: "JavaScript", json: "JSON", css: "CSS",
-          html: "HTML", markdown: "Markdown",
-        };
-        statusbarApi.update("language", { label: langMap[lang] ?? lang });
-      }
+  // ── Track model/language changes ─────────────────────────
+  const LANG_NAMES: Record<string, string> = {
+    typescript: "TypeScript", typescriptreact: "TypeScript React",
+    javascript: "JavaScript", javascriptreact: "JavaScript React",
+    json: "JSON", css: "CSS", scss: "SCSS", html: "HTML",
+    markdown: "Markdown", python: "Python", rust: "Rust", go: "Go",
+    yaml: "YAML", shell: "Shell Script", sql: "SQL", plaintext: "Plain Text",
+    xml: "XML", graphql: "GraphQL",
+  };
+
+  function updateModelMeta() {
+    const model = ide.editor.getModel();
+    if (!model) return;
+
+    // Language
+    statusbarApi.update("language", { label: LANG_NAMES[model.getLanguageId()] ?? model.getLanguageId() });
+
+    // EOL
+    const eolSeq = model.getEOL();
+    statusbarApi.update("eol", { label: eolSeq === "\r\n" ? "CRLF" : "LF" });
+
+    // Encoding (always UTF-8 in browser Monaco)
+    statusbarApi.update("encoding", { label: "UTF-8" });
+
+    // Tab size / indentation
+    const opts = model.getOptions();
+    const indentLabel = opts.insertSpaces ? `Spaces: ${opts.tabSize}` : `Tab Size: ${opts.tabSize}`;
+    statusbarApi.update("spaces", { label: indentLabel, tooltip: "Select Indentation" });
+
+    // Title
+    const filePath = model.uri.path.replace(/^\//, "");
+    const fileName = filePath.split("/").pop() ?? filePath;
+    document.title = `${fileName} — Antigravity — Monaco Vanced`;
+  }
+
+  ide.editor.onDidChangeModel(() => { updateModelMeta(); });
+  // Also update on language change within the same model
+  monaco.editor.onDidChangeModelLanguage(() => { updateModelMeta(); });
+
+  // ── Track diagnostics (error/warning markers) ─────────────
+  function updateDiagnostics() {
+    const markers = monaco.editor.getModelMarkers({});
+    let errors = 0;
+    let warnings = 0;
+    for (const m of markers) {
+      if (m.severity === monaco.MarkerSeverity.Error) errors++;
+      else if (m.severity === monaco.MarkerSeverity.Warning) warnings++;
     }
-  });
+    statusbarApi.update("errors", {
+      label: `$(error) ${errors}  $(warning) ${warnings}`,
+      tooltip: errors + warnings > 0 ? `${errors} error(s), ${warnings} warning(s)` : "No Problems",
+    });
+  }
+  // Monaco fires onDidChangeMarkers when diagnostics change
+  monaco.editor.onDidChangeMarkers(() => { updateDiagnostics(); });
+  // Initial update
+  updateDiagnostics();
+  updateModelMeta();
 
-  // Open the first file
-  eventBus.emit("file:open", { uri: defaultFile.uri, label: defaultFile.name });
+  // ══════════════════════════════════════════════════════════
+  // Commands — "Define once → use everywhere"
+  // editor.addAction() powers both Monaco's built-in Command Palette
+  // (Ctrl+Shift+P / F1) AND the right-click Context Menu.
+  // See: context/monaco-command-system.txt
+  //
+  // contextMenuGroupId controls WHERE in the right-click menu:
+  //   navigation       → top (Go to..., Peek...)
+  //   1_modification   → editing (Format, Comment, Rename)
+  //   9_cutcopypaste   → clipboard area
+  //   z_commands       → bottom (palette, sidebar, panel)
+  //   (omit)           → palette-only, no context menu entry
+  // ══════════════════════════════════════════════════════════
 
-  // Show a welcome notification after boot
+  const actions: monaco.editor.IActionDescriptor[] = [
+    // ── navigation group ──────────────────────────────────
+    {
+      id: "antigravity.goToDefinition",
+      label: "Go to Definition",
+      contextMenuGroupId: "navigation",
+      contextMenuOrder: 1,
+      keybindings: [monaco.KeyCode.F12],
+      precondition: "editorTextFocus",
+      run: (ed) => { ed.getAction("editor.action.revealDefinition")?.run(); },
+    },
+    {
+      id: "antigravity.goToReferences",
+      label: "Go to References",
+      contextMenuGroupId: "navigation",
+      contextMenuOrder: 2,
+      keybindings: [monaco.KeyMod.Shift | monaco.KeyCode.F12],
+      precondition: "editorTextFocus",
+      run: (ed) => { ed.getAction("editor.action.goToReferences")?.run(); },
+    },
+    {
+      id: "antigravity.peekDefinition",
+      label: "Peek Definition",
+      contextMenuGroupId: "navigation",
+      contextMenuOrder: 3,
+      keybindings: [monaco.KeyMod.Alt | monaco.KeyCode.F12],
+      precondition: "editorTextFocus",
+      run: (ed) => { ed.getAction("editor.action.peekDefinition")?.run(); },
+    },
+    {
+      id: "antigravity.goToLine",
+      label: "Go to Line...",
+      contextMenuGroupId: "navigation",
+      contextMenuOrder: 4,
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyG],
+      run: (ed) => { ed.getAction("editor.action.gotoLine")?.run(); },
+    },
+
+    // ── 1_modification group ──────────────────────────────
+    {
+      id: "antigravity.formatDocument",
+      label: "Format Document",
+      contextMenuGroupId: "1_modification",
+      contextMenuOrder: 1,
+      keybindings: [monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyF],
+      precondition: "!editorReadonly",
+      run: (ed) => { ed.getAction("editor.action.formatDocument")?.run(); },
+    },
+    {
+      id: "antigravity.toggleComment",
+      label: "Toggle Line Comment",
+      contextMenuGroupId: "1_modification",
+      contextMenuOrder: 2,
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Slash],
+      precondition: "!editorReadonly",
+      run: (ed) => { ed.getAction("editor.action.commentLine")?.run(); },
+    },
+    {
+      id: "antigravity.toggleBlockComment",
+      label: "Toggle Block Comment",
+      contextMenuGroupId: "1_modification",
+      contextMenuOrder: 3,
+      keybindings: [monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyA],
+      precondition: "!editorReadonly",
+      run: (ed) => { ed.getAction("editor.action.blockComment")?.run(); },
+    },
+    {
+      id: "antigravity.rename",
+      label: "Rename Symbol",
+      contextMenuGroupId: "1_modification",
+      contextMenuOrder: 4,
+      keybindings: [monaco.KeyCode.F2],
+      precondition: "editorTextFocus && !editorReadonly",
+      run: (ed) => { ed.getAction("editor.action.rename")?.run(); },
+    },
+
+    // ── 9_cutcopypaste group ──────────────────────────────
+    {
+      id: "antigravity.cut",
+      label: "Cut",
+      contextMenuGroupId: "9_cutcopypaste",
+      contextMenuOrder: 1,
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyX],
+      run: (ed) => { ed.trigger("menu", "editor.action.clipboardCutAction", null); },
+    },
+    {
+      id: "antigravity.copy",
+      label: "Copy",
+      contextMenuGroupId: "9_cutcopypaste",
+      contextMenuOrder: 2,
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC],
+      run: (ed) => { ed.trigger("menu", "editor.action.clipboardCopyAction", null); },
+    },
+    {
+      id: "antigravity.paste",
+      label: "Paste",
+      contextMenuGroupId: "9_cutcopypaste",
+      contextMenuOrder: 3,
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV],
+      run: (ed) => { ed.focus(); document.execCommand("paste"); },
+    },
+
+    // ── z_commands group ──────────────────────────────────
+    {
+      id: "antigravity.commandPalette",
+      label: "Command Palette...",
+      contextMenuGroupId: "z_commands",
+      contextMenuOrder: 1,
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyP],
+      run: () => { eventBus.emit("header:command-open", {}); },
+    },
+    {
+      id: "antigravity.toggleSidebar",
+      label: "Toggle Sidebar",
+      contextMenuGroupId: "z_commands",
+      contextMenuOrder: 2,
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyB],
+      run: () => { eventBus.emit(SidebarEvents.Toggle, {}); },
+    },
+    {
+      id: "antigravity.togglePanel",
+      label: "Toggle Panel",
+      contextMenuGroupId: "z_commands",
+      contextMenuOrder: 3,
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyJ],
+      run: () => { eventBus.emit(PanelEvents.BottomToggle, {}); },
+    },
+    {
+      id: "antigravity.openSettings",
+      label: "Open Settings",
+      contextMenuGroupId: "z_commands",
+      contextMenuOrder: 4,
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Comma],
+      run: () => { eventBus.emit("settings:ui-open", {}); },
+    },
+
+    // ── Palette-only (no contextMenuGroupId) ──────────────
+    {
+      id: "antigravity.find",
+      label: "Find",
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF],
+      run: (ed) => { ed.getAction("actions.find")?.run(); },
+    },
+    {
+      id: "antigravity.findReplace",
+      label: "Find and Replace",
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyH],
+      run: (ed) => { ed.getAction("editor.action.startFindReplaceAction")?.run(); },
+    },
+    {
+      id: "antigravity.selectAll",
+      label: "Select All",
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyA],
+      run: (ed) => { ed.getAction("editor.action.selectAll")?.run(); },
+    },
+    {
+      id: "antigravity.expandSelection",
+      label: "Expand Selection",
+      run: (ed) => { ed.getAction("editor.action.smartSelect.expand")?.run(); },
+    },
+    {
+      id: "antigravity.undo",
+      label: "Undo",
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyZ],
+      run: (ed) => { ed.trigger("menu", "undo", null); },
+    },
+    {
+      id: "antigravity.redo",
+      label: "Redo",
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyY],
+      run: (ed) => { ed.trigger("menu", "redo", null); },
+    },
+    // Sidebar views
+    {
+      id: "antigravity.showExplorer",
+      label: "Show Explorer",
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyE],
+      run: () => { eventBus.emit(SidebarEvents.ViewActivate, { viewId: "explorer" }); },
+    },
+    {
+      id: "antigravity.showSearch",
+      label: "Show Search",
+      run: () => { eventBus.emit(SidebarEvents.ViewActivate, { viewId: "search" }); },
+    },
+    {
+      id: "antigravity.showSourceControl",
+      label: "Show Source Control",
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyG],
+      run: () => { eventBus.emit(SidebarEvents.ViewActivate, { viewId: "scm" }); },
+    },
+    {
+      id: "antigravity.showDebug",
+      label: "Show Run and Debug",
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyD],
+      run: () => { eventBus.emit(SidebarEvents.ViewActivate, { viewId: "debug" }); },
+    },
+    {
+      id: "antigravity.showExtensions",
+      label: "Show Extensions",
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyX],
+      run: () => { eventBus.emit(SidebarEvents.ViewActivate, { viewId: "extensions" }); },
+    },
+    // File
+    {
+      id: "antigravity.saveFile",
+      label: "Save File",
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS],
+      run: () => { notificationApi.show({ type: "success", message: "File saved.", duration: 2000 }); },
+    },
+    {
+      id: "antigravity.newFile",
+      label: "New File",
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyN],
+      run: () => { notificationApi.show({ type: "info", message: "Use Explorer > New File toolbar button.", duration: 3000 }); },
+    },
+    // Help
+    {
+      id: "antigravity.welcome",
+      label: "Welcome",
+      run: () => { notificationApi.show({ type: "info", message: "Welcome to Antigravity — Monaco Vanced IDE", duration: 4000 }); },
+    },
+    {
+      id: "antigravity.about",
+      label: "About",
+      run: () => { notificationApi.show({ type: "info", message: "Monaco Vanced v0.2.0 — Plugin-based IDE Architecture", duration: 4000 }); },
+    },
+    // Language
+    {
+      id: "antigravity.changeLanguageMode",
+      label: "Change Language Mode",
+      run: () => { notificationApi.show({ type: "info", message: "Language mode selection coming soon.", duration: 3000 }); },
+    },
+  ];
+
+  // Register all actions with Monaco — appears in both palette + context menu
+  for (const action of actions) {
+    ide.editor.addAction(action);
+  }
+
+  // Also register with command module for wireframe palette
+  for (const action of actions) {
+    commandApi.register({
+      id: action.id,
+      label: action.label,
+      handler: () => action.run(ide.editor, undefined as never),
+    });
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // Open default file + welcome notification
+  // ══════════════════════════════════════════════════════════
+
+  eventBus.emit(FileEvents.Open, { uri: defaultFile.uri, label: defaultFile.name });
+
   notificationApi.show({
     type: "info",
-    message: "Welcome to Monaco Vanced — click files in the Explorer to open them.",
-    duration: 5000,
+    message: "Welcome to Antigravity — Right-click for context menu. Ctrl+Shift+P for command palette.",
+    duration: 6000,
   });
 
-  // Expose for dev console (typed via global.d.ts)
+  // Expose for dev console
   window.monaco = monaco;
   window.editor = ide.editor;
   window.engine = ide.engine;

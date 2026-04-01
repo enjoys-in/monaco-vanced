@@ -51,13 +51,22 @@ export function wireActivityBar(
     const svgEl = btn.querySelector("svg");
     if (svgEl) svgEl.style.cssText = "width:22px;height:22px;";
     btn.addEventListener("click", () => {
-      if (activeId === id) {
-        apis.sidebar?.toggle();
-      } else {
-        activeId = id;
-        apis.sidebar?.activateView(id);
+      if (id === "settings-gear") {
+        // Open settings webview directly instead of sidebar
+        eventBus.emit("settings:ui-open", {});
+        return;
       }
-      updateAll();
+      if (isTop || id === "accounts") {
+        if (activeId === id) {
+          // Toggle sidebar visibility directly via eventBus
+          eventBus.emit(SidebarEvents.Toggle, {});
+        } else {
+          activeId = id;
+          // Emit view activation directly on eventBus (bypasses plugin ctx timing)
+          eventBus.emit(SidebarEvents.ViewActivate, { viewId: id });
+        }
+        updateAll();
+      }
     });
     return btn;
   }
@@ -85,14 +94,63 @@ export function wireActivityBar(
     }
   }
 
+  let sidebarVisible = true;
+  const narrowMq = window.matchMedia("(max-width: 768px)");
+
+  function isNarrow() {
+    return narrowMq.matches;
+  }
+
+  function showSidebar() {
+    sidebarVisible = true;
+    if (isNarrow()) {
+      dom.sidebarContainer.classList.add("vsc-sidebar--visible");
+      dom.sidebarBackdrop.classList.add("vsc-sidebar-backdrop--visible");
+    } else {
+      dom.sidebarContainer.style.display = "flex";
+    }
+  }
+
+  function hideSidebar() {
+    sidebarVisible = false;
+    if (isNarrow()) {
+      dom.sidebarContainer.classList.remove("vsc-sidebar--visible");
+      dom.sidebarBackdrop.classList.remove("vsc-sidebar-backdrop--visible");
+    } else {
+      dom.sidebarContainer.style.display = "none";
+    }
+  }
+
+  // Auto-collapse sidebar when viewport shrinks below 768px
+  narrowMq.addEventListener("change", (e) => {
+    if (e.matches) {
+      // Entered narrow mode — hide sidebar, clear inline display
+      dom.sidebarContainer.style.display = "";
+      dom.sidebarContainer.classList.remove("vsc-sidebar--visible");
+      dom.sidebarBackdrop.classList.remove("vsc-sidebar-backdrop--visible");
+      sidebarVisible = false;
+    } else {
+      // Left narrow mode — restore inline display, remove overlay class
+      dom.sidebarContainer.classList.remove("vsc-sidebar--visible");
+      dom.sidebarBackdrop.classList.remove("vsc-sidebar-backdrop--visible");
+      dom.sidebarContainer.style.display = sidebarVisible ? "flex" : "none";
+    }
+  });
+
+  // Click backdrop to dismiss sidebar overlay
+  dom.sidebarBackdrop.addEventListener("click", () => {
+    if (isNarrow() && sidebarVisible) hideSidebar();
+  });
+
   on(SidebarEvents.ViewActivate, (p) => {
     const { viewId } = p as { viewId: string };
     activeId = viewId;
+    if (!sidebarVisible) showSidebar();
     updateAll();
   });
 
   on(SidebarEvents.Toggle, () => {
-    const state = apis.sidebar?.getState();
-    dom.sidebarContainer.style.display = state?.visible === false ? "none" : "flex";
+    if (sidebarVisible) hideSidebar();
+    else showSidebar();
   });
 }
