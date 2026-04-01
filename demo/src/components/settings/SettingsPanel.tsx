@@ -539,6 +539,7 @@ function ThemesConfig({ emit, themeApi }: { emit: Emit; themeApi?: ThemeAPI }) {
   const [filter, setFilter] = useState<"all" | "dark" | "light" | "contrast">("all");
   const [cdnThemes, setCdnThemes] = useState<ThemeInfo[]>([]);
   const [loading, setLoading] = useState(false);
+  const [activeId, setActiveId] = useState(() => themeApi?.getCurrent() ?? "");
 
   useEffect(() => {
     if (!themeApi) return;
@@ -553,6 +554,9 @@ function ThemesConfig({ emit, themeApi }: { emit: Emit; themeApi?: ThemeAPI }) {
   const filtered = filter === "all" ? allThemes : allThemes.filter((th) => th.type === filter);
 
   const handleApply = useCallback(async (theme: ThemeInfo) => {
+    // Prevent duplicate calls: skip if already active or a fetch is in progress
+    if (loading || theme.id === activeId || theme.name === activeId) return;
+
     if (themeApi) {
       if (theme.remote) {
         setLoading(true);
@@ -560,12 +564,14 @@ function ThemesConfig({ emit, themeApi }: { emit: Emit; themeApi?: ThemeAPI }) {
       }
       try {
         await themeApi.apply(theme.id);
+        setActiveId(theme.id);
         if (theme.remote) {
           emit(NotificationEvents.Show, { type: "success", message: `Theme "${theme.name}" activated.`, duration: 3000 });
         }
       } catch {
         const monacoTheme = theme.type === "light" ? "vs" : theme.type === "contrast" ? "hc-black" : "vs-dark";
         emit(ThemeEvents.Changed, { name: theme.name, type: theme.type, monacoTheme });
+        setActiveId(theme.id);
         if (theme.remote) {
           emit(NotificationEvents.Show, { type: "warning", message: `Failed to fetch "${theme.name}". Using fallback.`, duration: 3000 });
         }
@@ -575,8 +581,9 @@ function ThemesConfig({ emit, themeApi }: { emit: Emit; themeApi?: ThemeAPI }) {
     } else {
       const monacoTheme = theme.type === "light" ? "vs" : theme.type === "contrast" ? "hc-black" : "vs-dark";
       emit(ThemeEvents.Changed, { name: theme.name, type: theme.type, monacoTheme });
+      setActiveId(theme.id);
     }
-  }, [themeApi, emit]);
+  }, [themeApi, emit, loading, activeId]);
 
   return (
     <div>
