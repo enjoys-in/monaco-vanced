@@ -141,7 +141,7 @@ import {
   DecorationEvents, SnippetEvents, ProfilerEvents, TaskEvents, TestEvents,
   CrashEvents, SecurityEvents, AuditEvents, CollabEvents, ReviewEvents,
   NotebookEvents, GraphEvents, PredictEvents, PerformanceEvents, AiEvents,
-  IndexSymbolEvents, LspEvents, ContextEngineEvents, GitEvents,
+  IndexSymbolEvents, LspEvents, ContextEngineEvents, GitEvents, DialogEvents,
 } from "@enjoys/monaco-vanced/core/events";
 
 // ── Builtin theme definitions for registration ───────────────
@@ -1665,6 +1665,17 @@ const actions: monaco.editor.IActionDescriptor[] = [
     const { language, error } = p as { language: string; error: string };
     console.warn(`[context-engine] CDN fetch failed for ${language}: ${error}`);
     statusbarApi.remove("ctx-loading");
+    eventBus.emit(DialogEvents.Show, {
+      title: "Context Engine — Load Failed",
+      severity: "warning",
+      body: [
+        `Failed to fetch language intelligence packs for "${language}" from CDN.`,
+        `Error: ${error}`,
+        "IntelliSense features like completions, hover, and code actions may be limited for this language.",
+      ],
+      type: "confirm",
+      actions: [{ id: "ok", label: "OK", primary: true }],
+    });
   });
   eventBus.on(ContextEngineEvents.ManifestLoaded, () => {
     console.log("[context-engine] Manifest loaded from CDN");
@@ -1696,6 +1707,17 @@ const actions: monaco.editor.IActionDescriptor[] = [
     console.warn(`[lsp] Connection failed: ${error ?? "unknown"}`);
     statusbarApi.update("lsp-status", { label: "$(error) LSP" });
     setTimeout(() => statusbarApi.remove("lsp-status"), 5000);
+    eventBus.emit(DialogEvents.Show, {
+      title: "LSP Connection Failed",
+      severity: "error",
+      body: [
+        "The editor could not connect to the Language Server.",
+        `Error: ${error ?? "Connection refused or timed out."}`,
+        "Language features such as go-to-definition, diagnostics, and completions will be unavailable until the server is reachable.",
+      ],
+      type: "confirm",
+      actions: [{ id: "ok", label: "OK", primary: true }],
+    });
   });
   eventBus.on(LspEvents.Diagnostics, (p: unknown) => {
     const { uri, diagnostics } = p as { uri: string; diagnostics: { severity: number; message: string; range: { start: { line: number; character: number }; end: { line: number; character: number } } }[] };

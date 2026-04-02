@@ -7,7 +7,7 @@ import { DialogRenderer } from "./renderer";
 import { TrustStore } from "./trust-store";
 import { DialogEvents } from "@core/events";
 
-export type { DialogConfig, DialogModuleAPI, DialogResult, DialogType, DialogAction, DialogField, QuickPickItem, QuickPickOptions } from "./types";
+export type { DialogConfig, DialogModuleAPI, DialogResult, DialogType, DialogSeverity, DialogAction, DialogField, QuickPickItem, QuickPickOptions } from "./types";
 export { QuickPick } from "./quick-pick";
 export { DialogRenderer } from "./renderer";
 export { TrustStore } from "./trust-store";

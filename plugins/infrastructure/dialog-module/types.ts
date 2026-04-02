@@ -2,6 +2,9 @@
 
 export type DialogType = "confirm" | "input" | "trust" | "auth" | "permission" | "custom" | "wizard";
 
+/** Visual severity — drives the icon colour and default icon */
+export type DialogSeverity = "info" | "warning" | "error" | "success";
+
 export interface DialogAction {
   id: string;
   label: string;
@@ -22,8 +25,13 @@ export interface DialogField {
 export interface DialogConfig {
   id?: string;
   title: string;
-  body?: string;
+  /** Simple string or array of paragraphs */
+  body?: string | string[];
   type: DialogType;
+  /** Severity level — adds a coloured icon next to the title */
+  severity?: DialogSeverity;
+  /** Custom SVG string or codicon name to override the default severity icon */
+  icon?: string;
   actions?: DialogAction[];
   fields?: DialogField[];
   width?: number;
