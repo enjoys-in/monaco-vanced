@@ -1141,6 +1141,7 @@ const actions: monaco.editor.IActionDescriptor[] = [
       { resource: "terminal:*", actions: ["execute"], effect: "allow" },
     ],
   });
+  policyApi.createRole({ id: "editor", name: "Editor", policies: ["default-access"] });
   policyApi.assignRole("demo-user", "editor");
 
   // ── 11. Secrets — seed demo secrets ───────────────────────

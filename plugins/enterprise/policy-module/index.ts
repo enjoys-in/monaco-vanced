@@ -38,6 +38,10 @@ export function createPolicyPlugin(
       ctx?.emit(PolicyEvents.Updated, { action: "remove", policyId: id });
     },
 
+    createRole(role: Role): void {
+      roleManager.createRole(role);
+    },
+
     assignRole(actorId: string, roleId: string): void {
       roleManager.assignRole(actorId, roleId);
     },

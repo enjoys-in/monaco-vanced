@@ -33,6 +33,7 @@ export interface PolicyModuleAPI {
   evaluate(actor: string, action: string, resource: string): PolicyEvalResult;
   addPolicy(policy: Policy): void;
   removePolicy(id: string): void;
+  createRole(role: Role): void;
   assignRole(actorId: string, roleId: string): void;
   getRoles(actorId: string): Role[];
 }
