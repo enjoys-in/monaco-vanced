@@ -13,6 +13,7 @@ import { SettingsPanel } from "./settings";
 import { WelcomePage } from "./welcome";
 import { TabBar } from "./tabs";
 import { Breadcrumbs } from "./tabs";
+import type { ChatIndexerApi } from "./ai-chat/types";
 import { Shell, type ShellHandle } from "./shell";
 
 interface MountOptions {
@@ -114,7 +115,7 @@ export function buildReactShell(
     statusbarApi?: { getItems(align: "left" | "right"): { id: string; label: string; tooltip?: string; alignment?: "left" | "right"; command?: string; visible?: boolean }[] };
     contextMenuApi?: { dismiss(): void };
     aiApi?: { chat(messages: { role: string; content: string }[], opts?: Record<string, unknown>): Promise<{ content: string; metadata?: Record<string, unknown> }>; abort(): void; getStatus(): string };
-    indexerApi?: { query(q: { query: string; kind?: string | string[]; path?: string; limit?: number }): { name: string; kind: string; path: string; line: number; column: number }[]; getFileSymbols(path: string): { name: string; kind: string; path: string; line: number; column: number }[]; isReady(): boolean };
+    indexerApi?: ChatIndexerApi;
     files?: { uri: string; name: string }[];
   },
 ): DOMRefs {
