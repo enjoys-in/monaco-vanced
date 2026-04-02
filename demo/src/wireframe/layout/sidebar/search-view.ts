@@ -218,6 +218,40 @@ export function buildSearchView(ctx: ViewContext): HTMLElement {
   inputArea.append(searchRow, replaceRow);
 
   // ══════════════════════════════════════════════════════════
+  // Mode tabs — Text search vs Symbol search
+  // ══════════════════════════════════════════════════════════
+
+  let searchMode: "text" | "symbols" = "text";
+  const modeTabs = el("div", {
+    style: `display:flex;gap:0;padding:0 14px;border-bottom:1px solid ${C.separator};`,
+  });
+  const textTab = el("div", {
+    style: `padding:6px 12px;font-size:11px;cursor:pointer;border-bottom:2px solid ${C.accent};color:${C.fg};font-weight:500;transition:all .15s;user-select:none;`,
+  }, "Text");
+  const symbolTab = el("div", {
+    style: `padding:6px 12px;font-size:11px;cursor:pointer;border-bottom:2px solid transparent;color:${C.fgDim};transition:all .15s;user-select:none;`,
+  }, "Symbols");
+
+  function setMode(mode: "text" | "symbols") {
+    searchMode = mode;
+    textTab.style.borderBottomColor = mode === "text" ? C.accent : "transparent";
+    textTab.style.color = mode === "text" ? C.fg : C.fgDim;
+    textTab.style.fontWeight = mode === "text" ? "500" : "normal";
+    symbolTab.style.borderBottomColor = mode === "symbols" ? C.accent : "transparent";
+    symbolTab.style.color = mode === "symbols" ? C.fg : C.fgDim;
+    symbolTab.style.fontWeight = mode === "symbols" ? "500" : "normal";
+    // Re-trigger search
+    if (searchInput.value.trim()) {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(runSearch, 50);
+    }
+  }
+  textTab.addEventListener("click", () => setMode("text"));
+  symbolTab.addEventListener("click", () => setMode("symbols"));
+
+  modeTabs.append(textTab, symbolTab);
+
+  // ══════════════════════════════════════════════════════════
   // Separator + summary bar
   // ══════════════════════════════════════════════════════════
 
@@ -268,11 +302,103 @@ export function buildSearchView(ctx: ViewContext): HTMLElement {
 
     if (!q) {
       emptyState.style.display = "flex";
-      emptyText.textContent = "Search to find in files";
+      emptyText.textContent = searchMode === "symbols" ? "Search to find symbols" : "Search to find in files";
       summaryBar.style.display = "none";
       return;
     }
 
+    // ── Symbol search mode ───────────────────────────────
+    if (searchMode === "symbols") {
+      emptyState.style.display = "none";
+      resultsList.style.opacity = "0";
+
+      if (!ctx.indexerApi || !ctx.indexerApi.isReady()) {
+        emptyState.style.display = "flex";
+        emptyText.textContent = "Symbol index is not available.";
+        summaryBar.style.display = "none";
+        requestAnimationFrame(() => { resultsList.style.opacity = "1"; });
+        return;
+      }
+
+      const symbols = ctx.indexerApi.query({ name: q });
+      if (!symbols.length) {
+        emptyState.style.display = "flex";
+        emptyText.textContent = `No symbols found for "${q}"`;
+        summaryBar.style.display = "none";
+      } else {
+        summaryBar.style.display = "flex";
+        summaryBar.innerHTML = `<span style="color:${C.fg};font-weight:500;">${symbols.length}</span> symbol${symbols.length !== 1 ? "s" : ""} found`;
+
+        // Group by file
+        const byFile = new Map<string, typeof symbols>();
+        for (const sym of symbols) {
+          const arr = byFile.get(sym.path) ?? [];
+          arr.push(sym);
+          byFile.set(sym.path, arr);
+        }
+
+        for (const [filePath, fileSymbols] of byFile) {
+          const fileName = filePath.split("/").pop() ?? filePath;
+          const fileGroup = el("div", { style: "margin-bottom:2px;border-radius:4px;overflow:hidden;" });
+
+          const fileHeader = el("div", {
+            style: `display:flex;align-items:center;gap:6px;padding:3px 8px;cursor:pointer;border-radius:4px;transition:background .1s;user-select:none;`,
+          });
+          fileHeader.addEventListener("mouseenter", () => { fileHeader.style.background = C.listHover; });
+          fileHeader.addEventListener("mouseleave", () => { fileHeader.style.background = "transparent"; });
+
+          const fIcon = renderFileIcon(ctx, fileName);
+          const fName = el("span", { style: `font-size:12px;color:${C.fg};font-weight:500;flex-shrink:0;` }, fileName);
+          const fPath = el("span", { style: `font-size:11px;color:${C.fgDim};opacity:0.7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;` }, filePath);
+          const badge = el("span", {
+            style: `font-size:10px;padding:0 5px;border-radius:8px;background:color-mix(in srgb, ${C.accent} 18%, transparent);color:${C.accent};font-weight:600;line-height:16px;min-width:16px;text-align:center;flex-shrink:0;`,
+          }, String(fileSymbols.length));
+
+          fileHeader.append(fIcon, fName, fPath, badge);
+          fileHeader.addEventListener("click", () => eventBus.emit(FileEvents.Open, { uri: filePath, label: fileName }));
+
+          const symbolLines = el("div", { style: "overflow:hidden;" });
+          for (const sym of fileSymbols.slice(0, 20)) {
+            const kindColors: Record<string, string> = {
+              function: "#dcdcaa", class: "#4ec9b0", interface: "#4ec9b0",
+              variable: "#9cdcfe", method: "#dcdcaa", property: "#9cdcfe",
+              enum: "#b5cea8", type: "#4ec9b0", constant: "#569cd6",
+            };
+            const kindColor = kindColors[sym.kind.toLowerCase()] ?? C.fg;
+            const sRow = el("div", {
+              style: `display:flex;align-items:center;padding:2px 8px 2px 28px;cursor:pointer;border-radius:3px;transition:background .1s;min-height:22px;gap:6px;`,
+            });
+            sRow.addEventListener("mouseenter", () => { sRow.style.background = C.listHover; });
+            sRow.addEventListener("mouseleave", () => { sRow.style.background = "transparent"; });
+
+            const kindBadge = el("span", {
+              style: `font-size:10px;padding:0 4px;border-radius:3px;background:${kindColor}18;color:${kindColor};font-weight:600;font-family:monospace;flex-shrink:0;min-width:20px;text-align:center;`,
+            }, sym.kind.slice(0, 3).toUpperCase());
+            const symName = el("span", {
+              style: `font-size:12px;color:${C.fg};font-family:'JetBrains Mono',monospace;`,
+            }, sym.name);
+            const lineRef = el("span", {
+              style: `font-size:10px;color:${C.fgDim};font-family:monospace;margin-left:auto;`,
+            }, `L${sym.line}`);
+
+            sRow.append(kindBadge, symName, lineRef);
+            sRow.addEventListener("click", (e) => {
+              e.stopPropagation();
+              eventBus.emit(FileEvents.Open, { uri: filePath, label: fileName });
+            });
+            symbolLines.appendChild(sRow);
+          }
+
+          fileGroup.append(fileHeader, symbolLines);
+          resultsList.appendChild(fileGroup);
+        }
+      }
+
+      requestAnimationFrame(() => { resultsList.style.opacity = "1"; });
+      return;
+    }
+
+    // ── Text search mode (original) ──────────────────────
     emptyState.style.display = "none";
     resultsList.style.opacity = "0";
     let matchCount = 0;
@@ -445,7 +571,7 @@ export function buildSearchView(ctx: ViewContext): HTMLElement {
     apis.notification?.show({ type: "success", message: `Replaced in ${count} file(s)`, duration: 3000 });
   });
 
-  container.append(inputArea, summaryBar, resultsArea);
+  container.append(inputArea, modeTabs, summaryBar, resultsArea);
   return container;
 }
 

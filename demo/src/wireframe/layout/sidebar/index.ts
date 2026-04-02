@@ -38,7 +38,7 @@ export function wireSidebar(
 ) {
   let activeViewId = "explorer";
   const viewContainers: Record<string, HTMLElement> = {};
-  const ctx: ViewContext = { files, apis, eventBus, iconApi: extras?.iconApi, extensionApi: extras?.extensionApi, vsixApi: extras?.vsixApi, authApi: extras?.authApi, marketplaceApi: extras?.marketplaceApi };
+  const ctx: ViewContext = { files, apis, eventBus, iconApi: extras?.iconApi, extensionApi: extras?.extensionApi, vsixApi: extras?.vsixApi, authApi: extras?.authApi, marketplaceApi: extras?.marketplaceApi, indexerApi: extras?.indexerApi };
 
   // ── Explorer instance (if mockFs is provided) ──────────
   let explorer: Explorer | null = null;

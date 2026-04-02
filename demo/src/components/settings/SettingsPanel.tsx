@@ -10,6 +10,7 @@ import {
   THEMES, KEYBINDINGS, CATEGORIES, COMMONLY_USED_IDS,
   type SettingDef, type PluginInfo, type ThemeInfo, type SettingsCategory,
 } from "./settings-data";
+import { useSettingsStore } from "../../stores/settings-store";
 
 type Emit = (ev: string, payload: unknown) => void;
 type ThemeAPI = { apply(id: string): Promise<void>; getIndex(): { id: string; file: string }[]; getThemes(): { id: string; name: string; type: string; colors: Record<string, string> }[]; getCurrent(): string };
@@ -35,6 +36,7 @@ export function SettingsPanel({ emit, themeApi, extensionApi }: { emit: Emit; th
   }, []);
 
   const handleSettingChange = useCallback((id: string, value: unknown) => {
+    useSettingsStore.getState().setSetting(id, value);
     emit(SettingsEvents.Change, { id, value });
   }, [emit]);
 
@@ -305,10 +307,10 @@ function SettingItem({
   onChange: (id: string, value: unknown) => void;
 }) {
   const { tokens: t } = useTheme();
-  const [value, setValue] = useState(setting.value);
+  const storeValue = useSettingsStore((s) => s.settings[setting.id]);
+  const value = storeValue !== undefined ? String(storeValue) : setting.value;
 
   const handleChange = (newVal: string) => {
-    setValue(newVal);
     const emitVal = setting.type === "number" ? Number(newVal)
       : setting.type === "checkbox" ? newVal === "true"
       : newVal;
@@ -417,11 +419,12 @@ function PluginsConfig({ emit, extensionApi }: { emit: Emit; extensionApi?: Exte
 function PluginCard({ plugin, emit, extensionApi }: { plugin: PluginInfo; emit: Emit; extensionApi?: ExtensionAPI }) {
   const { tokens: t } = useTheme();
   const [expanded, setExpanded] = useState(false);
-  const [enabled, setEnabled] = useState(plugin.installed);
+  const pluginState = useSettingsStore((s) => s.plugins[plugin.id]);
+  const enabled = pluginState?.enabled ?? plugin.installed;
 
   const handleToggle = useCallback(() => {
     const next = !enabled;
-    setEnabled(next);
+    useSettingsStore.getState().setPluginEnabled(plugin.id, next);
     if (extensionApi) {
       if (next) extensionApi.enable(plugin.id);
       else extensionApi.disable(plugin.id);
@@ -502,7 +505,10 @@ function PluginCard({ plugin, emit, extensionApi }: { plugin: PluginInfo; emit: 
         <div style={{ borderTop: `1px solid ${t.border}`, padding: "10px 14px" }}>
           {plugin.settings.length > 0 ? (
             plugin.settings.map((s) => (
-              <SettingItem key={s.id} setting={s} onChange={(id, val) => emit(SettingsEvents.Change, { id, value: val })} />
+              <SettingItem key={s.id} setting={s} onChange={(id, val) => {
+                useSettingsStore.getState().setSetting(id, val);
+                emit(SettingsEvents.Change, { id, value: val });
+              }} />
             ))
           ) : (
             <div style={{ fontSize: 12, color: t.fgDim, padding: "8px 0", fontStyle: "italic" }}>

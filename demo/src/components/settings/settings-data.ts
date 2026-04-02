@@ -276,14 +276,49 @@ export const WINDOW_SETTINGS: SettingDef[] = [
   { id: "window.menuBarVisibility", label: "Menu Bar Visibility", type: "select", value: "classic", options: ["classic", "visible", "toggle", "hidden", "compact"], desc: "Menu bar visibility.", group: "Title Bar", category: "Window" },
 ];
 
-// ── Plugin catalog (trimmed — key modules) ───────────────────
+// ── Plugin catalog — all modules ─────────────────────────────
 export const PLUGIN_CATALOG: PluginInfo[] = [
+  // ── Infrastructure ─────────────────────────────────────
+  { name: "Command Palette", id: "infrastructure.command", desc: "Command registration & fuzzy search", category: "Infrastructure", color: "#569cd6", installed: true, settings: [
+    { id: "command.maxResults", label: "Max Results", type: "number", value: "50", desc: "Max palette results.", group: "Command Palette", category: "Plugins" },
+  ]},
+  { name: "Keybindings", id: "infrastructure.keybinding", desc: "Key binding management", category: "Infrastructure", color: "#dcdcaa", installed: true, settings: [] },
+  { name: "Settings", id: "infrastructure.settings", desc: "User & workspace settings with 3-layer merge", category: "Infrastructure", color: "#dcdcaa", installed: true, settings: [] },
+  { name: "Notifications", id: "infrastructure.notification", desc: "Toast notification system", category: "Infrastructure", color: "#ce9178", installed: true, settings: [
+    { id: "notification.defaultDuration", label: "Default Duration", type: "number", value: "5000", desc: "Default display time (ms).", group: "Notifications", category: "Plugins" },
+    { id: "notification.position", label: "Position", type: "select", value: "bottom-right", options: ["bottom-right", "top-right", "bottom-left", "top-left"], desc: "Toast position.", group: "Notifications", category: "Plugins" },
+  ]},
+  { name: "Dialog", id: "infrastructure.dialog", desc: "Modal dialog system", category: "Infrastructure", color: "#4ec9b0", installed: true, settings: [] },
+  { name: "Auth", id: "infrastructure.auth", desc: "Authentication & session management", category: "Infrastructure", color: "#c586c0", installed: true, settings: [
+    { id: "auth.autoLogin", label: "Auto Login", type: "checkbox", value: "false", desc: "Auto-login on startup.", group: "Auth", category: "Plugins" },
+  ]},
+  { name: "Storage", id: "infrastructure.storage", desc: "Key-value persistent storage", category: "Infrastructure", color: "#89d185", installed: true, settings: [] },
+  { name: "Deep Link", id: "infrastructure.deep-link", desc: "Deep link routing", category: "Infrastructure", color: "#b5cea8", installed: true, settings: [] },
+  { name: "Migration", id: "migration-module", desc: "Data migration framework", category: "Infrastructure", color: "#d7ba7d", installed: true, settings: [] },
+
+  // ── Theming ────────────────────────────────────────────
   { name: "Theme Engine", id: "theme-module", desc: "Color theme management & switching", category: "Theming", color: "#ce9178", installed: true, settings: [
     { id: "theme.autoDetectColorScheme", label: "Auto Detect Color Scheme", type: "checkbox", value: "false", desc: "Auto-switch based on OS setting.", group: "Theme Engine", category: "Plugins" },
   ]},
   { name: "Icon Pack", id: "icon-module", desc: "File & folder icon management", category: "Theming", color: "#dcdcaa", installed: true, settings: [
     { id: "iconTheme.active", label: "Active Icon Theme", type: "select", value: "seti", options: ["seti", "material", "vscode-icons", "none"], desc: "Active file icon theme.", group: "Icon Pack", category: "Plugins" },
   ]},
+
+  // ── Layout ─────────────────────────────────────────────
+  { name: "Layout Manager", id: "layout-module", desc: "Split panes & layout persistence", category: "Layout", color: "#4ec9b0", installed: true, settings: [
+    { id: "layout.panelPosition", label: "Panel Position", type: "select", value: "bottom", options: ["bottom", "right", "left"], desc: "Default panel position.", group: "Layout Manager", category: "Plugins" },
+  ]},
+  { name: "Sidebar", id: "sidebar-module", desc: "Sidebar view management", category: "Layout", color: "#ce9178", installed: true, settings: [
+    { id: "sidebar.defaultWidth", label: "Default Width", type: "number", value: "240", desc: "Default sidebar width.", group: "Sidebar", category: "Plugins" },
+  ]},
+  { name: "Context Menu", id: "context-menu-module", desc: "Right-click context menus", category: "Layout", color: "#569cd6", installed: true, settings: [] },
+  { name: "Header", id: "header-module", desc: "Header / menu bar", category: "Layout", color: "#b5cea8", installed: true, settings: [] },
+  { name: "Navigation", id: "navigation-module", desc: "Breadcrumb & go-to navigation", category: "Layout", color: "#dcdcaa", installed: true, settings: [] },
+  { name: "Statusbar", id: "statusbar-module", desc: "Status bar management", category: "Layout", color: "#89d185", installed: true, settings: [] },
+  { name: "Title Bar", id: "title-module", desc: "Window title configuration", category: "Layout", color: "#d7ba7d", installed: true, settings: [] },
+  { name: "UI Module", id: "ui-module", desc: "Shared UI components", category: "Layout", color: "#c586c0", installed: true, settings: [] },
+
+  // ── Editor ─────────────────────────────────────────────
   { name: "Code Editor", id: "editor-module", desc: "Core Monaco editor integration", category: "Editor", color: "#569cd6", installed: true, settings: [
     { id: "editor-module.retainUndoHistory", label: "Retain Undo History", type: "checkbox", value: "true", desc: "Keep undo/redo on model switch.", group: "Code Editor", category: "Plugins" },
   ]},
@@ -291,40 +326,106 @@ export const PLUGIN_CATALOG: PluginInfo[] = [
     { id: "tabs.maxOpen", label: "Max Open Tabs", type: "number", value: "20", desc: "Max tabs before auto-close.", group: "Tabs Manager", category: "Plugins" },
     { id: "tabs.previewMode", label: "Preview Mode", type: "checkbox", value: "true", desc: "Single-click opens preview tab.", group: "Tabs Manager", category: "Plugins" },
   ]},
-  { name: "Layout Manager", id: "layout-module", desc: "Split panes & layout persistence", category: "Layout", color: "#4ec9b0", installed: true, settings: [
-    { id: "layout.panelPosition", label: "Panel Position", type: "select", value: "bottom", options: ["bottom", "right", "left"], desc: "Default panel position.", group: "Layout Manager", category: "Plugins" },
+  { name: "Decorations", id: "decorations-module", desc: "Editor decorations & highlights", category: "Editor", color: "#ce9178", installed: true, settings: [] },
+  { name: "Preview", id: "preview-module", desc: "Markdown & HTML preview", category: "Editor", color: "#dcdcaa", installed: true, settings: [] },
+  { name: "Snippets", id: "snippets-module", desc: "Code snippet insertion", category: "Editor", color: "#b5cea8", installed: true, settings: [] },
+  { name: "Virtualization", id: "virtualization-module", desc: "Large file virtual scrolling", category: "Editor", color: "#89d185", installed: true, settings: [] },
+  { name: "Webview", id: "webview-module", desc: "Embedded webview panels", category: "Editor", color: "#d7ba7d", installed: true, settings: [] },
+
+  // ── Extensions ─────────────────────────────────────────
+  { name: "Extension Host", id: "extension-module", desc: "Extension lifecycle & sandbox", category: "Extensions", color: "#569cd6", installed: true, settings: [] },
+  { name: "Embed", id: "embed-module", desc: "Embeddable editor widget", category: "Extensions", color: "#4ec9b0", installed: true, settings: [] },
+  { name: "Marketplace", id: "marketplace-module", desc: "Extension marketplace", category: "Extensions", color: "#ce9178", installed: true, settings: [] },
+  { name: "VSIX Loader", id: "vsix-module", desc: "VSIX package loader", category: "Extensions", color: "#dcdcaa", installed: true, settings: [] },
+
+  // ── Filesystem ─────────────────────────────────────────
+  { name: "File System", id: "fs-module", desc: "Virtual file system operations", category: "Filesystem", color: "#dcdcaa", installed: true, settings: [] },
+  { name: "Symbol Indexer", id: "indexer-module", desc: "File & symbol indexing engine", category: "Filesystem", color: "#569cd6", installed: true, settings: [
+    { id: "indexer.maxFiles", label: "Max Indexed Files", type: "number", value: "5000", desc: "Maximum files to index.", group: "Symbol Indexer", category: "Plugins" },
   ]},
-  { name: "Sidebar", id: "sidebar-module", desc: "Sidebar view management", category: "Layout", color: "#ce9178", installed: true, settings: [
-    { id: "sidebar.defaultWidth", label: "Default Width", type: "number", value: "240", desc: "Default sidebar width.", group: "Sidebar", category: "Plugins" },
+  { name: "Workspace Search", id: "search-module", desc: "Cross-file text search", category: "Filesystem", color: "#4ec9b0", installed: true, settings: [] },
+  { name: "Workspace Manager", id: "workspace-module", desc: "Multi-root workspace management", category: "Filesystem", color: "#ce9178", installed: true, settings: [] },
+
+  // ── Language ───────────────────────────────────────────
+  { name: "Context Engine", id: "context-module", desc: "Code context extraction", category: "Language", color: "#b5cea8", installed: true, settings: [] },
+  { name: "Diagnostics", id: "diagnostics-module", desc: "Error & warning diagnostics", category: "Language", color: "#f14c4c", installed: true, settings: [] },
+  { name: "ESLint", id: "eslint-module", desc: "ESLint integration", category: "Language", color: "#c586c0", installed: true, settings: [
+    { id: "eslint.autoFix", label: "Auto Fix on Save", type: "checkbox", value: "false", desc: "Auto-fix on save.", group: "ESLint", category: "Plugins" },
   ]},
-  { name: "Command Palette", id: "command-module", desc: "Command registration & fuzzy search", category: "Infrastructure", color: "#569cd6", installed: true, settings: [
-    { id: "command.maxResults", label: "Max Results", type: "number", value: "50", desc: "Max palette results.", group: "Command Palette", category: "Plugins" },
-  ]},
-  { name: "Settings", id: "settings-module", desc: "User & workspace settings", category: "Infrastructure", color: "#dcdcaa", installed: true, settings: [] },
-  { name: "Notifications", id: "notification-module", desc: "Toast notification system", category: "Infrastructure", color: "#ce9178", installed: true, settings: [
-    { id: "notification.defaultDuration", label: "Default Duration", type: "number", value: "5000", desc: "Default display time (ms).", group: "Notifications", category: "Plugins" },
-    { id: "notification.position", label: "Position", type: "select", value: "bottom-right", options: ["bottom-right", "top-right", "bottom-left", "top-left"], desc: "Toast position.", group: "Notifications", category: "Plugins" },
-  ]},
-  { name: "AI Assistant", id: "ai-module", desc: "AI code completion & chat", category: "AI / Intelligence", color: "#b5cea8", installed: false, settings: [
-    { id: "ai.provider", label: "AI Provider", type: "select", value: "openai", options: ["openai", "anthropic", "local", "copilot"], desc: "AI completion provider.", group: "AI Assistant", category: "Plugins" },
-    { id: "ai.inlineEnabled", label: "Inline Suggestions", type: "checkbox", value: "true", desc: "Show AI ghost text.", group: "AI Assistant", category: "Plugins" },
-  ]},
-  { name: "Terminal", id: "terminal-module", desc: "Integrated terminal emulation", category: "Devtools", color: "#89d185", installed: false, settings: [] },
-  { name: "Debugger", id: "debugger-module", desc: "Breakpoints & step debugging", category: "Devtools", color: "#f14c4c", installed: false, settings: [] },
-  { name: "Git Integration", id: "git-module", desc: "Git operations & status", category: "SCM", color: "#ce9178", installed: false, settings: [
-    { id: "git.decorations", label: "Git Decorations", type: "checkbox", value: "true", desc: "Git status decorations in explorer.", group: "Git Integration", category: "Plugins" },
-  ]},
-  { name: "Extension Host", id: "extension-module", desc: "Extension lifecycle & sandbox", category: "Extensions", color: "#569cd6", installed: false, settings: [] },
-  { name: "File System", id: "fs-module", desc: "Virtual file system operations", category: "Filesystem", color: "#dcdcaa", installed: false, settings: [] },
-  { name: "LSP Bridge", id: "lsp-bridge-module", desc: "Language Server Protocol bridge", category: "Language", color: "#569cd6", installed: false, settings: [
+  { name: "Language Detection", id: "language-detection", desc: "Automatic language detection", category: "Language", color: "#89d185", installed: true, settings: [] },
+  { name: "Language Config", id: "language-config", desc: "Language-specific configuration", category: "Language", color: "#d7ba7d", installed: true, settings: [] },
+  { name: "LSP Bridge", id: "lsp-bridge-module", desc: "Language Server Protocol bridge", category: "Language", color: "#569cd6", installed: true, settings: [
     { id: "lsp.autoStart", label: "Auto Start", type: "checkbox", value: "true", desc: "Auto-start language servers.", group: "LSP Bridge", category: "Plugins" },
   ]},
-  { name: "Prettier", id: "prettier-module", desc: "Prettier code formatter", category: "Language", color: "#c586c0", installed: false, settings: [
+  { name: "Monarch Grammars", id: "monarch-grammars", desc: "Monarch tokenizer grammars", category: "Language", color: "#4ec9b0", installed: true, settings: [] },
+  { name: "Prettier", id: "prettier-module", desc: "Prettier code formatter", category: "Language", color: "#c586c0", installed: true, settings: [
     { id: "prettier.printWidth", label: "Print Width", type: "number", value: "80", desc: "Line width for formatting.", group: "Prettier", category: "Plugins" },
     { id: "prettier.useSingleQuote", label: "Single Quotes", type: "checkbox", value: "false", desc: "Use single quotes.", group: "Prettier", category: "Plugins" },
   ]},
-  { name: "Security", id: "security-module", desc: "CSP enforcement & sanitization", category: "Platform", color: "#f14c4c", installed: false, settings: [
+  { name: "Symbol Index", id: "symbol-index-module", desc: "Symbol navigation & outline", category: "Language", color: "#ce9178", installed: true, settings: [] },
+
+  // ── Platform ───────────────────────────────────────────
+  { name: "Accessibility", id: "accessibility-module", desc: "Screen reader & a11y support", category: "Platform", color: "#89d185", installed: true, settings: [] },
+  { name: "Concurrency", id: "platform.concurrency", desc: "Web Worker task scheduling", category: "Platform", color: "#569cd6", installed: true, settings: [] },
+  { name: "Crash Recovery", id: "platform.crash-recovery", desc: "Auto-save & crash recovery", category: "Platform", color: "#f14c4c", installed: true, settings: [] },
+  { name: "Fallback", id: "platform.fallback", desc: "Graceful degradation", category: "Platform", color: "#d7ba7d", installed: true, settings: [] },
+  { name: "Feature Flags", id: "platform.feature-flags", desc: "Runtime feature toggles", category: "Platform", color: "#b5cea8", installed: true, settings: [] },
+  { name: "i18n", id: "i18n-module", desc: "Internationalization", category: "Platform", color: "#dcdcaa", installed: true, settings: [
+    { id: "i18n.locale", label: "Locale", type: "select", value: "en", options: ["en", "es", "fr", "de", "ja", "zh-CN", "ko"], desc: "Display language.", group: "i18n", category: "Plugins" },
+  ]},
+  { name: "Offline", id: "offline-module", desc: "Service worker & offline support", category: "Platform", color: "#c586c0", installed: true, settings: [] },
+  { name: "Performance", id: "platform.performance", desc: "Performance monitoring", category: "Platform", color: "#4ec9b0", installed: true, settings: [] },
+  { name: "Resource Manager", id: "platform.resource", desc: "Memory & resource management", category: "Platform", color: "#ce9178", installed: true, settings: [] },
+  { name: "Security", id: "platform.security", desc: "CSP enforcement & sanitization", category: "Platform", color: "#f14c4c", installed: true, settings: [
     { id: "security.workspace.trust.enabled", label: "Workspace Trust", type: "checkbox", value: "true", desc: "Enable workspace trust.", group: "Security", category: "Plugins" },
+  ]},
+  { name: "Streaming", id: "platform.streaming", desc: "Streaming data channels", category: "Platform", color: "#89d185", installed: true, settings: [] },
+  { name: "Worker Pool", id: "platform.worker", desc: "Web Worker management", category: "Platform", color: "#569cd6", installed: true, settings: [] },
+
+  // ── AI / Intelligence ──────────────────────────────────
+  { name: "AI Assistant", id: "ai-module", desc: "AI code completion & chat", category: "AI / Intelligence", color: "#b5cea8", installed: true, settings: [
+    { id: "ai.provider", label: "AI Provider", type: "select", value: "openai", options: ["openai", "anthropic", "local", "copilot"], desc: "AI completion provider.", group: "AI Assistant", category: "Plugins" },
+    { id: "ai.inlineEnabled", label: "Inline Suggestions", type: "checkbox", value: "true", desc: "Show AI ghost text.", group: "AI Assistant", category: "Plugins" },
+  ]},
+  { name: "Agent", id: "agent-module", desc: "Agentic AI workflows", category: "AI / Intelligence", color: "#569cd6", installed: true, settings: [] },
+  { name: "AI Memory", id: "ai-memory-module", desc: "AI conversation memory", category: "AI / Intelligence", color: "#dcdcaa", installed: true, settings: [] },
+  { name: "Context Fusion", id: "context-fusion-module", desc: "Multi-source context gathering", category: "AI / Intelligence", color: "#4ec9b0", installed: true, settings: [] },
+  { name: "Eval", id: "eval-module", desc: "AI evaluation & benchmarks", category: "AI / Intelligence", color: "#ce9178", installed: true, settings: [] },
+  { name: "Intent Recognition", id: "intent-module", desc: "User intent detection", category: "AI / Intelligence", color: "#c586c0", installed: true, settings: [] },
+  { name: "Knowledge Graph", id: "knowledge-graph-module", desc: "Code knowledge graph", category: "AI / Intelligence", color: "#89d185", installed: true, settings: [] },
+  { name: "Memory", id: "memory-module", desc: "Persistent memory store", category: "AI / Intelligence", color: "#d7ba7d", installed: true, settings: [] },
+  { name: "Predictive", id: "predictive-module", desc: "Predictive code actions", category: "AI / Intelligence", color: "#f14c4c", installed: true, settings: [] },
+  { name: "RAG", id: "rag-module", desc: "Retrieval-augmented generation", category: "AI / Intelligence", color: "#b5cea8", installed: true, settings: [] },
+
+  // ── SCM ────────────────────────────────────────────────
+  { name: "Git Integration", id: "git-module", desc: "Git operations & status", category: "SCM", color: "#ce9178", installed: true, settings: [
+    { id: "git.decorations", label: "Git Decorations", type: "checkbox", value: "true", desc: "Git status decorations in explorer.", group: "Git Integration", category: "Plugins" },
+  ]},
+  { name: "Collab", id: "collab-module", desc: "Real-time collaboration", category: "SCM", color: "#569cd6", installed: true, settings: [] },
+  { name: "Review", id: "review-module", desc: "Code review workflows", category: "SCM", color: "#4ec9b0", installed: true, settings: [] },
+  { name: "Snapshots", id: "snapshot-module", desc: "Snapshot & restore", category: "SCM", color: "#dcdcaa", installed: true, settings: [] },
+  { name: "Sync", id: "sync-module", desc: "Settings sync across devices", category: "SCM", color: "#89d185", installed: true, settings: [] },
+
+  // ── Devtools ───────────────────────────────────────────
+  { name: "Debugger", id: "debugger-module", desc: "Breakpoints & step debugging", category: "Devtools", color: "#f14c4c", installed: true, settings: [] },
+  { name: "Notebook", id: "notebook-module", desc: "Interactive notebook", category: "Devtools", color: "#569cd6", installed: true, settings: [] },
+  { name: "Profiler", id: "profiler-module", desc: "Performance profiler", category: "Devtools", color: "#4ec9b0", installed: true, settings: [] },
+  { name: "Task Runner", id: "task-module", desc: "Background task management", category: "Devtools", color: "#dcdcaa", installed: true, settings: [] },
+  { name: "Terminal", id: "terminal-module", desc: "Integrated terminal emulation", category: "Devtools", color: "#89d185", installed: true, settings: [] },
+  { name: "Test Runner", id: "test-module", desc: "Unit test execution", category: "Devtools", color: "#b5cea8", installed: true, settings: [] },
+  { name: "Testing Harness", id: "testing-harness-module", desc: "Plugin testing framework", category: "Devtools", color: "#d7ba7d", installed: true, settings: [] },
+
+  // ── Enterprise ─────────────────────────────────────────
+  { name: "API Stability", id: "api-stability-module", desc: "API version & deprecation tracking", category: "Enterprise", color: "#569cd6", installed: true, settings: [] },
+  { name: "Audit", id: "audit-module", desc: "Audit logging", category: "Enterprise", color: "#4ec9b0", installed: true, settings: [] },
+  { name: "Billing", id: "billing-module", desc: "Usage metering & billing", category: "Enterprise", color: "#ce9178", installed: true, settings: [] },
+  { name: "Context Engine", id: "context-engine", desc: "Enterprise context engine", category: "Enterprise", color: "#dcdcaa", installed: true, settings: [] },
+  { name: "Policy", id: "policy-module", desc: "Policy enforcement", category: "Enterprise", color: "#c586c0", installed: true, settings: [] },
+  { name: "Realtime", id: "realtime-module", desc: "WebSocket real-time channels", category: "Enterprise", color: "#89d185", installed: true, settings: [] },
+  { name: "SaaS Tenants", id: "saas-tenant-module", desc: "Multi-tenant isolation", category: "Enterprise", color: "#d7ba7d", installed: true, settings: [] },
+  { name: "Secrets", id: "secrets-module", desc: "Secret & credential management", category: "Enterprise", color: "#f14c4c", installed: true, settings: [] },
+  { name: "Telemetry", id: "telemetry-module", desc: "Usage analytics & telemetry", category: "Enterprise", color: "#b5cea8", installed: true, settings: [
+    { id: "telemetry.enabled", label: "Enable Telemetry", type: "checkbox", value: "true", desc: "Send anonymous usage data.", group: "Telemetry", category: "Plugins" },
   ]},
 ];
 

@@ -4,6 +4,9 @@ import * as monaco from "monaco-editor";
 // ── Theme CSS custom properties (must init before wireframe) ─
 import { initThemeVars, switchTheme, BUILTIN_THEME_NAMES, THEME_DEFS, registerThemes } from "./components/theme";
 
+// ── Zustand store — reactive settings + plugin state ─────────
+import { useSettingsStore } from "./stores/settings-store";
+
 // ── Core ─────────────────────────────────────────────────────
 import { createMonacoIDE } from "@enjoys/monaco-vanced/core/facade";
 import { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
@@ -215,7 +218,7 @@ function buildVirtualFiles(fs: MockFsAPI): VirtualFile[] {
 // Infrastructure
 const { plugin: commandPlugin, api: commandApi } = createCommandPlugin();
 const { plugin: keybindingPlugin } = createKeybindingPlugin();
-const { plugin: settingsPlugin } = createSettingsPlugin();
+const { plugin: settingsPlugin, api: settingsApi } = createSettingsPlugin();
 const { plugin: notificationPlugin, api: notificationApi } = createNotificationPlugin();
 const { plugin: dialogPlugin, api: dialogApi } = createDialogPlugin();
 
@@ -484,6 +487,9 @@ async function bootstrap() {
 
   const eventBus = new EventBus();
 
+  // ── Hydrate Zustand store from IndexedDB ─────────────────
+  await useSettingsStore.getState().hydrate();
+
   // ── Mock File System ─────────────────────────────────────
   const mockFs = createMockFs(eventBus);
   seedDemoProject(mockFs);
@@ -526,6 +532,23 @@ async function bootstrap() {
   });
 
   console.log("[monaco-vanced] IDE ready:", ide.engine.getRegisteredIds());
+
+  // ── Initialize all plugin states in Zustand store ────────
+  for (const p of allPlugins) {
+    useSettingsStore.getState().initPlugin(p.id, true);
+  }
+
+  // ── Bridge: settings store changes → settings plugin API ──
+  useSettingsStore.subscribe(
+    (s) => s.settings,
+    (settings, prevSettings) => {
+      for (const [key, value] of Object.entries(settings)) {
+        if (prevSettings[key] !== value) {
+          settingsApi.set(key, value, "user");
+        }
+      }
+    },
+  );
 
   // ── Register themes from plugin API (runtime, no static JSON imports) ──
   registerThemes(themeApi.getThemes());
