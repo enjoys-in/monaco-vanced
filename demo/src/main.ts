@@ -10,7 +10,7 @@ import * as monaco from "monaco-editor";
 import { createMonacoIDE } from "@enjoys/monaco-vanced/core/facade";
 import { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
 import type { MonacoVancedInstance } from "@enjoys/monaco-vanced/core/facade";
-import { FileEvents, WelcomeEvents, SettingsEvents } from "@enjoys/monaco-vanced/core/events";
+import { FileEvents, WelcomeEvents, SettingsEvents, PluginEvents, ExtensionEvents } from "@enjoys/monaco-vanced/core/events";
 
 // ── Theme ────────────────────────────────────────────────────
 import { initThemeVars, switchTheme, registerThemes } from "./components/theme";
@@ -148,6 +148,37 @@ async function bootstrap() {
       }
     },
   );
+
+  // ── 11b. Bridge: plugin enable/disable → PluginEngine ────
+  useSettingsStore.subscribe(
+    (s) => s.plugins,
+    (plugins, prevPlugins) => {
+      for (const [id, state] of Object.entries(plugins)) {
+        const prev = prevPlugins[id];
+        if (prev && prev.enabled !== state.enabled) {
+          if (state.enabled) {
+            ide.engine.enablePlugin(id, monaco, ide.editor);
+          } else {
+            ide.engine.disablePlugin(id);
+          }
+        }
+      }
+    },
+  );
+
+  // Also listen for extension events emitted by the Settings UI
+  eventBus.on(ExtensionEvents.Enabled, (p: unknown) => {
+    const { id } = p as { id: string };
+    if (!ide.engine.isPluginEnabled(id)) {
+      ide.engine.enablePlugin(id, monaco, ide.editor);
+    }
+  });
+  eventBus.on(ExtensionEvents.Disabled, (p: unknown) => {
+    const { id } = p as { id: string };
+    if (ide.engine.isPluginEnabled(id)) {
+      ide.engine.disablePlugin(id);
+    }
+  });
 
   // ── 12. Register runtime themes ──────────────────────────
   registerThemes(pluginApis.theme.getThemes());

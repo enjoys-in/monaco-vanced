@@ -6,6 +6,36 @@ import type { TreeNode } from "./ExplorerTypes";
 import { getExtColor, getFolderColor } from "./ExplorerTypes";
 import { C } from "../wireframe/types";
 
+// ── Lazy icon loading via IntersectionObserver ───────────────
+// Icons from CDN (getFileIcon API) only load when the row scrolls into view.
+
+let _iconObserver: IntersectionObserver | null = null;
+
+function getIconObserver(): IntersectionObserver {
+  if (!_iconObserver) {
+    _iconObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            const el = entry.target as HTMLElement;
+            const src = el.dataset.lazyIcon;
+            if (src) {
+              el.innerHTML = `<img src="${src}" width="16" height="16" style="display:block;" alt="" loading="lazy" />`;
+              delete el.dataset.lazyIcon;
+            }
+            _iconObserver!.unobserve(el);
+          }
+        }
+      },
+      { rootMargin: "100px 0px" }, // pre-load 100px ahead of viewport
+    );
+  }
+  return _iconObserver;
+}
+
+/** Placeholder SVG while icon loads */
+const ICON_PLACEHOLDER = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" opacity=".2" stroke-width="1"/></svg>`;
+
 // ── SVG icon builders ───────────────────────────────────────
 
 function chevronSvg(): string {
@@ -124,11 +154,13 @@ export function renderFileItem(
     style: `display:flex;align-items:center;height:22px;padding-left:${24 + depth * 16}px;padding-right:8px;cursor:pointer;user-select:none;position:relative;`,
   });
 
-  // Icon
+  // Icon — lazy loaded when using CDN icon API
   const icon = el("span", { style: "margin-right:6px;display:inline-flex;align-items:center;flex-shrink:0;" });
   if (callbacks.getFileIcon) {
     const iconUrl = callbacks.getFileIcon(node.name, false, false);
-    icon.innerHTML = `<img src="${iconUrl}" width="16" height="16" style="display:block;" alt="" />`;
+    icon.dataset.lazyIcon = iconUrl;
+    icon.innerHTML = ICON_PLACEHOLDER;
+    getIconObserver().observe(icon);
   } else {
     icon.innerHTML = fileIconSvg(ext);
   }
@@ -204,11 +236,13 @@ export function renderFolderItem(
   });
   chevron.innerHTML = chevronSvg();
 
-  // Folder icon
+  // Folder icon — lazy loaded when using CDN icon API
   const folderIcon = el("span", { style: `margin-right:4px;display:inline-flex;align-items:center;flex-shrink:0;` });
   if (callbacks.getFileIcon) {
     const iconUrl = callbacks.getFileIcon(node.name, true, isExpanded);
-    folderIcon.innerHTML = `<img src="${iconUrl}" width="16" height="16" style="display:block;" alt="" />`;
+    folderIcon.dataset.lazyIcon = iconUrl;
+    folderIcon.innerHTML = ICON_PLACEHOLDER;
+    getIconObserver().observe(folderIcon);
   } else {
     folderIcon.innerHTML = isExpanded ? folderOpenSvg(folderColor) : folderClosedSvg(folderColor);
   }
@@ -229,7 +263,7 @@ export function renderFolderItem(
     chevron.style.transform = `rotate(${expanded ? "90deg" : "0"})`;
     if (callbacks.getFileIcon) {
       const iconUrl = callbacks.getFileIcon(node.name, true, expanded);
-      folderIcon.innerHTML = `<img src="${iconUrl}" width="16" height="16" style="display:block;" alt="" />`;
+      folderIcon.innerHTML = `<img src="${iconUrl}" width="16" height="16" style="display:block;" alt="" loading="lazy" />`;
     } else {
       folderIcon.innerHTML = expanded ? folderOpenSvg(folderColor) : folderClosedSvg(folderColor);
     }

@@ -341,6 +341,61 @@ export class PluginEngine {
     this.eventBus.emit(PluginEvents.Destroy, { name: id });
   }
 
+  // ── Enable / Disable at runtime ────────────────────────────
+
+  async disablePlugin(id: string): Promise<void> {
+    const entry = this.plugins.get(id);
+    if (!entry || !entry.enabled) return;
+
+    entry.enabled = false;
+
+    // Dispose context if it was booted
+    const ctx = this.contexts.get(id);
+    if (ctx) {
+      try {
+        await entry.plugin.onDispose?.();
+      } catch (err) {
+        console.error(`[PluginEngine] Error disposing plugin "${id}" on disable:`, err);
+      }
+      ctx.dispose();
+      this.contexts.delete(id);
+    }
+
+    this.bootOrder = this.bootOrder.filter((pid) => pid !== id);
+    this.eventBus.emit(PluginEvents.Disabled, { name: id });
+  }
+
+  async enablePlugin(id: string, monaco?: Monaco, editor?: MonacoEditor): Promise<void> {
+    const entry = this.plugins.get(id);
+    if (!entry || entry.enabled) return;
+
+    entry.enabled = true;
+
+    // Re-mount if engine already booted and we have monaco/editor
+    if (this.booted && monaco && editor) {
+      const ctx = new PluginContext(id, monaco, editor, this.eventBus);
+      this.contexts.set(id, ctx);
+
+      if (entry.plugin.onBeforeMount) {
+        await this.errorBoundary.guard(id, "onBeforeMount", () =>
+          entry.plugin.onBeforeMount!(monaco),
+        );
+      }
+
+      const ok = await this.initWithStrategy(id, entry.plugin, ctx);
+      if (ok) {
+        if (!this.bootOrder.includes(id)) this.bootOrder.push(id);
+        this.eventBus.emit(PluginEvents.Ready, { name: id });
+      }
+    }
+
+    this.eventBus.emit(PluginEvents.Enabled, { name: id });
+  }
+
+  isPluginEnabled(id: string): boolean {
+    return this.plugins.get(id)?.enabled ?? false;
+  }
+
   // ── Full shutdown ─────────────────────────────────────────
 
   async destroyAll(): Promise<void> {

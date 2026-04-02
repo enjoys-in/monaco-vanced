@@ -75,14 +75,15 @@ export function wireEditor(deps: EditorWiringDeps) {
   // ── Wire settings changes → Monaco editor options ────────
   eventBus.on(SettingsEvents.Change, (payload: unknown) => {
     const p = payload as { id?: string; key?: string; value: unknown; _src?: string };
-    if (p._src === "main") return;
     const settingId = p.id ?? p.key ?? "";
     if (!settingId) return;
 
-    if (p.id && !p.key) {
+    // Normalize: if only `id` was sent (no `key`), re-emit with both for other listeners
+    if (p.id && !p.key && p._src !== "main") {
       eventBus.emit(SettingsEvents.Change, { id: settingId, key: settingId, value: p.value, _src: "main" });
-      return;
     }
+    // Skip duplicate processing if this is the re-emitted version
+    if (p._src === "main" && p.key) return;
 
     const optMap: Record<string, string> = {
       "editor.fontSize": "fontSize", "editor.fontFamily": "fontFamily",

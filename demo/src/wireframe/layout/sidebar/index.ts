@@ -1,21 +1,18 @@
-// ── Sidebar: multi-view panels — modernized VS Code style ──
+// ── Sidebar: multi-view panels — React views + vanilla Explorer ──
 
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
-import { SidebarEvents, FileEvents, TabEvents } from "@enjoys/monaco-vanced/core/events";
+import { SidebarEvents } from "@enjoys/monaco-vanced/core/events";
 import type { DOMRefs, WireframeAPIs, OnHandler, VirtualFile } from "../../types";
 import { C } from "../../types";
-import { el, fileIconSvg, getExt } from "../../utils";
+import { el } from "../../utils";
 import type { MockFsAPI } from "../../../mock-fs";
 import { Explorer } from "../../../explorer";
 import type { ExplorerIconAPI } from "../../../explorer";
 import { VIEW_TITLES } from "./types";
-import type { ViewContext } from "./types";
-import { buildSearchView } from "./search-view";
-import { buildScmView } from "./scm-view";
-import { buildDebugView } from "./debug-view";
-import { buildExtensionsView } from "./extensions-view";
-import { buildAccountsView } from "./accounts-view";
-import { buildSettingsRedirect } from "./settings-view";
+import { createRoot, type Root } from "react-dom/client";
+import { createElement } from "react";
+import { ThemeProvider } from "../../../components/theme";
+import { SidebarViews } from "../../../components/sidebar";
 
 export interface SidebarExtras {
   iconApi?: ExplorerIconAPI;
@@ -24,7 +21,7 @@ export interface SidebarExtras {
   authApi?: import("@enjoys/monaco-vanced/infrastructure/auth-module").AuthModuleAPI;
   marketplaceApi?: import("@enjoys/monaco-vanced/extensions/marketplace-module").MarketplaceModuleAPI;
   aiApi?: { chat(messages: { role: string; content: string }[], opts?: Record<string, unknown>): Promise<{ content: string; metadata?: Record<string, unknown> }>; abort(): void; getStatus(): string };
-  indexerApi?: { query(q: { name?: string; kind?: string; file?: string }): { name: string; kind: string; path: string; line: number; column: number }[]; getFileSymbols(path: string): { name: string; kind: string; path: string; line: number; column: number }[]; isReady(): boolean };
+  indexerApi?: { query(q: { query: string; kind?: string; path?: string }): { name: string; kind: string; path: string; line: number; column: number }[]; getFileSymbols(path: string): { name: string; kind: string; path: string; line: number; column: number }[]; isReady(): boolean };
 }
 
 export function wireSidebar(
@@ -37,8 +34,7 @@ export function wireSidebar(
   extras?: SidebarExtras,
 ) {
   let activeViewId = "explorer";
-  const viewContainers: Record<string, HTMLElement> = {};
-  const ctx: ViewContext = { files, apis, eventBus, iconApi: extras?.iconApi, extensionApi: extras?.extensionApi, vsixApi: extras?.vsixApi, authApi: extras?.authApi, marketplaceApi: extras?.marketplaceApi, indexerApi: extras?.indexerApi };
+  let sidebarRoot: Root | null = null;
 
   // ── Explorer instance (if mockFs is provided) ──────────
   let explorer: Explorer | null = null;
@@ -52,28 +48,33 @@ export function wireSidebar(
     });
   }
 
-  function createViews() {
-    viewContainers.explorer = explorer ? explorer.getElement() : buildFallbackExplorerView(files);
-    viewContainers.search = buildSearchView(ctx);
-    viewContainers.scm = buildScmView(ctx);
-    viewContainers.debug = buildDebugView(ctx);
-    viewContainers.extensions = buildExtensionsView(ctx);
-    viewContainers.accounts = buildAccountsView(ctx);
-    viewContainers["settings-gear"] = buildSettingsRedirect(ctx);
-    for (const [id, container] of Object.entries(viewContainers)) {
-      container.style.display = id === activeViewId ? "" : "none";
-      container.dataset.viewId = id;
-      dom.sidebarContent.appendChild(container);
+  // ── Mount React sidebar views ──────────────────────────
+  function mountSidebarViews() {
+    dom.sidebarContent.innerHTML = "";
+    if (!sidebarRoot) {
+      sidebarRoot = createRoot(dom.sidebarContent);
     }
+    sidebarRoot.render(
+      createElement(ThemeProvider, { eventBus },
+        createElement(SidebarViews, {
+          eventBus,
+          files,
+          notificationApi: apis.notification,
+          extensionApi: extras?.extensionApi,
+          vsixApi: extras?.vsixApi,
+          marketplaceApi: extras?.marketplaceApi,
+          indexerApi: extras?.indexerApi,
+          explorerElement: explorer ? explorer.getElement() : null,
+        }),
+      ),
+    );
   }
 
   function switchView(viewId: string) {
     activeViewId = viewId;
-    for (const [id, container] of Object.entries(viewContainers)) {
-      container.style.display = id === viewId ? "" : "none";
-    }
     dom.sidebarHeader.textContent = VIEW_TITLES[viewId] ?? viewId;
     updateToolbar(viewId);
+    // Notify React component via event bus (SidebarViews listens for ViewActivate)
   }
 
   function updateToolbar(viewId: string) {
@@ -106,171 +107,31 @@ export function wireSidebar(
     btn.addEventListener("mouseenter", () => { btn.style.background = "rgba(255,255,255,0.08)"; btn.style.color = C.fg; });
     btn.addEventListener("mouseleave", () => { btn.style.background = "transparent"; btn.style.color = C.fgDim; });
     btn.addEventListener("click", () => {
-      if (viewId === "explorer") {
-        if (explorer) {
-          if (title === "New File") explorer.newFile();
-          else if (title === "New Folder") explorer.newFolder();
-          else if (title === "Refresh") explorer.refresh();
-          else if (title === "Collapse All") explorer.collapseAll();
-        } else {
-          if (title === "New File") promptNewFile();
-          else if (title === "New Folder") promptNewFolder();
-          else if (title === "Collapse All") collapseAllFolders();
-        }
+      if (viewId === "explorer" && explorer) {
+        if (title === "New File") explorer.newFile();
+        else if (title === "New Folder") explorer.newFolder();
+        else if (title === "Refresh") explorer.refresh();
+        else if (title === "Collapse All") explorer.collapseAll();
       } else if (viewId === "search" && title === "Clear Results") {
-        const searchInput = viewContainers.search?.querySelector("input") as HTMLInputElement | null;
-        if (searchInput) { searchInput.value = ""; searchInput.dispatchEvent(new Event("input")); }
+        const searchInput = dom.sidebarContent.querySelector("input[type='text']") as HTMLInputElement | null;
+        if (searchInput) { searchInput.value = ""; searchInput.dispatchEvent(new Event("input", { bubbles: true })); }
       }
     });
     return btn;
   }
 
-  function promptNewFile() {
-    const name = prompt("Enter file name (e.g. src/utils.ts):");
-    if (!name?.trim()) return;
-    const path = name.trim();
-    const fileName = path.split("/").pop() ?? path;
-    const ext = fileName.includes(".") ? fileName.split(".").pop()!.toLowerCase() : "";
-    const langMap: Record<string, string> = { ts: "typescript", tsx: "typescriptreact", js: "javascript", jsx: "javascriptreact", json: "json", css: "css", html: "html", md: "markdown" };
-    const newFile: VirtualFile = { uri: path, name: fileName, language: langMap[ext] ?? "plaintext", content: "" };
-    files.push(newFile);
-    rebuildFallbackExplorer();
-    eventBus.emit(FileEvents.Open, { uri: path, label: fileName });
-    apis.notification?.show({ type: "success", message: `Created ${path}`, duration: 3000 });
-  }
 
-  function promptNewFolder() {
-    const name = prompt("Enter folder path (e.g. src/components):");
-    if (!name?.trim()) return;
-    const placeholder = name.trim() + "/.gitkeep";
-    files.push({ uri: placeholder, name: ".gitkeep", language: "plaintext", content: "" });
-    rebuildFallbackExplorer();
-    apis.notification?.show({ type: "success", message: `Created folder ${name.trim()}`, duration: 3000 });
-  }
-
-  function collapseAllFolders() {
-    const explorerEl = viewContainers.explorer;
-    if (!explorerEl) return;
-    explorerEl.querySelectorAll("[style*='transform: rotate(90deg)']").forEach((chevron) => {
-      (chevron as HTMLElement).click();
-    });
-  }
-
-  function rebuildFallbackExplorer() {
-    const old = viewContainers.explorer;
-    viewContainers.explorer = buildFallbackExplorerView(files);
-    viewContainers.explorer.dataset.viewId = "explorer";
-    viewContainers.explorer.style.display = activeViewId === "explorer" ? "" : "none";
-    if (old?.parentNode) old.parentNode.replaceChild(viewContainers.explorer, old);
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  // ── Fallback Explorer (used when no MockFsAPI provided) ────
-  // ═══════════════════════════════════════════════════════════
-
-  interface FallbackTreeNode {
-    name: string;
-    uri?: string;
-    children?: FallbackTreeNode[];
-    expanded?: boolean;
-  }
-
-  function buildFallbackExplorerView(fileList: VirtualFile[]): HTMLElement {
-    const container = el("div", { style: "overflow-y:auto;overflow-x:hidden;height:100%;" });
-    const tree = buildFallbackTree(fileList);
-    const projectNode: FallbackTreeNode = { name: "MONACO-VANCED", children: tree, expanded: true };
-    container.appendChild(renderFallbackTree([projectNode], 0));
-    return container;
-  }
-
-  function buildFallbackTree(fileList: VirtualFile[]): FallbackTreeNode[] {
-    const root: FallbackTreeNode = { name: "", children: [] };
-    for (const f of fileList) {
-      const parts = f.uri.split("/");
-      let node = root;
-      for (let i = 0; i < parts.length; i++) {
-        const part = parts[i];
-        if (i === parts.length - 1) { node.children!.push({ name: part, uri: f.uri }); }
-        else {
-          let child = node.children!.find((c) => c.name === part && c.children);
-          if (!child) { child = { name: part, children: [], expanded: true }; node.children!.push(child); }
-          node = child;
-        }
-      }
-    }
-    return root.children ?? [];
-  }
-
-  function renderFallbackTree(nodes: FallbackTreeNode[], depth = 0): DocumentFragment {
-    const frag = document.createDocumentFragment();
-    const sorted = [...nodes].sort((a, b) => {
-      if (a.children && !b.children) return -1;
-      if (!a.children && b.children) return 1;
-      return a.name.localeCompare(b.name);
-    });
-    for (const node of sorted) frag.appendChild(node.children ? renderFallbackFolder(node, depth) : renderFallbackFile(node, depth));
-    return frag;
-  }
-
-  function renderFallbackFolder(node: FallbackTreeNode, depth: number): HTMLElement {
-    const wrapper = el("div");
-    const row = el("div", { class: "vsc-file-item", style: `display:flex;align-items:center;height:22px;padding-left:${8 + depth * 16}px;cursor:pointer;user-select:none;` });
-    const chevron = el("span", { style: `display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;transition:transform .12s ease;transform:rotate(${node.expanded ? "90deg" : "0"});color:${C.fgDim};` });
-    chevron.innerHTML = `<svg width="10" height="10" viewBox="0 0 16 16"><path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`;
-    const folderIcon = el("span", { style: "margin-right:4px;display:inline-flex;align-items:center;color:#dcb67a;" });
-    const openSvg = `<svg width="16" height="16" viewBox="0 0 16 16" fill="#dcb67a"><path d="M1.5 14h13l.5-.5v-7l-.5-.5H8l-1-2H1.5L1 4.5v9l.5.5zM2 5h4.5l1 2H14v6H2V5z"/></svg>`;
-    const closedSvg = `<svg width="16" height="16" viewBox="0 0 16 16" fill="#dcb67a"><path d="M14.5 3H7.71l-.85-.85L6.51 2h-5l-.5.5v11l.5.5h13l.5-.5v-10L14.5 3zm-.51 8.49V13H2V3h4.29l.85.85.36.15h6.49v7.49z"/></svg>`;
-    folderIcon.innerHTML = node.expanded ? openSvg : closedSvg;
-    const label = el("span", { style: `color:${C.fg};font-size:13px;` }, node.name);
-    row.append(chevron, folderIcon, label);
-    const childContainer = el("div", { style: node.expanded ? "" : "display:none;" });
-    childContainer.appendChild(renderFallbackTree(node.children ?? [], depth + 1));
-    row.addEventListener("click", () => {
-      node.expanded = !node.expanded;
-      chevron.style.transform = `rotate(${node.expanded ? "90deg" : "0"})`;
-      childContainer.style.display = node.expanded ? "" : "none";
-      folderIcon.innerHTML = node.expanded ? openSvg : closedSvg;
-    });
-    wrapper.append(row, childContainer);
-    return wrapper;
-  }
-
-  function renderFallbackFile(node: FallbackTreeNode, depth: number): HTMLElement {
-    const ext = getExt(node.name);
-    const row = el("div", { class: "vsc-file-item", "data-uri": node.uri ?? "", style: `display:flex;align-items:center;height:22px;padding-left:${24 + depth * 16}px;cursor:pointer;user-select:none;` });
-    const icon = el("span", { style: "margin-right:6px;display:inline-flex;align-items:center;" });
-    icon.innerHTML = fileIconSvg(ext);
-    const label = el("span", { style: `color:${C.fg};font-size:13px;` }, node.name);
-    row.append(icon, label);
-    row.addEventListener("click", () => { if (node.uri) eventBus.emit(FileEvents.Open, { uri: node.uri, label: node.name }); });
-    return row;
-  }
 
   // ═══════════════════════════════════════════════════════════
   // ── Initialize ─────────────────────────────────────────────
   // ═══════════════════════════════════════════════════════════
 
-  dom.sidebarContent.innerHTML = "";
-  createViews();
+  mountSidebarViews();
   dom.sidebarHeader.textContent = VIEW_TITLES[activeViewId];
   updateToolbar(activeViewId);
 
   on(SidebarEvents.ViewActivate, (p) => { const { viewId } = p as { viewId: string }; switchView(viewId); });
   on(SidebarEvents.Resize, (p) => { const { width } = p as { width: number }; dom.sidebarContainer.style.width = `${width}px`; });
-
-  // Active file tracking — new Explorer handles it internally; fallback needs manual highlights
-  if (!explorer) {
-    const setActiveFile = (uri: string) => {
-      const explorerEl = viewContainers.explorer;
-      if (!explorerEl) return;
-      explorerEl.querySelectorAll(".vsc-file-item").forEach((e) => {
-        const item = e as HTMLElement;
-        item.dataset.active = item.dataset.uri === uri ? "true" : "false";
-      });
-    };
-    on(FileEvents.Open, (p) => { const { uri } = p as { uri: string }; setActiveFile(uri); });
-    on(TabEvents.Switch, (p) => { const { uri } = p as { uri: string }; setActiveFile(uri); });
-  }
 }
 
 export function wireResizeHandle(dom: DOMRefs) {

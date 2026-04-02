@@ -6,4 +6,6 @@ export enum PluginEvents {
   Error = "plugin:error",
   AllReady = "plugin:all-ready",
   BootFailed = "plugin:boot-failed",
+  Enabled = "plugin:enabled",
+  Disabled = "plugin:disabled",
 }

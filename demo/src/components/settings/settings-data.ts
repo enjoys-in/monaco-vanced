@@ -356,6 +356,8 @@ export const PLUGIN_CATALOG: PluginInfo[] = [
   { name: "Language Config", id: "language-config", desc: "Language-specific configuration", category: "Language", color: "#d7ba7d", installed: true, settings: [] },
   { name: "LSP Bridge", id: "lsp-bridge-module", desc: "Language Server Protocol bridge", category: "Language", color: "#569cd6", installed: true, settings: [
     { id: "lsp.autoStart", label: "Auto Start", type: "checkbox", value: "true", desc: "Auto-start language servers.", group: "LSP Bridge", category: "Plugins" },
+    { id: "lsp.healthCheck", label: "Health Check", type: "checkbox", value: "true", desc: "Enable LSP health check before connecting.", group: "LSP Bridge", category: "Plugins" },
+    { id: "lsp.timeout", label: "Connection Timeout (ms)", type: "number", value: "5000", desc: "Timeout for LSP server connection.", group: "LSP Bridge", category: "Plugins" },
   ]},
   { name: "Monarch Grammars", id: "monarch-grammars", desc: "Monarch tokenizer grammars", category: "Language", color: "#4ec9b0", installed: true, settings: [] },
   { name: "Prettier", id: "prettier-module", desc: "Prettier code formatter", category: "Language", color: "#c586c0", installed: true, settings: [
@@ -419,7 +421,10 @@ export const PLUGIN_CATALOG: PluginInfo[] = [
   { name: "API Stability", id: "api-stability-module", desc: "API version & deprecation tracking", category: "Enterprise", color: "#569cd6", installed: true, settings: [] },
   { name: "Audit", id: "audit-module", desc: "Audit logging", category: "Enterprise", color: "#4ec9b0", installed: true, settings: [] },
   { name: "Billing", id: "billing-module", desc: "Usage metering & billing", category: "Enterprise", color: "#ce9178", installed: true, settings: [] },
-  { name: "Context Engine", id: "context-engine", desc: "Enterprise context engine", category: "Enterprise", color: "#dcdcaa", installed: true, settings: [] },
+  { name: "Context Engine", id: "context-engine", desc: "Enterprise context engine with LSP providers", category: "Enterprise", color: "#dcdcaa", installed: true, settings: [
+    { id: "contextEngine.lazyLoad", label: "Lazy Load", type: "checkbox", value: "true", desc: "Load context providers on demand when files are opened.", group: "Context Engine", category: "Plugins" },
+    { id: "contextEngine.lspBaseUrl", label: "LSP Base URL", type: "text", value: "https://monaco-lsp-hub.onrender.com", desc: "Base URL for the LSP server.", group: "Context Engine", category: "Plugins" },
+  ] },
   { name: "Policy", id: "policy-module", desc: "Policy enforcement", category: "Enterprise", color: "#c586c0", installed: true, settings: [] },
   { name: "Realtime", id: "realtime-module", desc: "WebSocket real-time channels", category: "Enterprise", color: "#89d185", installed: true, settings: [] },
   { name: "SaaS Tenants", id: "saas-tenant-module", desc: "Multi-tenant isolation", category: "Enterprise", color: "#d7ba7d", installed: true, settings: [] },
