@@ -5,7 +5,7 @@ import { ContextStorage } from "./storage";
 import { ProviderRegistry } from "./providers";
 import { ContextEngineAPI } from "./api";
 import { convertManifestToProviders, convertTheme, convertGrammar } from "./converters";
-import { ContextEngineEvents, LspEvents, EditorEvents } from "@core/events";
+import { ContextEngineEvents, LspEvents, EditorEvents, FileEvents } from "@core/events";
 import { LazyContextLoader } from "./lazy-loader";
 
 // Re-export interfaces
@@ -117,13 +117,33 @@ export function createContextEnginePlugin(
         }),
       );
 
-      // Lazy-load on language change (file open / tab switch)
+      // Lazy-load on language change (file open / language detection)
       disposables.push(
         ctx.on(EditorEvents.LanguageChange, (payload: unknown) => {
-          const { languageId } = payload as { languageId: string };
-          api.loadLanguage(languageId).catch((err) => {
-            console.warn(`[context-engine] Lazy load failed for ${languageId}:`, err);
-          });
+          const { languageId, language } = payload as { languageId?: string; language?: string };
+          const lang = languageId ?? language;
+          if (lang) {
+            api.loadLanguage(lang).catch((err) => {
+              console.warn(`[context-engine] Lazy load failed for ${lang}:`, err);
+            });
+          }
+        }),
+      );
+
+      // Also lazy-load on file open (tab switch — language already known)
+      disposables.push(
+        ctx.on(FileEvents.Open, (payload: unknown) => {
+          const { uri } = payload as { uri?: string };
+          if (uri) {
+            // Defer to let the model be set in the editor first
+            setTimeout(() => {
+              const { editor } = ctx!;
+              const model = editor.getModel();
+              if (model) {
+                api.loadLanguage(model.getLanguageId()).catch(() => {});
+              }
+            }, 50);
+          }
         }),
       );
     },

@@ -1647,24 +1647,9 @@ const actions: monaco.editor.IActionDescriptor[] = [
 
   // ── 34. Context Engine — lazy CDN loading per-language ──
   // Languages are loaded on-demand when a file is opened and LSP is NOT connected.
-  // The plugin listens to EditorEvents.LanguageChange internally and fetches
-  // only the providers for that specific language from the CDN.
-
-  // Also trigger on initial model (in case a file is already open at boot)
-  const initialModel = ide.editor.getModel();
-  if (initialModel) {
-    contextEngineApi.loadLanguage(initialModel.getLanguageId()).catch(() => {});
-  }
-
-  // Trigger on model switch (tab change / new file open)
-  ide.editor.onDidChangeModel((e) => {
-    if (e.newModelUrl) {
-      const model = ide.monaco.editor.getModel(e.newModelUrl);
-      if (model) {
-        contextEngineApi.loadLanguage(model.getLanguageId()).catch(() => {});
-      }
-    }
-  });
+  // The plugin listens to EditorEvents.LanguageChange + FileEvents.Open internally
+  // and fetches only the providers for that specific language from the CDN.
+  // No eager loading — CDN is only hit when user actually opens a file.
 
   eventBus.on(ContextEngineEvents.LazyFetchStarted, (p: unknown) => {
     const { language } = p as { language: string };
