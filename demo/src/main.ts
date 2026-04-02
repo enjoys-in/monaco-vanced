@@ -14,12 +14,7 @@ import { FileEvents, WelcomeEvents, SettingsEvents, PluginEvents, ExtensionEvent
 
 // ── Theme ────────────────────────────────────────────────────
 import { initThemeVars, switchTheme, registerThemes } from "./components/theme";
-import type { ThemeDefinition } from "../../plugins/theming/theme-module/types";
-import draculaTheme from "../../plugins/theming/theme-module/builtin/dracula.json";
-import githubDarkTheme from "../../plugins/theming/theme-module/builtin/github-dark.json";
-import githubLightTheme from "../../plugins/theming/theme-module/builtin/github-light.json";
-import monokaiTheme from "../../plugins/theming/theme-module/builtin/monokai.json";
-import oneDarkTheme from "../../plugins/theming/theme-module/builtin/one-dark.json";
+import { builtinThemes } from "../../plugins/theming/theme-module";
 
 // ── Zustand settings store ───────────────────────────────────
 import { useSettingsStore } from "./stores/settings-store";
@@ -112,7 +107,6 @@ async function bootstrap() {
   });
 
   // ── 7. Register builtin themes ───────────────────────────
-  const builtinThemes = [draculaTheme, githubDarkTheme, githubLightTheme, monokaiTheme, oneDarkTheme] as unknown as ThemeDefinition[];
   for (const t of builtinThemes) pluginApis.theme.register(t);
 
   // ── 8. Determine default file ────────────────────────────

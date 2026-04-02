@@ -18,6 +18,7 @@ export type { ThemeConfig, ThemeDefinition, ThemeModuleAPI, ThemeTokenColor, The
 export { ThemeRegistry } from "./registry";
 export { convertVSCodeTheme } from "./converter";
 export { getCachedIndex, setCachedIndex, getCachedTheme, setCachedTheme, clearThemeCache } from "./theme-store";
+export { builtinThemes, draculaTheme, githubDarkTheme, githubLightTheme, monokaiTheme, oneDarkTheme } from "./builtin";
 
 const DEFAULT_CDN_BASE =
   "https://cdn.jsdelivr.net/npm/@enjoys/context-engine@latest/data/themes";

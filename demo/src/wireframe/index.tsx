@@ -12,7 +12,7 @@ import { wireSidebarVisibility } from "./layout/sidebar-visibility";
 import { wireSidebar, wireResizeHandle } from "./layout/sidebar/index";
 import { createRoot, type Root } from "react-dom/client";
 import { ThemeProvider } from "../components/theme";
-import { ExtDetailView } from "../components/ExtDetailView";
+import { ExtDetailView } from "../components/ext-detail";
 
 export type { WireframeAPIs, VirtualFile } from "./types";
 
@@ -37,6 +37,7 @@ interface ExtWebviewTab {
 function createExtWebviewManager(
   parentEl: HTMLElement,
   eventBus: InstanceType<typeof EventBus>,
+  vsixApi?: import("@enjoys/monaco-vanced/extensions/vsix-module").VSIXModuleAPI,
 ) {
   let tabs: ExtWebviewTab[] = [];
   let activeTabId: string | null = null;
@@ -73,6 +74,7 @@ function createExtWebviewManager(
           extName={ext.name}
           eventBus={eventBus}
           onInteract={() => { tab.interacted = true; }}
+          vsixApi={vsixApi}
         />
       </ThemeProvider>,
     );
@@ -129,12 +131,13 @@ function wireReactPanelVisibility(
   eventBus: InstanceType<typeof import("@enjoys/monaco-vanced/core/event-bus").EventBus>,
   on: (ev: string, fn: (p: unknown) => void) => void,
   _files: VirtualFile[],
+  vsixApi?: import("@enjoys/monaco-vanced/extensions/vsix-module").VSIXModuleAPI,
 ) {
   let settingsOpen = false;
   let welcomeVisible = true;
   let extDetailOpen = false;
 
-  const extManager = createExtWebviewManager(dom.extensionDetailWebview, eventBus);
+  const extManager = createExtWebviewManager(dom.extensionDetailWebview, eventBus, vsixApi);
 
   function showWelcome() {
     welcomeVisible = true;
@@ -283,7 +286,7 @@ export function mountWireframe(
   wireSidebarVisibility(dom, on);
   wireSidebar(dom, apis, eventBus, on, files, mockFs, extras);
 
-  const { disposeExtManager } = wireReactPanelVisibility(dom, eventBus, on, files);
+  const { disposeExtManager } = wireReactPanelVisibility(dom, eventBus, on, files, extras?.vsixApi);
 
   wireResizeHandle(dom);
 

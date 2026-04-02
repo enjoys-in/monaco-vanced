@@ -37,7 +37,8 @@ export type {
   VSIXLoadedTheme,
   VSIXLoadedIconTheme,
 } from "./types";
-export { VSIXFetcher } from "./fetcher";
+export { VSIXFetcher, OPENVSX_API } from "./fetcher";
+export type { OpenVSXMetadata, OpenVSXSearchResult } from "./fetcher";
 export { VSIXExtractor } from "./extractor";
 export { VSIXRegistry } from "./registry";
 export { VSIXCache } from "./cache";
@@ -118,6 +119,22 @@ export function createVSIXPlugin(config: VSIXConfig = {}): {
     async clearCache() {
       await cache.clear();
       ctx?.emit(VsixEvents.CacheCleared, {});
+    },
+
+    async getMetadata(id: string) {
+      return fetcher.getMetadata(id);
+    },
+
+    async search(query: string, opts = {}) {
+      return fetcher.search(query, opts);
+    },
+
+    async fetchText(url: string) {
+      return fetcher.fetchText(url);
+    },
+
+    get baseUrl() {
+      return fetcher.baseUrl;
     },
   };
 

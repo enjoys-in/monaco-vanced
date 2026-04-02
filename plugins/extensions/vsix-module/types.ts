@@ -106,4 +106,12 @@ export interface VSIXModuleAPI {
   getInstalled(): VSIXManifest[];
   uninstall(id: string): void;
   clearCache(): Promise<void>;
+  /** Fetch extension metadata from Open VSX */
+  getMetadata(id: string): Promise<import("./fetcher").OpenVSXMetadata>;
+  /** Search the Open VSX registry */
+  search(query: string, opts?: { size?: number; offset?: number; category?: string; sortBy?: string; sortOrder?: string }): Promise<import("./fetcher").OpenVSXSearchResult>;
+  /** Fetch a text resource (e.g. README URL) */
+  fetchText(url: string): Promise<string>;
+  /** The base Open VSX API URL */
+  readonly baseUrl: string;
 }

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useTheme } from "../theme";
 import { ExtensionEvents, VsixEvents, MarketplaceEvents } from "@enjoys/monaco-vanced/core/events";
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
+import { OPENVSX_API, type OpenVSXSearchResult } from "@enjoys/monaco-vanced/extensions/vsix-module";
 
 // ── Types ────────────────────────────────────────────────────
 interface ExtEntry {
@@ -16,21 +17,17 @@ interface Props {
   eventBus: InstanceType<typeof EventBus>;
   notificationApi?: { show(opts: { type: string; message: string; duration: number }): void };
   extensionApi?: { enable(id: string): void; disable(id: string): void };
-  vsixApi?: { fetch(id: string): Promise<unknown>; install(pkg: unknown): Promise<void>; uninstall(id: string): void; getInstalled(): { name: string; publisher: string }[] };
+  vsixApi?: {
+    fetch(id: string): Promise<unknown>;
+    install(pkg: unknown): Promise<void>;
+    uninstall(id: string): void;
+    getInstalled(): { name: string; publisher: string }[];
+    search?(query: string, opts?: { size?: number; offset?: number; category?: string; sortBy?: string; sortOrder?: string }): Promise<OpenVSXSearchResult>;
+  };
   marketplaceApi?: { install(id: string): Promise<void> };
 }
 
 // ── API helpers ──────────────────────────────────────────────
-const OPENVSX = "https://open-vsx.org/api";
-
-interface OpenVSXSearchResult {
-  totalSize: number;
-  extensions: {
-    name: string; namespace: string; version: string;
-    displayName?: string; description?: string; downloadCount?: number;
-    averageRating?: number; categories?: string[]; files?: { icon?: string };
-  }[];
-}
 
 function mapEntry(e: OpenVSXSearchResult["extensions"][0]): ExtEntry {
   return {
@@ -93,12 +90,17 @@ export function ExtensionsView({ eventBus, notificationApi, extensionApi, vsixAp
   const fetchExts = useCallback(async (q: string, category?: string) => {
     setLoading(true); setError(null);
     try {
-      const params = new URLSearchParams({ size: "50", sortBy: "downloadCount", sortOrder: "desc" });
-      if (q) params.set("query", q);
-      if (category) params.set("category", category);
-      const res = await fetch(`${OPENVSX}/-/search?${params}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data: OpenVSXSearchResult = await res.json();
+      let data: OpenVSXSearchResult;
+      if (vsixApi?.search) {
+        data = await vsixApi.search(q, { size: 50, sortBy: "downloadCount", sortOrder: "desc", category });
+      } else {
+        const params = new URLSearchParams({ size: "50", sortBy: "downloadCount", sortOrder: "desc" });
+        if (q) params.set("query", q);
+        if (category) params.set("category", category);
+        const res = await fetch(`${OPENVSX_API}/-/search?${params}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        data = await res.json();
+      }
       setExtensions(data.extensions.map(mapEntry));
       setTotal(data.totalSize);
     } catch (err) {
@@ -106,7 +108,7 @@ export function ExtensionsView({ eventBus, notificationApi, extensionApi, vsixAp
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [vsixApi]);
 
   useEffect(() => {
     if (filter === "installed") return;
@@ -129,8 +131,8 @@ export function ExtensionsView({ eventBus, notificationApi, extensionApi, vsixAp
     notificationApi?.show({ type: "info", message: `Installing ${ext.name}…`, duration: 4000 });
     eventBus.emit(MarketplaceEvents.InstallStart, { id: ext.id });
     try {
-      if (marketplaceApi) await marketplaceApi.install(ext.id);
-      else if (vsixApi) { const pkg = await vsixApi.fetch(ext.id); eventBus.emit(VsixEvents.FetchComplete, { id: ext.id }); await vsixApi.install(pkg); }
+      if (vsixApi) { const pkg = await vsixApi.fetch(ext.id); eventBus.emit(VsixEvents.FetchComplete, { id: ext.id }); await vsixApi.install(pkg); }
+      else if (marketplaceApi) await marketplaceApi.install(ext.id);
       setInstalled((prev) => new Set(prev).add(ext.id));
       notificationApi?.show({ type: "success", message: `${ext.name} installed.`, duration: 3000 });
       eventBus.emit(ExtensionEvents.Installed, { id: ext.id, name: ext.name });

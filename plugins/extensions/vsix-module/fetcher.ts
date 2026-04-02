@@ -2,16 +2,20 @@
 
 import { VSIXCache } from "./cache";
 
-const DEFAULT_CDN = "https://open-vsx.org/api";
+/** Open VSX registry base URL (shared across the module) */
+export const OPENVSX_API = "https://open-vsx.org/api";
 
 export class VSIXFetcher {
   private cdnUrl: string;
   private cache: VSIXCache;
 
   constructor(cdnUrl?: string, cache?: VSIXCache) {
-    this.cdnUrl = (cdnUrl ?? DEFAULT_CDN).replace(/\/$/, "");
+    this.cdnUrl = (cdnUrl ?? OPENVSX_API).replace(/\/$/, "");
     this.cache = cache ?? new VSIXCache();
   }
+
+  /** Get the base CDN/API URL */
+  get baseUrl(): string { return this.cdnUrl; }
 
   /** Fetch a VSIX package as ArrayBuffer */
   async fetch(id: string, version?: string): Promise<ArrayBuffer> {
@@ -53,4 +57,81 @@ export class VSIXFetcher {
     }
     return [parts[0], parts.slice(1).join(".")];
   }
+
+  /** Fetch extension metadata from the Open VSX API */
+  async getMetadata(id: string): Promise<OpenVSXMetadata> {
+    const [publisher, name] = this.parseId(id);
+    const url = `${this.cdnUrl}/${encodeURIComponent(publisher)}/${encodeURIComponent(name)}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Failed to fetch metadata for "${id}": HTTP ${res.status}`);
+    return res.json();
+  }
+
+  /** Search the Open VSX registry */
+  async search(query: string, opts: { size?: number; offset?: number; category?: string; sortBy?: string; sortOrder?: string } = {}): Promise<OpenVSXSearchResult> {
+    const params = new URLSearchParams({ query });
+    if (opts.size) params.set("size", String(opts.size));
+    if (opts.offset) params.set("offset", String(opts.offset));
+    if (opts.category) params.set("category", opts.category);
+    if (opts.sortBy) params.set("sortBy", opts.sortBy);
+    if (opts.sortOrder) params.set("sortOrder", opts.sortOrder);
+    const url = `${this.cdnUrl}/-/search?${params}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Search failed: HTTP ${res.status}`);
+    return res.json();
+  }
+
+  /** Fetch a text resource (e.g. README) by URL */
+  async fetchText(url: string): Promise<string> {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Failed to fetch: HTTP ${res.status}`);
+    return res.text();
+  }
+}
+
+// ── Open VSX API response types ──────────────────────────────
+
+export interface OpenVSXMetadata {
+  name: string;
+  namespace: string;
+  displayName?: string;
+  version: string;
+  description?: string;
+  downloadCount?: number;
+  averageRating?: number;
+  reviewCount?: number;
+  license?: string;
+  categories?: string[];
+  tags?: string[];
+  publishedBy?: { loginName: string };
+  repository?: string;
+  bugs?: string;
+  homepage?: string;
+  files?: {
+    icon?: string;
+    readme?: string;
+    changelog?: string;
+    license?: string;
+    download?: string;
+  };
+  timestamp?: string;
+  allVersions?: Record<string, string>;
+}
+
+export interface OpenVSXSearchResult {
+  totalSize: number;
+  extensions: Array<{
+    name: string;
+    namespace: string;
+    version: string;
+    displayName?: string;
+    description?: string;
+    downloadCount?: number;
+    averageRating?: number;
+    reviewCount?: number;
+    categories?: string[];
+    tags?: string[];
+    files?: { icon?: string };
+    timestamp?: string;
+  }>;
 }
