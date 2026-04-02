@@ -141,7 +141,7 @@ import {
   DecorationEvents, SnippetEvents, ProfilerEvents, TaskEvents, TestEvents,
   CrashEvents, SecurityEvents, AuditEvents, CollabEvents, ReviewEvents,
   NotebookEvents, GraphEvents, PredictEvents, PerformanceEvents, AiEvents,
-  IndexSymbolEvents, LspEvents, ContextEngineEvents,
+  IndexSymbolEvents, LspEvents, ContextEngineEvents, GitEvents,
 } from "@enjoys/monaco-vanced/core/events";
 
 // ── Builtin theme definitions for registration ───────────────
@@ -377,7 +377,9 @@ const { plugin: embedPlugin, api: embedApi } = createEmbedPlugin();
 const { plugin: apiStabilityPlugin, api: apiStabilityApi } = createAPIStabilityPlugin();
 const { plugin: auditPlugin, api: auditApi } = createAuditPlugin();
 const { plugin: billingPlugin, api: billingApi } = createBillingPlugin();
-const { plugin: contextEnginePlugin, api: contextEngineApi } = createContextEnginePlugin();
+const { plugin: contextEnginePlugin, api: contextEngineApi } = createContextEnginePlugin({
+  lazyLoad: true,
+});
 const { plugin: policyPlugin, api: policyApi } = createPolicyPlugin();
 const { plugin: realtimePlugin, api: realtimeApi } = createRealtimePlugin();
 const { plugin: saasTenantPlugin, api: saasTenantApi } = createSaasTenantPlugin();
@@ -724,8 +726,35 @@ async function bootstrap() {
   // Status Bar — fully dynamic
   // ══════════════════════════════════════════════════════════
 
-  statusbarApi.register({ id: "branch", label: "$(git-branch) main", alignment: "left", priority: 100, tooltip: "main (Git Branch) — Click to Checkout" });
-  statusbarApi.register({ id: "sync", label: "$(sync) 0↓ 0↑", alignment: "left", priority: 95, tooltip: "Synchronize Changes — 0 pending pull, 0 pending push" });
+  // ── Detect .git directory for real branch info ───────────
+  const gitHead = mockFs.readFile(".git/HEAD");
+  const isGitRepo = gitHead !== null;
+  let currentBranch = "main";
+  if (isGitRepo && gitHead) {
+    // Parse "ref: refs/heads/<branch>\n" format
+    const match = gitHead.match(/^ref:\s+refs\/heads\/(.+)/);
+    if (match) currentBranch = match[1].trim();
+  }
+
+  if (isGitRepo) {
+    statusbarApi.register({ id: "branch", label: `$(git-branch) ${currentBranch}`, alignment: "left", priority: 100, tooltip: `${currentBranch} (Git Branch) — Click to Checkout` });
+    statusbarApi.register({ id: "sync", label: "$(sync) 0↓ 0↑", alignment: "left", priority: 95, tooltip: "Synchronize Changes — 0 pending pull, 0 pending push" });
+  }
+
+  // React to branch changes from git plugin
+  eventBus.on(GitEvents.BranchChange, (p: unknown) => {
+    const { branch } = p as { branch: string };
+    currentBranch = branch;
+    if (isGitRepo) {
+      // Update .git/HEAD in mock-fs to keep in sync
+      mockFs.writeFile(".git/HEAD", `ref: refs/heads/${branch}\n`);
+      statusbarApi.update("branch", {
+        label: `$(git-branch) ${branch}`,
+        tooltip: `${branch} (Git Branch) — Click to Checkout`,
+      });
+    }
+  });
+
   statusbarApi.register({ id: "errors", label: "$(error) 0  $(warning) 0", alignment: "left", priority: 90, tooltip: "No Problems — Click to Toggle Problems Panel", visible: false });
   statusbarApi.register({ id: "line-col", label: "Ln 1, Col 1", alignment: "right", priority: 100, tooltip: "Go to Line/Column", visible: false });
   statusbarApi.register({ id: "selection", label: "", alignment: "right", priority: 95, visible: false, tooltip: "Characters Selected" });
@@ -1616,22 +1645,44 @@ const actions: monaco.editor.IActionDescriptor[] = [
     if (count > 0) console.log(`[indexer] ${path}: ${count} symbols`);
   });
 
-  // ── 34. Context Engine — register demo languages ──────────
-  contextEngineApi.registerLanguage("typescript", "TypeScript");
-  contextEngineApi.registerLanguage("javascript", "JavaScript");
-  contextEngineApi.registerLanguage("css", "CSS");
-  contextEngineApi.registerLanguage("html", "HTML");
-  contextEngineApi.registerLanguage("json", "JSON");
-  contextEngineApi.registerLanguage("markdown", "Markdown");
-  // Register editor context as provider data
-  contextEngineApi.registerProviderData("typescript", "symbols", {
-    source: "indexer",
-    getSymbols: () => indexerApi.isReady() ? indexerApi.query({ query: "" }) : [],
+  // ── 34. Context Engine — lazy CDN loading per-language ──
+  // Languages are loaded on-demand when a file is opened and LSP is NOT connected.
+  // The plugin listens to EditorEvents.LanguageChange internally and fetches
+  // only the providers for that specific language from the CDN.
+
+  // Also trigger on initial model (in case a file is already open at boot)
+  const initialModel = ide.editor.getModel();
+  if (initialModel) {
+    contextEngineApi.loadLanguage(initialModel.getLanguageId()).catch(() => {});
+  }
+
+  // Trigger on model switch (tab change / new file open)
+  ide.editor.onDidChangeModel((e) => {
+    if (e.newModelUrl) {
+      const model = ide.monaco.editor.getModel(e.newModelUrl);
+      if (model) {
+        contextEngineApi.loadLanguage(model.getLanguageId()).catch(() => {});
+      }
+    }
   });
-  contextEngineApi.registerProviderData("typescript", "editor", {
-    source: "monaco",
-    getModel: () => ide.editor.getModel(),
-    getSelection: () => ide.editor.getSelection(),
+
+  eventBus.on(ContextEngineEvents.LazyFetchStarted, (p: unknown) => {
+    const { language } = p as { language: string };
+    console.log(`[context-engine] Fetching CDN packs for ${language}…`);
+    statusbarApi.register({ id: "ctx-loading", label: `$(loading~spin) ${language}`, alignment: "right", priority: 3, tooltip: `Loading context: ${language}` });
+  });
+  eventBus.on(ContextEngineEvents.LazyFetchComplete, (p: unknown) => {
+    const { language, providers } = p as { language: string; providers: number };
+    console.log(`[context-engine] Loaded ${providers} providers for ${language}`);
+    statusbarApi.remove("ctx-loading");
+  });
+  eventBus.on(ContextEngineEvents.LazyFetchFailed, (p: unknown) => {
+    const { language, error } = p as { language: string; error: string };
+    console.warn(`[context-engine] CDN fetch failed for ${language}: ${error}`);
+    statusbarApi.remove("ctx-loading");
+  });
+  eventBus.on(ContextEngineEvents.ManifestLoaded, () => {
+    console.log("[context-engine] Manifest loaded from CDN");
   });
   eventBus.on(ContextEngineEvents.LanguageRegistered, (p: unknown) => {
     const { id, name } = p as { id: string; name: string };

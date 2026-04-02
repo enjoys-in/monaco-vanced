@@ -35,6 +35,7 @@ export function renderTree(
 
   for (const node of sorted) {
     if (node.name === ".gitkeep") continue; // hide placeholder files
+    if (node.name === ".git") continue; // hide .git directory (like VS Code)
 
     if (node.isDirectory) {
       const { header, childContainer } = renderFolderItem(node, depth, callbacks);

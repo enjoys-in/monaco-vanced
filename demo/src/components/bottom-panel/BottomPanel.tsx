@@ -340,6 +340,19 @@ export function BottomPanel({ eventBus, files = [] }: BottomPanelProps) {
     return () => { eventBus.off(PanelEvents.BottomToggle, onToggle); };
   }, [eventBus]);
 
+  // Focus a specific tab (e.g. from "Open in Integrated Terminal")
+  useEffect(() => {
+    const onFocusTab = (p: unknown) => {
+      const { tab } = p as { tab: string };
+      if (tab && PANEL_TABS.includes(tab)) {
+        setActiveTab(tab);
+        setVisible(true);
+      }
+    };
+    eventBus.on(PanelEvents.BottomFocusTab, onFocusTab);
+    return () => { eventBus.off(PanelEvents.BottomFocusTab, onFocusTab); };
+  }, [eventBus]);
+
   // Track current file for Outline
   useEffect(() => {
     const onOpen = (p: unknown) => { setCurrentFileUri((p as { uri: string }).uri); };

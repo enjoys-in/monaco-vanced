@@ -3,7 +3,7 @@
 // Exposes a single mount point that returns an HTMLElement.
 
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
-import { ExplorerAction, SettingsEvents, ThemeEvents } from "@enjoys/monaco-vanced/core/events";
+import { ExplorerAction, PanelEvents, SettingsEvents, ThemeEvents } from "@enjoys/monaco-vanced/core/events";
 import type { MockFsAPI } from "../mock-fs";
 import type { TreeNode } from "./ExplorerTypes";
 import type { ExplorerItemCallbacks } from "./ExplorerItem";
@@ -230,6 +230,13 @@ export class Explorer {
       case ExplorerAction.CollapseFolder:
         if (node.isDirectory) this.service.toggleFolder(node.path);
         break;
+      case ExplorerAction.OpenInTerminal: {
+        // Open the bottom panel with Terminal tab focused
+        const dir = node.isDirectory ? node.path : (node.path.includes("/") ? node.path.slice(0, node.path.lastIndexOf("/")) : "");
+        this.options.eventBus?.emit(PanelEvents.BottomToggle, {});
+        this.options.eventBus?.emit(PanelEvents.BottomFocusTab, { tab: "Terminal", cwd: dir || "." });
+        break;
+      }
     }
   }
 

@@ -23,7 +23,9 @@ interface MonacoLsp {
   WebSocketTransport: {
     connectTo(opts: { address: string }): Promise<MonacoWebSocketTransport>;
   };
-  MonacoLspClient: new (transport: MonacoWebSocketTransport) => MonacoLspClientInstance;
+  MonacoLspClient: new (
+    transport: MonacoWebSocketTransport,
+  ) => MonacoLspClientInstance;
 }
 
 interface MonacoWebSocketTransport {
@@ -73,12 +75,14 @@ export class NativeLspClient implements LspClient {
     private editor: monacoNs.editor.IStandaloneCodeEditor | null,
   ) {
     // Access the lsp namespace (available at runtime, not typed)
-    const lsp = (monacoInstance as Record<string, unknown>)["lsp"] as MonacoLsp | undefined;
+    const lsp = (monacoInstance as Record<string, unknown>)["lsp"] as
+      | MonacoLsp
+      | undefined;
     if (!lsp) {
       throw new Error(
         "[lsp-bridge] monaco.lsp is not available. " +
-        "Ensure you are using a Monaco Editor build that includes LSP support. " +
-        "Fall back to mode: 'builtin' or 'custom'.",
+          "Ensure you are using a Monaco Editor build that includes LSP support. " +
+          "Fall back to mode: 'builtin' or 'custom'.",
       );
     }
     this.lsp = lsp;
@@ -116,7 +120,7 @@ export class NativeLspClient implements LspClient {
       // runs initialize/initialized, sends didOpen, handles document sync
       this.nativeClient = new this.lsp.MonacoLspClient(interceptedTransport);
 
-      // Monitor transport state  
+      // Monitor transport state
       rawTransport.state.onChange(() => {
         const transportState = rawTransport.state.value.state;
         if (transportState === "closed") {
@@ -173,10 +177,7 @@ export class NativeLspClient implements LspClient {
 
       originalSetListener((message: LspJsonRpcMessage) => {
         // ── window/showMessage ──
-        if (
-          message.method === LSP_METHODS.showMessage &&
-          message.params
-        ) {
+        if (message.method === LSP_METHODS.showMessage && message.params) {
           const { type, message: text } = message.params as {
             type: number;
             message: string;
@@ -206,17 +207,21 @@ export class NativeLspClient implements LspClient {
         }
 
         // ── window/logMessage ──
-        if (
-          message.method === LSP_METHODS.logMessage &&
-          message.params
-        ) {
+        if (message.method === LSP_METHODS.logMessage && message.params) {
           const { type, message: text } = message.params as {
             type: number;
             message: string;
           };
-          const levelMap: Record<number, string> = { 1: "error", 2: "warn", 3: "info", 4: "log" };
+          const levelMap: Record<number, string> = {
+            1: "error",
+            2: "warn",
+            3: "info",
+            4: "log",
+          };
           const level = levelMap[type] ?? "log";
-          const logFn = (console as unknown as Record<string, (...args: unknown[]) => void>)[level];
+          const logFn = (
+            console as unknown as Record<string, (...args: unknown[]) => void>
+          )[level];
           if (typeof logFn === "function") {
             logFn(`[LSP/${languageId}] ${text}`);
           }
@@ -328,8 +333,14 @@ export class NativeLspClient implements LspClient {
 
   // ── Send scaffold files (additional didOpen for multi-file) ─
 
-  sendDidOpen(uri: string, languageId: string, version: number, text: string): void {
+  sendDidOpen(
+    uri: string,
+    languageId: string,
+    version: number,
+    text: string,
+  ): void {
     if (!this.rawTransport) return;
+    uri = uri.replace("file://", "file://workspace/"); // MonacoLspClient expects plain paths for didOpen
     this.rawTransport.send({
       jsonrpc: "2.0",
       method: LSP_METHODS.didOpen,

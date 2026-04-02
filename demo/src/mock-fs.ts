@@ -1052,6 +1052,22 @@ body {
 }
 `);
 
+  // ── .git directory (simulated git repo) ───────────────────
+
+  fs.writeFile(".git/HEAD", `ref: refs/heads/main\n`);
+  fs.writeFile(".git/config", `[core]
+	repositoryformatversion = 0
+	filemode = true
+	bare = false
+[remote "origin"]
+	url = https://github.com/user/monaco-vanced-demo.git
+	fetch = +refs/heads/*:refs/remotes/origin/*
+[branch "main"]
+	remote = origin
+	merge = refs/heads/main
+`);
+  fs.writeFile(".git/refs/heads/main", "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2\n");
+
   // ── Config files ─────────────────────────────────────────
 
   fs.writeFile(".prettierrc", JSON.stringify({

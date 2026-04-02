@@ -26,4 +26,5 @@ export enum ExplorerAction {
   CollapseAll = "explorer:collapse-all",
   ExpandAll = "explorer:expand-all",
   Refresh = "explorer:refresh",
+  OpenInTerminal = "explorer:open-in-terminal",
 }

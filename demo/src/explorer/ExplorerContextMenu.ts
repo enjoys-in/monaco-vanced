@@ -20,6 +20,7 @@ export type ContextMenuHandler = (action: ExplorerAction, node: TreeNode) => voi
 const FILE_MENU: MenuOption[] = [
   { label: "Open File", icon: openIcon(), action: ExplorerAction.Open },
   { label: "Open to the Side", icon: splitIcon(), action: ExplorerAction.OpenSide, separator: true },
+  { label: "Open in Integrated Terminal", icon: terminalIcon(), action: ExplorerAction.OpenInTerminal, separator: true },
   { label: "Copy Path", icon: copyIcon(), action: ExplorerAction.CopyPath, shortcut: "Shift+Alt+C" },
   { label: "Copy Relative Path", icon: copyIcon(), action: ExplorerAction.CopyRelativePath, shortcut: "Shift+Alt+R" },
   { label: "Copy Content", icon: copyIcon(), action: ExplorerAction.CopyContent, separator: true },
@@ -31,6 +32,7 @@ const FILE_MENU: MenuOption[] = [
 const FOLDER_MENU: MenuOption[] = [
   { label: "New File…", icon: newFileIcon(), action: ExplorerAction.NewFile },
   { label: "New Folder…", icon: newFolderIcon(), action: ExplorerAction.NewFolder, separator: true },
+  { label: "Open in Integrated Terminal", icon: terminalIcon(), action: ExplorerAction.OpenInTerminal, separator: true },
   { label: "Copy Path", icon: copyIcon(), action: ExplorerAction.CopyPath, shortcut: "Shift+Alt+C" },
   { label: "Copy Relative Path", icon: copyIcon(), action: ExplorerAction.CopyRelativePath, separator: true },
   { label: "Rename…", icon: renameIcon(), action: ExplorerAction.Rename, shortcut: "F2" },
@@ -183,4 +185,8 @@ function collapseIcon(): string {
 
 function duplicateIcon(): string {
   return `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 4h8v8H4V4zm1 1v6h6V5H5zM2 2h8v1H3v7H2V2z"/></svg>`;
+}
+
+function terminalIcon(): string {
+  return `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1 3.5l.5-.5h13l.5.5v9l-.5.5h-13l-.5-.5v-9zM2 12h12V4H2v8zm6.146-3.146l-2-2 .708-.708L9.207 8.5l-2.353 2.354-.708-.708 2-2z"/></svg>`;
 }
