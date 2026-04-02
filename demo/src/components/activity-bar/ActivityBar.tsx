@@ -77,7 +77,7 @@ function AccountsPopup({ authApi, eventBus, anchorRect, onClose }: {
   const user = session?.user;
 
   const notify = (type: string, message: string) => {
-    eventBus.emit(NotificationEvents.Show, { type, message, duration: 3000 });
+    eventBus.emit(NotificationEvents.Show, { id: `ab-${Date.now()}`, type, message, duration: 3000 });
   };
 
   const popupStyle: CSSProperties = {
@@ -143,7 +143,7 @@ function SyncToggle({ eventBus }: { eventBus: ActivityBarProps["eventBus"] }) {
     const next = !isOn;
     setIsOn(next);
     localStorage.setItem("monaco-vanced-sync", String(next));
-    eventBus.emit(NotificationEvents.Show, { type: "info", message: next ? "Settings Sync enabled" : "Settings Sync disabled", duration: 3000 });
+    eventBus.emit(NotificationEvents.Show, { id: "sync-toggle", type: "info", message: next ? "Settings Sync enabled" : "Settings Sync disabled", duration: 3000 });
   };
 
   return (

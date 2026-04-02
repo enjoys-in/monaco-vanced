@@ -178,8 +178,13 @@ export function Notifications({ eventBus }: NotificationsProps) {
 
   useEffect(() => {
     const onShow = (p: unknown) => {
-      const n = p as NotificationData;
-      setToasts((prev) => [...prev.filter((t) => t.id !== n.id), n]);
+      const raw = p as Partial<NotificationData>;
+      const n: NotificationData = { ...raw, id: raw.id || `notif-${Date.now()}-${Math.random().toString(36).slice(2, 7)}` } as NotificationData;
+      setToasts((prev) => {
+        // Deduplicate: if same message already visible, skip
+        if (prev.some((t) => t.message === n.message)) return prev;
+        return [...prev.filter((t) => t.id !== n.id), n];
+      });
     };
     const onDismiss = (p: unknown) => {
       const { id } = p as { id: string };

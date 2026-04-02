@@ -566,20 +566,20 @@ function ThemesConfig({ emit, themeApi }: { emit: Emit; themeApi?: ThemeAPI }) {
     if (themeApi) {
       if (theme.remote) {
         setLoading(true);
-        emit(NotificationEvents.Show, { type: "info", message: `Fetching "${theme.name}" from CDN…`, duration: 4000 });
+        emit(NotificationEvents.Show, { id: "theme-apply", type: "info", message: `Fetching "${theme.name}" from CDN…`, duration: 4000 });
       }
       try {
         await themeApi.apply(theme.id);
         setActiveId(theme.id);
         if (theme.remote) {
-          emit(NotificationEvents.Show, { type: "success", message: `Theme "${theme.name}" activated.`, duration: 3000 });
+          emit(NotificationEvents.Show, { id: "theme-apply", type: "success", message: `Theme "${theme.name}" activated.`, duration: 3000 });
         }
       } catch {
         const monacoTheme = theme.type === "light" ? "vs" : theme.type === "contrast" ? "hc-black" : "vs-dark";
         emit(ThemeEvents.Changed, { name: theme.name, type: theme.type, monacoTheme });
         setActiveId(theme.id);
         if (theme.remote) {
-          emit(NotificationEvents.Show, { type: "warning", message: `Failed to fetch "${theme.name}". Using fallback.`, duration: 3000 });
+          emit(NotificationEvents.Show, { id: "theme-apply", type: "warning", message: `Failed to fetch "${theme.name}". Using fallback.`, duration: 3000 });
         }
       } finally {
         setLoading(false);

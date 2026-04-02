@@ -15,7 +15,7 @@ export function WelcomePage({ emit, recentFiles }: { emit: Emit; recentFiles: Fi
   const { tokens: t } = useTheme();
 
   const showAboutDialog = () => {
-    emit(NotificationEvents.Show, { type: "info", message: "Monaco Vanced IDE — v3.0 — Plugin-based Architecture", duration: 4000 });
+    emit(NotificationEvents.Show, { id: "about-dialog", type: "info", message: "Monaco Vanced IDE — v3.0 — Plugin-based Architecture", duration: 4000 });
     emit("dialog:show", {
       title: "About Monaco Vanced",
       body: "Monaco Vanced IDE v3.0\n\nA plugin-based editor built on Monaco Editor with full theming, extensions, filesystem, and language support.\n\nPowered by Bun + Vite 8 + React 19.",
@@ -25,7 +25,7 @@ export function WelcomePage({ emit, recentFiles }: { emit: Emit; recentFiles: Fi
   };
 
   const showDocsDialog = () => {
-    emit(NotificationEvents.Show, { type: "info", message: "Opening documentation…", duration: 2000 });
+    emit(NotificationEvents.Show, { id: "docs-dialog", type: "info", message: "Opening documentation…", duration: 2000 });
     emit("dialog:show", {
       title: "Documentation",
       body: "Monaco Vanced documentation is available at:\n\nhttps://github.com/AkashMondal/monaco-vanced\n\nIncludes guides for plugin development, theming, filesystem adapters, and extension authoring.",
@@ -35,7 +35,7 @@ export function WelcomePage({ emit, recentFiles }: { emit: Emit; recentFiles: Fi
   };
 
   const showWelcomeNotif = () => {
-    emit(NotificationEvents.Show, { type: "info", message: "Welcome to Monaco Vanced IDE! Explore the sidebar, open files, and try the command palette.", duration: 5000 });
+    emit(NotificationEvents.Show, { id: "welcome-notif", type: "info", message: "Welcome to Monaco Vanced IDE! Explore the sidebar, open files, and try the command palette.", duration: 5000 });
   };
 
   return (
@@ -72,7 +72,7 @@ export function WelcomePage({ emit, recentFiles }: { emit: Emit; recentFiles: Fi
                 onClick={() => emit(CommandEvents.Execute, { id: "workbench.action.files.newUntitledFile" })} />
               <ActionRow icon="folder" label="Open Folder…" shortcut="Ctrl+K Ctrl+O"
                 onClick={() => {
-                  emit(NotificationEvents.Show, { type: "info", message: "Open Folder: Not available in browser demo", duration: 3000 });
+                  emit(NotificationEvents.Show, { id: "open-folder", type: "info", message: "Open Folder: Not available in browser demo", duration: 3000 });
                   emit("dialog:show", {
                     title: "Open Folder",
                     body: "The Open Folder feature is not available in the browser demo. In a desktop environment, this would open a native file picker.",
@@ -82,7 +82,7 @@ export function WelcomePage({ emit, recentFiles }: { emit: Emit; recentFiles: Fi
                 }} />
               <ActionRow icon="clone" label="Clone Repository…"
                 onClick={() => {
-                  emit(NotificationEvents.Show, { type: "info", message: "Clone: Not available in browser demo", duration: 3000 });
+                  emit(NotificationEvents.Show, { id: "clone-repo", type: "info", message: "Clone: Not available in browser demo", duration: 3000 });
                   emit("dialog:show", {
                     title: "Clone Repository",
                     body: "Git clone is not available in the browser demo. This feature requires a backend Git service.",
