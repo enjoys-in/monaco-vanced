@@ -7,6 +7,7 @@ import { ContextEngineAPI } from "./api";
 import { convertManifestToProviders, convertTheme, convertGrammar } from "./converters";
 import { ContextEngineEvents, LspEvents, EditorEvents, FileEvents } from "@core/events";
 import { LazyContextLoader } from "./lazy-loader";
+import { registerMonacoProviders } from "./monaco-bridge";
 
 // Re-export interfaces
 export * from "./interfaces";
@@ -22,6 +23,10 @@ export interface ContextEngineConfig {
   lazyLoad?: boolean;
   /** CDN base URL for lazy loading (default: jsdelivr @enjoys/context-engine) */
   cdnBaseUrl?: string;
+  /** LSP server base URL — used for /api/health check before CDN fallback */
+  lspBaseUrl?: string;
+  /** Health check timeout in ms (default: 5 000) */
+  healthTimeoutMs?: number;
 }
 
 export interface ContextEngineModuleAPI {
@@ -44,6 +49,8 @@ export function createContextEnginePlugin(
   const engine = new ContextEngineAPI(storage, providers);
   const lazyLoader = new LazyContextLoader(engine, {
     cdnBaseUrl: config.cdnBaseUrl,
+    lspBaseUrl: config.lspBaseUrl,
+    healthTimeoutMs: config.healthTimeoutMs,
   });
 
   let ctx: PluginContext | null = null;
@@ -84,6 +91,8 @@ export function createContextEnginePlugin(
         (count) => ctx?.emit(ContextEngineEvents.LazyFetchComplete, { language: languageId, providers: count }),
         (error) => ctx?.emit(ContextEngineEvents.LazyFetchFailed, { language: languageId, error }),
         () => ctx?.emit(ContextEngineEvents.ManifestLoaded, {}),
+        () => ctx?.emit(LspEvents.HealthCheckOk, { source: "context-engine" }),
+        () => ctx?.emit(LspEvents.HealthCheckFailed, { source: "context-engine" }),
       );
     },
 
@@ -114,6 +123,8 @@ export function createContextEnginePlugin(
         ctx.on(LspEvents.Disconnected, (payload: unknown) => {
           const { languageId } = payload as { languageId?: string };
           if (languageId) lazyLoader.markLspDisconnected(languageId);
+          // Force re-check health on next request
+          lazyLoader.invalidateHealth();
         }),
       );
 
@@ -123,7 +134,11 @@ export function createContextEnginePlugin(
           const { languageId, language } = payload as { languageId?: string; language?: string };
           const lang = languageId ?? language;
           if (lang) {
-            api.loadLanguage(lang).catch((err) => {
+            api.loadLanguage(lang).then((fetched) => {
+              if (fetched && ctx) {
+                registerMonacoProviders(ctx.monaco, lang, engine);
+              }
+            }).catch((err) => {
               console.warn(`[context-engine] Lazy load failed for ${lang}:`, err);
             });
           }
@@ -137,10 +152,15 @@ export function createContextEnginePlugin(
           if (uri) {
             // Defer to let the model be set in the editor first
             setTimeout(() => {
-              const { editor } = ctx!;
+              const { editor, monaco: m } = ctx!;
               const model = editor.getModel();
               if (model) {
-                api.loadLanguage(model.getLanguageId()).catch(() => {});
+                const lang = model.getLanguageId();
+                api.loadLanguage(lang).then((fetched) => {
+                  if (fetched && ctx) {
+                    registerMonacoProviders(m, lang, engine);
+                  }
+                }).catch(() => {});
               }
             }, 50);
           }

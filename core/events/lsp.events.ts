@@ -27,6 +27,10 @@ export enum LspEvents {
   // ── Server messages (V2 only) ─────────────────────────
   ServerMessage = "lsp:server-message",
 
+  // ── Health check ──────────────────────────────────────
+  HealthCheckOk = "lsp:health-check-ok",
+  HealthCheckFailed = "lsp:health-check-failed",
+
   // ── Liveness ping ─────────────────────────────────────
   PingSuccess = "lsp:ping-success",
   PingTimeout = "lsp:ping-timeout",

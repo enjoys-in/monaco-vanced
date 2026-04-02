@@ -395,6 +395,15 @@ export function wirePlugins(deps: PluginWiringDeps) {
   eventBus.on(ContextEngineEvents.ProviderLoaded, (p: unknown) => { const { language, provider } = p as { language: string; provider: string }; console.log(`[context-engine] Provider loaded: ${provider} for ${language}`); });
 
   // ── 35. LSP Bridge ───────────────────────────────────────
+  eventBus.on(LspEvents.HealthCheckOk, () => {
+    console.log("[lsp] Health check OK — using LSP for language features");
+    apis.statusbar.register({ id: "lsp-health", label: "$(check) LSP", alignment: "right", priority: 4, tooltip: "LSP server healthy" });
+  });
+  eventBus.on(LspEvents.HealthCheckFailed, () => {
+    console.warn("[lsp] Health check failed — falling back to context engine CDN");
+    apis.statusbar.register({ id: "lsp-health", label: "$(warning) LSP offline", alignment: "right", priority: 4, tooltip: "LSP unreachable — using CDN fallback" });
+    setTimeout(() => apis.statusbar.remove("lsp-health"), 8000);
+  });
   eventBus.on(LspEvents.Connected, (p: unknown) => {
     const { languageId } = p as { languageId?: string };
     console.log(`[lsp] Connected${languageId ? ` (${languageId})` : ""}`);

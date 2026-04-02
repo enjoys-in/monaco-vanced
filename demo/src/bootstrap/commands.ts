@@ -148,5 +148,5 @@ export function wireCommands(deps: CommandsDeps) {
     },
   });
   commandApi.register({ id: "monacoVanced.aiStatus", label: "AI: Show Status", handler: () => { notificationApi.show({ type: "info", message: `AI Module Status: ${apis.ai.getStatus()}`, duration: 3000 }); } });
-  commandApi.register({ id: "monacoVanced.toggleCopilot", label: "Copilot: Toggle Chat Panel", handler: () => eventBus.emit("copilot:toggle", {}) });
+  commandApi.register({ id: "monacoVanced.toggleCopilot", label: "Copilot: Toggle Chat Panel", handler: () => eventBus.emit(AiEvents.CopilotToggle, {}) });
 }

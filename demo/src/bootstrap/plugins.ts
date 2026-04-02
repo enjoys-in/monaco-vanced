@@ -267,7 +267,10 @@ const { plugin: testPlugin, api: testApi } = createTestPlugin();
 const { plugin: apiStabilityPlugin, api: apiStabilityApi } = createAPIStabilityPlugin();
 const { plugin: auditPlugin, api: auditApi } = createAuditPlugin();
 const { plugin: billingPlugin, api: billingApi } = createBillingPlugin();
-const { plugin: contextEnginePlugin, api: contextEngineApi } = createContextEnginePlugin({ lazyLoad: true });
+const { plugin: contextEnginePlugin, api: contextEngineApi } = createContextEnginePlugin({
+  lazyLoad: true,
+  lspBaseUrl: "https://monaco-lsp-hub.onrender.com",
+});
 const { plugin: policyPlugin, api: policyApi } = createPolicyPlugin();
 const { plugin: realtimePlugin, api: realtimeApi } = createRealtimePlugin();
 const { plugin: saasTenantPlugin, api: saasTenantApi } = createSaasTenantPlugin();

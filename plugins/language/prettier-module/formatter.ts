@@ -65,11 +65,20 @@ export async function formatWithPrettier(
 
   const baseUrl = prettierUrl ?? DEFAULT_CDN_BASE;
 
-  // Lazy-load both in parallel (each uses its own cache)
-  const [prettier, parserPlugin] = await Promise.all([
+  // Lazy-load core + parser (and estree if needed) in parallel
+  const loads: Promise<unknown>[] = [
     loadPrettierCore(baseUrl),
     loadParserPlugin(parser, baseUrl, parserUrls),
-  ]);
+  ];
+  if (parserNeedsEstree(parser)) {
+    loads.push(loadParserPlugin("estree", baseUrl, parserUrls));
+  }
+
+  const results = await Promise.all(loads);
+  const prettier = results[0] as Record<string, unknown>;
+  const parserPlugin = results[1] as Record<string, unknown>;
+  const plugins: Record<string, unknown>[] = [parserPlugin];
+  if (results[2]) plugins.push(results[2] as Record<string, unknown>);
 
   const formatFn = prettier.format as (
     code: string,
@@ -79,7 +88,7 @@ export async function formatWithPrettier(
   return formatFn(code, {
     ...config,
     parser,
-    plugins: [parserPlugin],
+    plugins,
   });
 }
 
@@ -97,10 +106,14 @@ export async function preloadParserForLanguage(
   if (!parser) return;
   const baseUrl = prettierUrl ?? DEFAULT_CDN_BASE;
   try {
-    await Promise.all([
+    const loads: Promise<unknown>[] = [
       loadPrettierCore(baseUrl),
       loadParserPlugin(parser, baseUrl, parserUrls),
-    ]);
+    ];
+    if (parserNeedsEstree(parser)) {
+      loads.push(loadParserPlugin("estree", baseUrl, parserUrls));
+    }
+    await Promise.all(loads);
   } catch {
     // Silently fail — will retry on actual format
   }
@@ -123,6 +136,9 @@ export function clearCache(): void {
 
 // ── Internals ────────────────────────────────────────────────
 
+/** Parsers that require the estree plugin alongside their own plugin */
+const ESTREE_PARSERS = new Set(["babel", "typescript", "json"]);
+
 function resolveParserUrl(baseUrl: string, parser: string): string {
   const parserFileMap: Record<string, string> = {
     babel: "plugins/babel.mjs",
@@ -133,11 +149,16 @@ function resolveParserUrl(baseUrl: string, parser: string): string {
     markdown: "plugins/markdown.mjs",
     yaml: "plugins/yaml.mjs",
     graphql: "plugins/graphql.mjs",
+    estree: "plugins/estree.mjs",
   };
 
   const file = parserFileMap[parser] ?? `plugins/${parser}.mjs`;
   const base = baseUrl.replace(/\/standalone$/, "");
   return `${base}/${file}`;
+}
+
+function parserNeedsEstree(parser: string): boolean {
+  return ESTREE_PARSERS.has(parser);
 }
 
 async function importModule(url: string): Promise<Record<string, unknown>> {

@@ -12,4 +12,5 @@ export enum AiEvents {
   Explain = "ai:explain",
   Generate = "ai:generate",
   Fix = "ai:fix",
+  CopilotToggle = "copilot:toggle",
 }

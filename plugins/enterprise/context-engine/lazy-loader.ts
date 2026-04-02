@@ -1,19 +1,27 @@
 // ── Context Engine Lazy Loader ─────────────────────────────
 // Fetches language packs from CDN on demand — only when a file is opened
 // for a language that has NO active LSP connection.
+// First checks LSP health; if the server is reachable, defers to LSP.
 
 import type { ContextEngineManifest, ManifestLanguageEntry, LanguageFileMap } from "./interfaces/manifest";
 import type { ContextEngineAPI } from "./api";
+import { checkLspHealth } from "../../language/lsp-bridge-module/health";
 
 const DEFAULT_CDN_BASE = "https://cdn.jsdelivr.net/npm/@enjoys/context-engine/data";
 
 export interface LazyLoaderConfig {
   cdnBaseUrl?: string;
+  /** LSP server base URL — used for /api/health check before CDN fallback */
+  lspBaseUrl?: string;
+  /** Health check timeout in ms (default: 5 000) */
+  healthTimeoutMs?: number;
 }
 
 export class LazyContextLoader {
   private readonly api: ContextEngineAPI;
   private readonly cdnBase: string;
+  private readonly lspBaseUrl: string | null;
+  private readonly healthTimeoutMs: number;
 
   /** Languages with an active LSP connection */
   private readonly lspConnected = new Set<string>();
@@ -25,9 +33,15 @@ export class LazyContextLoader {
   private manifest: ContextEngineManifest | null = null;
   private manifestPromise: Promise<ContextEngineManifest | null> | null = null;
 
+  /** Cached LSP health state (null = not checked yet) */
+  private lspHealthy: boolean | null = null;
+  private healthPromise: Promise<boolean> | null = null;
+
   constructor(api: ContextEngineAPI, config: LazyLoaderConfig = {}) {
     this.api = api;
     this.cdnBase = (config.cdnBaseUrl ?? DEFAULT_CDN_BASE).replace(/\/+$/, "");
+    this.lspBaseUrl = config.lspBaseUrl ?? null;
+    this.healthTimeoutMs = config.healthTimeoutMs ?? 5000;
   }
 
   // ── LSP tracking ────────────────────────────────────────
@@ -49,6 +63,14 @@ export class LazyContextLoader {
   /**
    * Called when a file is opened / language changes.
    * Returns true if a fetch was triggered, false if skipped.
+   *
+   * Flow:
+   *  1. If LSP already connected for this language → skip
+   *  2. If already fetched → skip
+   *  3. If lspBaseUrl configured → check /api/health
+   *     - healthy → skip (LSP will handle it)
+   *     - unhealthy → fall through to CDN
+   *  4. Fetch manifest + language packs from CDN
    */
   async loadForLanguage(
     languageId: string,
@@ -56,12 +78,26 @@ export class LazyContextLoader {
     onComplete?: (providerCount: number) => void,
     onFail?: (error: string) => void,
     onManifestLoaded?: () => void,
+    onHealthOk?: () => void,
+    onHealthFailed?: () => void,
   ): Promise<boolean> {
     // Skip if LSP is handling this language
     if (this.lspConnected.has(languageId)) return false;
 
     // Skip if already fetched
     if (this.fetched.has(languageId)) return false;
+
+    // ── LSP health check (if configured) ──────────────────
+    if (this.lspBaseUrl) {
+      const healthy = await this.checkHealth();
+      if (healthy) {
+        // LSP server is reachable — let it handle language features
+        onHealthOk?.();
+        return false;
+      }
+      // Server unreachable — fall back to CDN
+      onHealthFailed?.();
+    }
 
     // Mark as fetching to prevent duplicate requests
     this.fetched.add(languageId);
@@ -96,6 +132,36 @@ export class LazyContextLoader {
       this.fetched.delete(languageId);
       return false;
     }
+  }
+
+  // ── LSP health check ─────────────────────────────────────
+
+  /**
+   * Check LSP server health. Result is cached for 30 s to avoid
+   * hammering the health endpoint on rapid file switches.
+   */
+  private async checkHealth(): Promise<boolean> {
+    if (!this.lspBaseUrl) return false;
+
+    // Return cached result if still fresh
+    if (this.lspHealthy !== null) return this.lspHealthy;
+
+    // Deduplicate concurrent health checks
+    if (!this.healthPromise) {
+      this.healthPromise = checkLspHealth(this.lspBaseUrl, this.healthTimeoutMs).then((ok) => {
+        this.lspHealthy = ok;
+        // Expire after 30 s so we re-check periodically
+        setTimeout(() => { this.lspHealthy = null; this.healthPromise = null; }, 30_000);
+        return ok;
+      });
+    }
+    return this.healthPromise;
+  }
+
+  /** Force re-check on next request (called when LspEvents.Disconnected fires) */
+  invalidateHealth(): void {
+    this.lspHealthy = null;
+    this.healthPromise = null;
   }
 
   // ── Manifest ────────────────────────────────────────────
@@ -167,5 +233,7 @@ export class LazyContextLoader {
     this.fetched.clear();
     this.manifest = null;
     this.manifestPromise = null;
+    this.lspHealthy = null;
+    this.healthPromise = null;
   }
 }

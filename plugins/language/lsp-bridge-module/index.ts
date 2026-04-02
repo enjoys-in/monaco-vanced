@@ -463,3 +463,4 @@ export { LspProviderBridge } from "./providers/bridge";
 export { LspConnectionManager } from "./connection";
 export { hasLSPSupport, buildLSPWebSocketUrl, LSP_LANGUAGES } from "./languages";
 export { LSP_METHODS } from "./protocol";
+export { checkLspHealth } from "./health";

@@ -320,7 +320,7 @@ export function buildSearchView(ctx: ViewContext): HTMLElement {
         return;
       }
 
-      const symbols = ctx.indexerApi.query({ name: q });
+      const symbols = ctx.indexerApi.query({ query: q });
       if (!symbols.length) {
         emptyState.style.display = "flex";
         emptyText.textContent = `No symbols found for "${q}"`;

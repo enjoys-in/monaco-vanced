@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { useTheme } from "../theme";
-import { SidebarEvents, SettingsEvents, NotificationEvents } from "@enjoys/monaco-vanced/core/events";
+import { SidebarEvents, SettingsEvents, NotificationEvents, AiEvents } from "@enjoys/monaco-vanced/core/events";
 
 // ── Icon data ────────────────────────────────────────────────
 const ICONS = [
@@ -238,7 +238,7 @@ export function ActivityBarBottom({ eventBus, authApi }: ActivityBarProps) {
             } else if (icon.id === "accounts") {
               setAccountsAnchor(e.currentTarget.getBoundingClientRect());
             } else if (icon.id === "copilot") {
-              eventBus.emit("copilot:toggle" as string, {});
+              eventBus.emit(AiEvents.CopilotToggle, {});
             }
           }}
         />
