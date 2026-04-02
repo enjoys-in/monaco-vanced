@@ -23,7 +23,7 @@ export interface SidebarProps {
   extensionApi?: { enable(id: string): void; disable(id: string): void };
   vsixApi?: { fetch(id: string): Promise<unknown>; install(pkg: unknown): Promise<void>; uninstall(id: string): void; getInstalled(): { name: string; publisher: string }[]; search?(query: string, opts?: Record<string, unknown>): Promise<unknown> };
   marketplaceApi?: { install(id: string): Promise<void> };
-  indexerApi?: { query(q: { query: string }): { name: string; kind: string; path: string; line: number; column: number }[]; isReady(): boolean };
+  indexerApi?: { query(q: { query: string; kind?: string | string[]; path?: string; limit?: number }): { name: string; kind: string; path: string; line: number; column: number }[]; getFileSymbols(path: string): { name: string; kind: string; path: string; line: number; column: number }[]; isReady(): boolean };
   /** Mock FS for the explorer view */
   mockFs?: MockFsAPI;
   /** Icon API for file/folder icons */

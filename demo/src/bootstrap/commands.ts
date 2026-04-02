@@ -168,7 +168,7 @@ export function wireCommands(deps: CommandsDeps) {
     id: "monacoVanced.addFileToChat",
     label: "Add File to Chat",
     handler: () => {
-      const editor = (window as Record<string, unknown>).editor as import("monaco-editor").editor.IStandaloneCodeEditor | undefined;
+      const editor = window.editor;
       const model = editor?.getModel();
       if (model) {
         const uri = model.uri.path.replace(/^\/+/, "");

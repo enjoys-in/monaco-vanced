@@ -12,7 +12,7 @@ interface Props {
   eventBus: InstanceType<typeof EventBus>;
   files: FileEntry[];
   notificationApi?: { show(opts: { type: string; message: string; duration: number }): void };
-  indexerApi?: { query(q: { query: string }): { name: string; kind: string; path: string; line: number; column: number }[]; isReady(): boolean };
+  indexerApi?: { query(q: { query: string; kind?: string | string[]; path?: string; limit?: number }): { name: string; kind: string; path: string; line: number; column: number }[]; getFileSymbols(path: string): { name: string; kind: string; path: string; line: number; column: number }[]; isReady(): boolean };
 }
 
 function esc(s: string): string {
@@ -359,9 +359,13 @@ export function SearchView({ eventBus, files, notificationApi, indexerApi }: Pro
                   </div>
                   {syms.slice(0, 20).map((sym, i) => {
                     const kindColors: Record<string, string> = {
-                      function: "#dcdcaa", class: "#4ec9b0", interface: "#4ec9b0",
-                      variable: "#9cdcfe", method: "#dcdcaa", property: "#9cdcfe",
-                      enum: "#b5cea8", type: "#4ec9b0", constant: "#569cd6",
+                      file: "#d4d4d4", module: "#c586c0", namespace: "#c586c0", package: "#c586c0",
+                      class: "#4ec9b0", method: "#dcdcaa", property: "#9cdcfe", field: "#9cdcfe",
+                      constructor: "#dcdcaa", enum: "#b5cea8", interface: "#4ec9b0", function: "#dcdcaa",
+                      variable: "#9cdcfe", constant: "#569cd6", string: "#ce9178", number: "#b5cea8",
+                      boolean: "#569cd6", array: "#9cdcfe", object: "#4ec9b0", key: "#9cdcfe",
+                      null: "#569cd6", enummember: "#b5cea8", struct: "#4ec9b0", event: "#dcdcaa",
+                      operator: "#d4d4d4", typeparameter: "#4ec9b0", type: "#4ec9b0",
                     };
                     const kc = kindColors[sym.kind.toLowerCase()] ?? t.fg;
                     return (

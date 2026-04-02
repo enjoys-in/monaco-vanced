@@ -50,5 +50,20 @@ declare global {
     engine: InstanceType<typeof PluginEngine>;
     /** Shared event bus (emit/on cross-plugin events) */
     eventBus: InstanceType<typeof EventBus>;
+    /** Dev-only: all plugin APIs */
+    __apis: Record<string, unknown>;
+    /** Dev-only: concurrency API */
+    __concurrencyApi: unknown;
+    /** Dev-only: streaming API */
+    __streamingApi: unknown;
+    /** Dev-only: worker API */
+    __workerApi: unknown;
+    /** Dev-only: explorer API */
+    __explorerApi: {
+      newFile(): void;
+      newFolder(): void;
+      collapseAll(): void;
+      refresh(): void;
+    };
   }
 }

@@ -114,7 +114,7 @@ export function buildReactShell(
     statusbarApi?: { getItems(align: "left" | "right"): { id: string; label: string; tooltip?: string; alignment?: "left" | "right"; command?: string; visible?: boolean }[] };
     contextMenuApi?: { dismiss(): void };
     aiApi?: { chat(messages: { role: string; content: string }[], opts?: Record<string, unknown>): Promise<{ content: string; metadata?: Record<string, unknown> }>; abort(): void; getStatus(): string };
-    indexerApi?: { query(q: { name?: string; kind?: string; file?: string }): { name: string; kind: string; path: string; line: number; column: number }[]; getFileSymbols(path: string): { name: string; kind: string; path: string; line: number; column: number }[]; isReady(): boolean };
+    indexerApi?: { query(q: { query: string; kind?: string | string[]; path?: string; limit?: number }): { name: string; kind: string; path: string; line: number; column: number }[]; getFileSymbols(path: string): { name: string; kind: string; path: string; line: number; column: number }[]; isReady(): boolean };
     files?: { uri: string; name: string }[];
   },
 ): DOMRefs {

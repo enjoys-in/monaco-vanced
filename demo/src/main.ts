@@ -238,7 +238,7 @@ async function bootstrap() {
   });
 
   // ── 17. Dev console exposure ─────────────────────────────
-  (window as Record<string, unknown>).__apis = pluginApis;
+  window.__apis = pluginApis;
 
   pluginApis.notification.show({
     type: "info",

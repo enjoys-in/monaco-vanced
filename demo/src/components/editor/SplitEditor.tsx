@@ -29,9 +29,7 @@ export function SplitEditor({ eventBus }: SplitEditorProps) {
   const resizing = useRef(false);
 
   const relayoutPrimary = useCallback(() => {
-    const ed = (window as Record<string, unknown>).editor as
-      import("monaco-editor").editor.IStandaloneCodeEditor | undefined;
-    ed?.layout();
+    window.editor?.layout();
   }, []);
 
   // ── Listen for LayoutEvents.Split ──────────────────────────
@@ -113,14 +111,12 @@ export function SplitEditor({ eventBus }: SplitEditorProps) {
 
       const monacoUri = monaco.Uri.parse(`file:///${split.uri}`);
       const model = monaco.editor.getModel(monacoUri)
-        ?? ((window as Record<string, unknown>).editor as import("monaco-editor").editor.IStandaloneCodeEditor | undefined)?.getModel()
+        ?? window.editor?.getModel()
         ?? null;
 
       if (editorRef.current) editorRef.current.dispose();
 
-      const primary = (window as Record<string, unknown>).editor as
-        import("monaco-editor").editor.IStandaloneCodeEditor | undefined;
-      const opts = primary?.getOptions();
+      const opts = window.editor?.getOptions();
 
       const ed = monaco.editor.create(secondaryRef.current, {
         model,

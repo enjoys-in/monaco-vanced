@@ -154,7 +154,7 @@ export function ExplorerView({ fs, eventBus, rootLabel = "MONACO-VANCED", onNoti
   }, [svc, fs]);
 
   // Expose for toolbar buttons
-  (window as any).__explorerApi = {
+  window.__explorerApi = {
     newFile: () => { const p = resolveNewItemParent(); svc?.startInlineInput(p, "file", p ? p.split("/").length + 1 : 1); },
     newFolder: () => { const p = resolveNewItemParent(); svc?.startInlineInput(p, "folder", p ? p.split("/").length + 1 : 1); },
     collapseAll: () => svc?.collapseAll(),

@@ -4,7 +4,7 @@
 import * as monaco from "monaco-editor";
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
 import type { MonacoVancedInstance } from "@enjoys/monaco-vanced/core/facade";
-import { GitEvents } from "@enjoys/monaco-vanced/core/events";
+import { GitEvents, SidebarEvents } from "@enjoys/monaco-vanced/core/events";
 import type { MockFsAPI } from "../mock-fs";
 import type { PluginApis } from "./plugins";
 
@@ -48,6 +48,7 @@ export function wireStatusBar(deps: StatusBarDeps) {
 
   // ── Static status bar items ──────────────────────────────
   statusbarApi.register({ id: "errors", label: "$(error) 0  $(warning) 0", alignment: "left", priority: 90, tooltip: "No Problems — Click to Toggle Problems Panel", visible: false });
+  statusbarApi.register({ id: "symbol-count", label: "", alignment: "left", priority: 85, tooltip: "Symbol Index — Click to Search Symbols", visible: false, command: "sidebar:search-symbols" });
   statusbarApi.register({ id: "line-col", label: "Ln 1, Col 1", alignment: "right", priority: 100, tooltip: "Go to Line/Column", visible: false });
   statusbarApi.register({ id: "selection", label: "", alignment: "right", priority: 95, visible: false, tooltip: "Characters Selected" });
   statusbarApi.register({ id: "spaces", label: "Spaces: 2", alignment: "right", priority: 80, tooltip: "Select Indentation — Spaces: 2", visible: false });
@@ -135,4 +136,34 @@ export function wireStatusBar(deps: StatusBarDeps) {
   monaco.editor.onDidChangeMarkers(() => { updateDiagnostics(); });
   updateDiagnostics();
   updateModelMeta();
+
+  // ── Symbol count status bar item ─────────────────────────
+  const indexerApi = apis.indexer;
+  function updateSymbolCount() {
+    if (!indexerApi?.isReady()) return;
+    const model = ide.editor.getModel();
+    if (!model) {
+      statusbarApi.update("symbol-count", { visible: false });
+      return;
+    }
+    const filePath = model.uri.path.replace(/^\/+/, "");
+    const langId = model.getLanguageId();
+    const symbols = indexerApi.getFileSymbols(filePath);
+    const count = symbols.length;
+    statusbarApi.update("symbol-count", {
+      label: `[${langId} Importer]: Symbol: ${count}`,
+      tooltip: `${count} symbol${count !== 1 ? "s" : ""} in ${filePath} — Click to Search Symbols`,
+      visible: count > 0,
+    });
+  }
+  ide.editor.onDidChangeModel(() => { updateSymbolCount(); });
+
+  // Register command to open search view with symbols tab
+  if (apis.command) {
+    apis.command.register({
+      id: "sidebar:search-symbols",
+      label: "Search Symbols",
+      handler: () => { eventBus.emit(SidebarEvents.ViewActivate, { viewId: "search" }); },
+    });
+  }
 }

@@ -325,7 +325,7 @@ export function wirePlugins(deps: PluginWiringDeps) {
   apis.featureFlag.register({ key: "preview.markdown", defaultValue: true });
 
   // ── 27. Concurrency ──────────────────────────────────────
-  (window as Record<string, unknown>).__concurrencyApi = apis.concurrency;
+  window.__concurrencyApi = apis.concurrency;
 
   // ── 28. SaaS Tenant ──────────────────────────────────────
   apis.saasTenant.setTenant({
@@ -334,7 +334,7 @@ export function wirePlugins(deps: PluginWiringDeps) {
   });
 
   // ── 29. Streaming ────────────────────────────────────────
-  (window as Record<string, unknown>).__streamingApi = apis.streaming;
+  window.__streamingApi = apis.streaming;
 
   // ── 30. Fallback ─────────────────────────────────────────
   apis.fallback.register("ai-provider", [
@@ -349,7 +349,7 @@ export function wirePlugins(deps: PluginWiringDeps) {
   }
 
   // ── 32. Worker ───────────────────────────────────────────
-  (window as Record<string, unknown>).__workerApi = apis.worker;
+  window.__workerApi = apis.worker;
 
   // ── 33. Indexer ──────────────────────────────────────────
   for (const file of DEMO_FILES) apis.indexer.indexFile(file.uri, file.content, file.language).catch(() => {});

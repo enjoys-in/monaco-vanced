@@ -93,7 +93,7 @@ export function wireSidebar(
     btn.addEventListener("mouseenter", () => { btn.style.background = "rgba(255,255,255,0.08)"; btn.style.color = C.fg; });
     btn.addEventListener("mouseleave", () => { btn.style.background = "transparent"; btn.style.color = C.fgDim; });
     btn.addEventListener("click", () => {
-      const explorerApi = (window as any).__explorerApi;
+      const explorerApi = window.__explorerApi;
       if (viewId === "explorer" && explorerApi) {
         if (title === "New File") explorerApi.newFile();
         else if (title === "New Folder") explorerApi.newFolder();
