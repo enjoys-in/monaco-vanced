@@ -82,20 +82,30 @@ export class LazyContextLoader {
     onHealthFailed?: () => void,
   ): Promise<boolean> {
     // Skip if LSP is handling this language
-    if (this.lspConnected.has(languageId)) return false;
+    if (this.lspConnected.has(languageId)) {
+      console.debug(`[lazy-loader] Skip ${languageId} — LSP connected`);
+      return false;
+    }
 
     // Skip if already fetched
-    if (this.fetched.has(languageId)) return false;
+    if (this.fetched.has(languageId)) {
+      console.debug(`[lazy-loader] Skip ${languageId} — already fetched`);
+      return false;
+    }
+
+    console.debug(`[lazy-loader] loadForLanguage(${languageId}) — checking health…`);
 
     // ── LSP health check (if configured) ──────────────────
     if (this.lspBaseUrl) {
       const healthy = await this.checkHealth();
       if (healthy) {
         // LSP server is reachable — let it handle language features
+        console.debug(`[lazy-loader] LSP healthy — deferring ${languageId} to LSP`);
         onHealthOk?.();
         return false;
       }
       // Server unreachable — fall back to CDN
+      console.debug(`[lazy-loader] LSP unhealthy — falling back to CDN for ${languageId}`);
       onHealthFailed?.();
     }
 
@@ -144,11 +154,17 @@ export class LazyContextLoader {
     if (!this.lspBaseUrl) return false;
 
     // Return cached result if still fresh
-    if (this.lspHealthy !== null) return this.lspHealthy;
+    if (this.lspHealthy !== null) {
+      console.debug(`[lazy-loader] health (cached): ${this.lspHealthy}`);
+      return this.lspHealthy;
+    }
 
     // Deduplicate concurrent health checks
     if (!this.healthPromise) {
+      const url = `${this.lspBaseUrl.replace(/\/+$/, "")}/api/health`;
+      console.debug(`[lazy-loader] health check → ${url}`);
       this.healthPromise = checkLspHealth(this.lspBaseUrl, this.healthTimeoutMs).then((ok) => {
+        console.debug(`[lazy-loader] health result: ${ok}`);
         this.lspHealthy = ok;
         // Expire after 30 s so we re-check periodically
         setTimeout(() => { this.lspHealthy = null; this.healthPromise = null; }, 30_000);
@@ -188,10 +204,15 @@ export class LazyContextLoader {
   private async fetchManifest(): Promise<ContextEngineManifest | null> {
     try {
       const url = `${this.cdnBase}/manifest.json`;
+      console.debug(`[lazy-loader] fetching manifest → ${url}`);
       const res = await fetch(url);
-      if (!res.ok) return null;
+      if (!res.ok) {
+        console.warn(`[lazy-loader] manifest fetch failed: ${res.status} ${res.statusText}`);
+        return null;
+      }
       return (await res.json()) as ContextEngineManifest;
-    } catch {
+    } catch (err) {
+      console.warn(`[lazy-loader] manifest fetch error:`, err);
       return null;
     }
   }

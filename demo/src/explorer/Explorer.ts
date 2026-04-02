@@ -3,7 +3,7 @@
 // Exposes a single mount point that returns an HTMLElement.
 
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
-import { ExplorerAction, PanelEvents, SettingsEvents, ThemeEvents } from "@enjoys/monaco-vanced/core/events";
+import { ExplorerAction, PanelEvents, SettingsEvents, ThemeEvents, AiEvents } from "@enjoys/monaco-vanced/core/events";
 import type { MockFsAPI } from "../mock-fs";
 import type { TreeNode } from "./ExplorerTypes";
 import type { ExplorerItemCallbacks } from "./ExplorerItem";
@@ -235,6 +235,20 @@ export class Explorer {
         const dir = node.isDirectory ? node.path : (node.path.includes("/") ? node.path.slice(0, node.path.lastIndexOf("/")) : "");
         this.options.eventBus?.emit(PanelEvents.BottomToggle, {});
         this.options.eventBus?.emit(PanelEvents.BottomFocusTab, { tab: "Terminal", cwd: dir || "." });
+        break;
+      }
+      case ExplorerAction.AddFileToChat: {
+        if (!node.isDirectory) {
+          this.options.eventBus?.emit(AiEvents.AttachFile, { uri: node.path, name: node.name });
+          this.options.eventBus?.emit(AiEvents.OpenChat, {});
+        }
+        break;
+      }
+      case ExplorerAction.AddFolderToChat: {
+        if (node.isDirectory) {
+          this.options.eventBus?.emit(AiEvents.AttachFolder, { uri: node.path, name: node.name });
+          this.options.eventBus?.emit(AiEvents.OpenChat, {});
+        }
         break;
       }
     }

@@ -139,8 +139,7 @@ export type { SyncModuleAPI, SyncConfig, SyncStatus } from "@plugins/scm/sync-mo
 // ── Plugins: Language ────────────────────────────────────────
 export { createLanguageDetectionPlugin, detectLanguage } from "@plugins/language/language-detection";
 
-export { createContextPlugin } from "@plugins/language/context-module";
-export type { ContextModuleOptions } from "@plugins/language/context-module/types";
+ 
 
 export { createDiagnosticsPlugin } from "@plugins/language/diagnostics-module";
 export type { Diagnostic, DiagnosticCounts } from "@plugins/language/diagnostics-module/types";

@@ -150,17 +150,21 @@ export function createContextEnginePlugin(
         ctx.on(FileEvents.Open, (payload: unknown) => {
           const { uri } = payload as { uri?: string };
           if (uri) {
+            console.debug(`[context-engine] FileEvents.Open → ${uri}`);
             // Defer to let the model be set in the editor first
             setTimeout(() => {
               const { editor, monaco: m } = ctx!;
               const model = editor.getModel();
               if (model) {
                 const lang = model.getLanguageId();
+                console.debug(`[context-engine] detected language: ${lang}`);
                 api.loadLanguage(lang).then((fetched) => {
                   if (fetched && ctx) {
                     registerMonacoProviders(m, lang, engine);
                   }
                 }).catch(() => {});
+              } else {
+                console.debug(`[context-engine] no model found after FileEvents.Open for ${uri}`);
               }
             }, 50);
           }

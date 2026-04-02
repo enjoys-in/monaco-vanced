@@ -17,11 +17,16 @@ export interface TabProps {
   onClick: () => void;
   onClose: () => void;
   onContextMenu: (x: number, y: number) => void;
+  onDragStart: (uri: string) => void;
+  onDragOver: (uri: string) => void;
+  onDragEnd: () => void;
+  dragOverUri?: string | null;
 }
 
 export function Tab({
-  label, isActive, isDirty, isPinned, isSpecial, isDeleted,
+  uri, label, isActive, isDirty, isPinned, isSpecial, isDeleted,
   iconApi, onClick, onClose, onContextMenu,
+  onDragStart, onDragOver, onDragEnd, dragOverUri,
 }: TabProps) {
   const { tokens: t } = useTheme();
   const [hovered, setHovered] = useState(false);
@@ -37,24 +42,30 @@ export function Tab({
   }, [onClose]);
 
   const showClose = hovered || isActive;
-  const showDot = isDirty && !hovered && !isActive;
+  const showDirtyDot = isDirty && !hovered;
+  const isDragTarget = dragOverUri === uri;
 
   return (
     <div
+      draggable
       onClick={onClick}
       onContextMenu={handleCtx}
       onAuxClick={handleAux}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", uri); onDragStart(uri); }}
+      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; onDragOver(uri); }}
+      onDragEnd={onDragEnd}
       style={{
         display: "flex", alignItems: "center", gap: 6,
-        padding: "0 4px 0 12px", height: "100%", cursor: "pointer",
+        padding: "0 4px 0 12px", height: "100%", cursor: "grab",
         borderRight: `1px solid ${t.border}`, fontSize: 13,
         whiteSpace: "nowrap", minWidth: 0, position: "relative",
         background: isActive ? t.tabActiveBg : hovered ? t.hover : t.tabInactiveBg,
         color: isActive ? t.fgBright : t.fgDim,
         borderTop: isActive ? `2px solid ${t.accent}` : "2px solid transparent",
         borderBottom: isActive ? `1px solid ${t.tabActiveBg}` : "1px solid transparent",
+        borderLeft: isDragTarget ? `2px solid ${t.accent}` : "2px solid transparent",
         transition: "background .1s", userSelect: "none",
       }}
     >
@@ -72,8 +83,8 @@ export function Tab({
         width: 20, height: 20, display: "flex", alignItems: "center",
         justifyContent: "center", flexShrink: 0, marginLeft: "auto",
       }}>
-        {showClose && <CloseBtn color={t.fgDim} onClick={(e) => { e.stopPropagation(); onClose(); }} />}
-        {showDot && <span style={{ width: 8, height: 8, borderRadius: "50%", background: t.fg }} />}
+        {showClose && <CloseBtn color={isDirty ? t.fg : t.fgDim} onClick={(e) => { e.stopPropagation(); onClose(); }} />}
+        {showDirtyDot && <span style={{ width: 8, height: 8, borderRadius: "50%", background: t.fg }} />}
       </span>
     </div>
   );

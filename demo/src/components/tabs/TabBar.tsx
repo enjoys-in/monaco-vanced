@@ -34,6 +34,8 @@ export function TabBar({ eventBus, iconApi, onActiveChange }: TabBarProps) {
   const [tabs, setTabs] = useState<TabEntry[]>([]);
   const [activeUri, setActiveUri] = useState<string | null>(null);
   const [ctxMenu, setCtxMenu] = useState<CtxMenuState | null>(null);
+  const [dragUri, setDragUri] = useState<string | null>(null);
+  const [dragOverUri, setDragOverUri] = useState<string | null>(null);
 
   const tabsRef = useRef(tabs);
   const activeRef = useRef(activeUri);
@@ -137,6 +139,47 @@ export function TabBar({ eventBus, iconApi, onActiveChange }: TabBarProps) {
     [eventBus],
   );
 
+  // ── Move tab position ──────────────────────────────────────
+
+  const moveToFirst = useCallback((uri: string) => {
+    setTabs((prev) => {
+      const idx = prev.findIndex((t) => t.uri === uri);
+      if (idx <= 0) return prev;
+      const tab = prev[idx];
+      return [tab, ...prev.filter((t) => t.uri !== uri)];
+    });
+  }, []);
+
+  const moveToLast = useCallback((uri: string) => {
+    setTabs((prev) => {
+      const idx = prev.findIndex((t) => t.uri === uri);
+      if (idx < 0 || idx >= prev.length - 1) return prev;
+      const tab = prev[idx];
+      return [...prev.filter((t) => t.uri !== uri), tab];
+    });
+  }, []);
+
+  // ── Drag & drop reorder ────────────────────────────────────
+
+  const handleDragStart = useCallback((uri: string) => setDragUri(uri), []);
+  const handleDragOverTab = useCallback((uri: string) => setDragOverUri(uri), []);
+
+  const handleDragEnd = useCallback(() => {
+    if (dragUri && dragOverUri && dragUri !== dragOverUri) {
+      setTabs((prev) => {
+        const fromIdx = prev.findIndex((t) => t.uri === dragUri);
+        const toIdx = prev.findIndex((t) => t.uri === dragOverUri);
+        if (fromIdx < 0 || toIdx < 0) return prev;
+        const next = [...prev];
+        const [moved] = next.splice(fromIdx, 1);
+        next.splice(toIdx, 0, moved);
+        return next;
+      });
+    }
+    setDragUri(null);
+    setDragOverUri(null);
+  }, [dragUri, dragOverUri]);
+
   // ── Event bus wiring ───────────────────────────────────────
 
   useEffect(() => {
@@ -216,6 +259,9 @@ export function TabBar({ eventBus, iconApi, onActiveChange }: TabBarProps) {
         { label: "Copy Path", action: () => { navigator.clipboard.writeText(uri); } },
         { label: "Copy Relative Path", action: () => { navigator.clipboard.writeText(uri); } },
         { type: "separator" },
+        { label: "Move to First", disabled: idx <= 0, action: () => moveToFirst(uri) },
+        { label: "Move to Last", disabled: idx >= tabs.length - 1, action: () => moveToLast(uri) },
+        { type: "separator" },
         { label: "Split Right", action: () => eventBus.emit(LayoutEvents.Split, { direction: "right", uri }) },
         { label: "Split Down", action: () => eventBus.emit(LayoutEvents.Split, { direction: "down", uri }) },
         { type: "separator" },
@@ -223,7 +269,7 @@ export function TabBar({ eventBus, iconApi, onActiveChange }: TabBarProps) {
         { label: "Reveal in Explorer", action: () => eventBus.emit(SidebarEvents.ViewActivate, { viewId: "explorer" }) },
       ];
     },
-    [tabs, closeTab, closeOthers, closeToRight, closeToLeft, closeSaved, closeAll, togglePin, eventBus],
+    [tabs, closeTab, closeOthers, closeToRight, closeToLeft, closeSaved, closeAll, togglePin, moveToFirst, moveToLast, eventBus],
   );
 
   // ── Render ─────────────────────────────────────────────────
@@ -231,6 +277,8 @@ export function TabBar({ eventBus, iconApi, onActiveChange }: TabBarProps) {
   return (
     <>
       <div
+        onDrop={(e) => { e.preventDefault(); handleDragEnd(); }}
+        onDragOver={(e) => e.preventDefault()}
         style={{
           display: "flex", alignItems: "stretch", height: "100%",
           overflowX: "auto", overflowY: "hidden", flex: 1,
@@ -257,6 +305,10 @@ export function TabBar({ eventBus, iconApi, onActiveChange }: TabBarProps) {
             }}
             onClose={() => closeTab(tab.uri)}
             onContextMenu={(x, y) => setCtxMenu({ x, y, uri: tab.uri })}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOverTab}
+            onDragEnd={handleDragEnd}
+            dragOverUri={dragOverUri}
           />
         ))}
       </div>

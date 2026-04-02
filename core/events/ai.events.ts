@@ -13,4 +13,10 @@ export enum AiEvents {
   Generate = "ai:generate",
   Fix = "ai:fix",
   CopilotToggle = "copilot:toggle",
+  /** Add a file to the chat context (from explorer or editor) */
+  AttachFile = "ai:attach-file",
+  /** Add a folder to the chat context (from explorer) */
+  AttachFolder = "ai:attach-folder",
+  /** Open the chat panel */
+  OpenChat = "ai:open-chat",
 }

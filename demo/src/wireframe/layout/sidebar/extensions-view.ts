@@ -328,6 +328,11 @@ export function buildExtensionsView(ctx: ViewContext): HTMLElement {
         }
       });
 
+      // Open extension detail on row click
+      row.addEventListener("click", () => {
+        eventBus.emit(MarketplaceEvents.OpenDetail, { id: ext.id, name: ext.name });
+      });
+
       row.append(iconWrap, info, btn);
       extList.appendChild(row);
     }

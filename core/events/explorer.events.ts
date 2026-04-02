@@ -27,4 +27,6 @@ export enum ExplorerAction {
   ExpandAll = "explorer:expand-all",
   Refresh = "explorer:refresh",
   OpenInTerminal = "explorer:open-in-terminal",
+  AddFileToChat = "explorer:add-file-to-chat",
+  AddFolderToChat = "explorer:add-folder-to-chat",
 }

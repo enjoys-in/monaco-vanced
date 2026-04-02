@@ -58,7 +58,6 @@ import { createSyncPlugin } from "@enjoys/monaco-vanced/scm/sync-module";
 
 // ── Language ───────────────────────────────────────────────
 import { createLanguageDetectionPlugin } from "@enjoys/monaco-vanced/language/language-detection";
-import { createContextPlugin } from "@enjoys/monaco-vanced/language/context-module";
 import { createDiagnosticsPlugin } from "@enjoys/monaco-vanced/language/diagnostics-module";
 import { createESLintPlugin } from "@enjoys/monaco-vanced/language/eslint-module";
 import { createLanguageConfigPlugin } from "@enjoys/monaco-vanced/language/language-config";
@@ -223,7 +222,7 @@ const { plugin: syncPlugin, api: syncApi } = createSyncPlugin();
 
 // Language
 const languageDetectionPlugin = createLanguageDetectionPlugin();
-const contextPlugin = createContextPlugin();
+ 
 const diagnosticsPlugin = createDiagnosticsPlugin();
 const eslintPlugin = createESLintPlugin();
 const languageConfigPlugin = createLanguageConfigPlugin();
@@ -300,7 +299,7 @@ export const allPlugins = [
   // SCM
   gitPlugin, collabPlugin, reviewPlugin, snapshotPlugin, syncPlugin,
   // Language
-  languageDetectionPlugin, contextPlugin, diagnosticsPlugin, eslintPlugin,
+  languageDetectionPlugin,  diagnosticsPlugin, eslintPlugin,
   languageConfigPlugin, lspBridgePlugin, monarchGrammarsPlugin,
   prettierPlugin, symbolIndexPlugin,
   // Platform

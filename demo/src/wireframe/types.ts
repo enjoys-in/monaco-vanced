@@ -44,6 +44,7 @@ export interface DOMRefs {
   tabActions: HTMLElement;
   editorContainer: HTMLElement;
   settingsWebview: HTMLElement;
+  extensionDetailWebview: HTMLElement;
   welcomePage: HTMLElement;
   breadcrumbBar: HTMLElement;
   // Bottom panel

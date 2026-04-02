@@ -12,6 +12,7 @@ import { CommandPalette } from "../command-palette/CommandPalette";
 import { BottomPanel } from "../bottom-panel/BottomPanel";
 import { AiChat, type AiChatProps } from "../ai-chat/AiChat";
 import { WelcomeDialog } from "../dialogs/WelcomeDialog";
+import { SplitEditor } from "../editor/SplitEditor";
 
 // ── Styles (CSS custom properties for live theming) ──────────
 const S = {
@@ -65,7 +66,7 @@ const S = {
   activityBottom: { display: "flex", flexDirection: "column", alignItems: "center", width: "100%", paddingBottom: 4 } as CSSProperties,
 
   sidebar: {
-    display: "flex", flexDirection: "column", width: 240, minWidth: 170,
+    display: "flex", flexDirection: "column", width: 330, minWidth: 170,
     background: CV.sidebarBg, borderRight: `1px solid ${CV.border}`,
     overflow: "hidden", position: "relative",
   } as CSSProperties,
@@ -101,6 +102,10 @@ const S = {
   editorContainer: { flex: 1, overflow: "hidden" } as CSSProperties,
 
   settingsWebview: {
+    display: "none", flexDirection: "column", flex: 1, overflow: "hidden", background: CV.editorBg,
+  } as CSSProperties,
+
+  extensionDetailWebview: {
     display: "none", flexDirection: "column", flex: 1, overflow: "hidden", background: CV.editorBg,
   } as CSSProperties,
 
@@ -181,8 +186,13 @@ export const Shell = forwardRef<ShellHandle, {
   // Listen for copilot toggle from activity bar or command
   useEffect(() => {
     const toggleChat = () => setChatVisible((v) => !v);
+    const openChat = () => setChatVisible(true);
     eventBus.on("copilot:toggle", toggleChat);
-    return () => { eventBus.off("copilot:toggle", toggleChat); };
+    eventBus.on("ai:open-chat", openChat);
+    return () => {
+      eventBus.off("copilot:toggle", toggleChat);
+      eventBus.off("ai:open-chat", openChat);
+    };
   }, [eventBus]);
 
   // Refs for every element that wiring code needs
@@ -214,6 +224,7 @@ export const Shell = forwardRef<ShellHandle, {
         tabActions: refs.current.tabActions!,
         editorContainer: refs.current.editorContainer!,
         settingsWebview: refs.current.settingsWebview!,
+        extensionDetailWebview: refs.current.extensionDetailWebview!,
         welcomePage: refs.current.welcomePage!,
         breadcrumbBar: refs.current.breadcrumbBar!,
         bottomPanel: placeholder.current,
@@ -273,10 +284,15 @@ export const Shell = forwardRef<ShellHandle, {
           <div ref={setRef("breadcrumbBar")} className="vsc-breadcrumb-bar" style={S.breadcrumbBar} />
 
           {/* Editor */}
-          <div ref={setRef("editorContainer")} id="editor-container" style={S.editorContainer} />
+          <div ref={setRef("editorContainer")} id="editor-container" style={{ ...S.editorContainer, position: "relative" }}>
+            <SplitEditor eventBus={eventBus} primaryEditorRef={null} />
+          </div>
 
           {/* Settings Webview */}
           <div ref={setRef("settingsWebview")} style={S.settingsWebview} />
+
+          {/* Extension Detail Webview */}
+          <div ref={setRef("extensionDetailWebview")} style={S.extensionDetailWebview} />
 
           {/* Welcome Page */}
           <div ref={setRef("welcomePage")} style={S.welcomePage} />

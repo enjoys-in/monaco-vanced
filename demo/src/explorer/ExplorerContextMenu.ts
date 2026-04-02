@@ -20,7 +20,8 @@ export type ContextMenuHandler = (action: ExplorerAction, node: TreeNode) => voi
 const FILE_MENU: MenuOption[] = [
   { label: "Open File", icon: openIcon(), action: ExplorerAction.Open },
   { label: "Open to the Side", icon: splitIcon(), action: ExplorerAction.OpenSide, separator: true },
-  { label: "Open in Integrated Terminal", icon: terminalIcon(), action: ExplorerAction.OpenInTerminal, separator: true },
+  { label: "Open in Integrated Terminal", icon: terminalIcon(), action: ExplorerAction.OpenInTerminal },
+  { label: "Add File to Chat", icon: chatIcon(), action: ExplorerAction.AddFileToChat, separator: true },
   { label: "Copy Path", icon: copyIcon(), action: ExplorerAction.CopyPath, shortcut: "Shift+Alt+C" },
   { label: "Copy Relative Path", icon: copyIcon(), action: ExplorerAction.CopyRelativePath, shortcut: "Shift+Alt+R" },
   { label: "Copy Content", icon: copyIcon(), action: ExplorerAction.CopyContent, separator: true },
@@ -32,7 +33,8 @@ const FILE_MENU: MenuOption[] = [
 const FOLDER_MENU: MenuOption[] = [
   { label: "New File…", icon: newFileIcon(), action: ExplorerAction.NewFile },
   { label: "New Folder…", icon: newFolderIcon(), action: ExplorerAction.NewFolder, separator: true },
-  { label: "Open in Integrated Terminal", icon: terminalIcon(), action: ExplorerAction.OpenInTerminal, separator: true },
+  { label: "Open in Integrated Terminal", icon: terminalIcon(), action: ExplorerAction.OpenInTerminal },
+  { label: "Add Folder to Chat", icon: chatIcon(), action: ExplorerAction.AddFolderToChat, separator: true },
   { label: "Copy Path", icon: copyIcon(), action: ExplorerAction.CopyPath, shortcut: "Shift+Alt+C" },
   { label: "Copy Relative Path", icon: copyIcon(), action: ExplorerAction.CopyRelativePath, separator: true },
   { label: "Rename…", icon: renameIcon(), action: ExplorerAction.Rename, shortcut: "F2" },
@@ -189,4 +191,8 @@ function duplicateIcon(): string {
 
 function terminalIcon(): string {
   return `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1 3.5l.5-.5h13l.5.5v9l-.5.5h-13l-.5-.5v-9zM2 12h12V4H2v8zm6.146-3.146l-2-2 .708-.708L9.207 8.5l-2.353 2.354-.708-.708 2-2z"/></svg>`;
+}
+
+function chatIcon(): string {
+  return `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1C4.1 1 1 3.6 1 7c0 1.7.9 3.2 2.3 4.2L2 14l3.5-1.7c.8.2 1.6.3 2.5.3 3.9 0 7-2.6 7-6s-3.1-6-7-6zm0 11c-.8 0-1.5-.1-2.2-.3l-.5-.2-2 1 .7-1.6-.4-.3C2.4 9.7 2 8.4 2 7c0-2.8 2.7-5 6-5s6 2.2 6 5-2.7 5-6 5z"/></svg>`;
 }

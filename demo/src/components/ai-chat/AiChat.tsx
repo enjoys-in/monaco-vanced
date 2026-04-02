@@ -1,8 +1,13 @@
 // ── AI Chat Panel — Copilot-style right sidebar ──────────────
 
-import { useState, useRef, useEffect, useCallback, type CSSProperties, type KeyboardEvent, type ChangeEvent, type MouseEvent as ReactMouseEvent } from "react";
+import { useState, useRef, useEffect, useCallback, type CSSProperties, type KeyboardEvent, type ChangeEvent, type MouseEvent as ReactMouseEvent, type DragEvent } from "react";
 import { useTheme } from "../theme";
-import { AiEvents } from "@enjoys/monaco-vanced/core/events";
+import { AiEvents, FileEvents } from "@enjoys/monaco-vanced/core/events";
+import {
+  createConversation, listConversations, addMessage, getMessages,
+  getConversation, deleteConversation, clearAllConversations, updateConversation, deriveTitle,
+  type ChatConversation, type ChatMessageRecord,
+} from "../../stores/chat-store";
 
 // ── Types ────────────────────────────────────────────────────
 interface ChatMessage {
@@ -35,7 +40,7 @@ export interface AiChatProps {
     getStatus(): string;
   };
   indexerApi?: {
-    query(q: { name?: string; kind?: string; file?: string }): { name: string; kind: string; path: string; line: number; column: number }[];
+    query(q: { query: string; kind?: string; path?: string; limit?: number }): { name: string; kind: string; path: string; line: number; column: number }[];
     getFileSymbols(path: string): { name: string; kind: string; path: string; line: number; column: number }[];
     isReady(): boolean;
   };
@@ -97,6 +102,17 @@ const SUGGESTIONS = [
   { label: "Refactor", icon: "✨", prompt: "Suggest a cleaner refactoring for this code" },
 ];
 
+// ── Slash commands ───────────────────────────────────────────
+const SLASH_COMMANDS = [
+  { cmd: "/explain", description: "Explain the selected code", action: "explain" as const },
+  { cmd: "/fix", description: "Fix errors in the selected code", action: "fix" as const },
+  { cmd: "/generate", description: "Generate code from a prompt", action: "generate" as const },
+  { cmd: "/tests", description: "Generate unit tests", action: "generate" as const },
+  { cmd: "/refactor", description: "Suggest a refactoring", action: "explain" as const },
+  { cmd: "/clear", description: "Clear chat history", action: undefined },
+  { cmd: "/new", description: "Start a new conversation", action: undefined },
+];
+
 // ── Markdown-lite renderer ───────────────────────────────────
 function renderContent(text: string): string {
   return text
@@ -128,13 +144,83 @@ export function AiChat({ eventBus, aiApi, indexerApi, visible, onClose, files = 
   const [mentionMode, setMentionMode] = useState<"file" | "symbol">("file");
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionIdx, setMentionIdx] = useState(0);
+  const [slashOpen, setSlashOpen] = useState(false);
+  const [slashQuery, setSlashQuery] = useState("");
+  const [slashIdx, setSlashIdx] = useState(0);
+  const [dragOver, setDragOver] = useState(false);
+  // ── History state ──────────────────────────────────────────
+  const [conversations, setConversations] = useState<ChatConversation[]>([]);
+  const [activeConvId, setActiveConvId] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const mentionRef = useRef<HTMLDivElement>(null);
   const msgIdRef = useRef(0);
 
-  const nextId = () => `msg-${++msgIdRef.current}`;
+  const nextId = () => `msg-${Date.now()}-${++msgIdRef.current}`;
+
+  // ── Load conversations on mount ────────────────────────────
+  useEffect(() => {
+    if (visible) {
+      listConversations().then((convs) => {
+        setConversations(convs);
+        // If no active conv, create one
+        if (!activeConvId && convs.length === 0) {
+          createConversation().then((c) => {
+            setActiveConvId(c.id);
+            setConversations([c]);
+          });
+        } else if (!activeConvId && convs.length > 0) {
+          // Load most recent
+          setActiveConvId(convs[0].id);
+          getMessages(convs[0].id).then((msgs) => {
+            setMessages(msgs.map((m) => ({
+              id: m.id, role: m.role, content: m.content, timestamp: m.timestamp,
+              action: m.action, attachedFiles: m.attachedFiles,
+              attachedSymbols: m.attachedSymbols, attachedSelection: m.attachedSelection,
+            })));
+          });
+        }
+      });
+    }
+  }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Switch conversation ────────────────────────────────────
+  const switchConversation = useCallback(async (convId: string) => {
+    setActiveConvId(convId);
+    setShowHistory(false);
+    const msgs = await getMessages(convId);
+    setMessages(msgs.map((m) => ({
+      id: m.id, role: m.role, content: m.content, timestamp: m.timestamp,
+      action: m.action, attachedFiles: m.attachedFiles,
+      attachedSymbols: m.attachedSymbols, attachedSelection: m.attachedSelection,
+    })));
+  }, []);
+
+  const startNewChat = useCallback(async () => {
+    const c = await createConversation();
+    setConversations((prev) => [c, ...prev]);
+    setActiveConvId(c.id);
+    setMessages([]);
+    setShowHistory(false);
+    setInput("");
+    setTimeout(() => inputRef.current?.focus(), 100);
+  }, []);
+
+  const handleDeleteConversation = useCallback(async (convId: string) => {
+    await deleteConversation(convId);
+    setConversations((prev) => prev.filter((c) => c.id !== convId));
+    if (activeConvId === convId) {
+      const remaining = conversations.filter((c) => c.id !== convId);
+      if (remaining.length > 0) {
+        switchConversation(remaining[0].id);
+      } else {
+        startNewChat();
+      }
+    }
+  }, [activeConvId, conversations, switchConversation, startNewChat]);
 
   // ── Resize handle logic ──────────────────────────────────
   const handleResizeStart = useCallback((e: ReactMouseEvent) => {
@@ -157,6 +243,43 @@ export function AiChat({ eventBus, aiApi, indexerApi, visible, onClose, files = 
     document.addEventListener("mouseup", onUp);
   }, [panelWidth]);
 
+  // ── Drag & drop ────────────────────────────────────────────
+  const handleDragOver = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+
+    // Try to get text/uri or text/plain from drag data
+    const uriData = e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain") || "";
+    if (uriData) {
+      const uris = uriData.split("\n").map((u) => u.trim()).filter(Boolean);
+      for (const uri of uris) {
+        // Clean up URI — remove file:/// prefix
+        const cleanUri = uri.replace(/^file:\/\/\//, "");
+        setAttachedFiles((prev) => prev.includes(cleanUri) ? prev : [...prev, cleanUri]);
+      }
+      return;
+    }
+
+    // Handle dragged items via custom data attribute
+    const dragPath = e.dataTransfer.getData("application/x-monaco-path");
+    if (dragPath) {
+      setAttachedFiles((prev) => prev.includes(dragPath) ? prev : [...prev, dragPath]);
+    }
+  }, []);
+
   // ── File mention filtering ───────────────────────────────
   const filteredFiles = mentionQuery
     ? files.filter((f) => f.uri.toLowerCase().includes(mentionQuery.toLowerCase()) || f.name.toLowerCase().includes(mentionQuery.toLowerCase())).slice(0, 8)
@@ -166,14 +289,18 @@ export function AiChat({ eventBus, aiApi, indexerApi, visible, onClose, files = 
   const filteredSymbols = (() => {
     if (!indexerApi?.isReady()) return [];
     if (mentionQuery) {
-      return indexerApi.query({ name: mentionQuery }).slice(0, 10);
+      return indexerApi.query({ query: mentionQuery }).slice(0, 10);
     }
-    // Show symbols from current file
     const model = (window as Record<string, unknown>).editor as { getModel(): { uri: { path: string } } | null } | undefined;
     const currentPath = model?.getModel()?.uri.path?.replace(/^\/+/, "") ?? "";
     if (currentPath) return indexerApi.getFileSymbols(currentPath).slice(0, 10);
     return [];
   })();
+
+  // ── Slash command filtering ──────────────────────────────
+  const filteredSlash = slashQuery
+    ? SLASH_COMMANDS.filter((c) => c.cmd.startsWith("/" + slashQuery.toLowerCase()))
+    : SLASH_COMMANDS;
 
   // Unified filtered list for active mention mode
   const mentionItems = mentionMode === "file"
@@ -182,7 +309,6 @@ export function AiChat({ eventBus, aiApi, indexerApi, visible, onClose, files = 
 
   const addFileAttachment = useCallback((uri: string) => {
     setAttachedFiles((prev) => prev.includes(uri) ? prev : [...prev, uri]);
-    // Remove the @query from input
     setInput((prev) => {
       const atIdx = prev.lastIndexOf("@");
       return atIdx >= 0 ? prev.slice(0, atIdx) : prev;
@@ -222,6 +348,12 @@ export function AiChat({ eventBus, aiApi, indexerApi, visible, onClose, files = 
     setAttachedSymbols((prev) => prev.filter((s) => `${s.file}:${s.name}:${s.line}` !== key));
   }, []);
 
+  // ── Open file on click (for file references in messages) ──
+  const openFileReference = useCallback((uri: string) => {
+    const name = uri.split("/").pop() ?? uri;
+    eventBus.emit(FileEvents.Open, { uri, label: name });
+  }, [eventBus]);
+
   // Auto-scroll on new messages
   useEffect(() => {
     if (scrollRef.current) {
@@ -234,9 +366,57 @@ export function AiChat({ eventBus, aiApi, indexerApi, visible, onClose, files = 
     if (visible) setTimeout(() => inputRef.current?.focus(), 100);
   }, [visible]);
 
+  // ── Persist message to Dexie ───────────────────────────────
+  const persistMessage = useCallback(async (msg: ChatMessage) => {
+    if (!activeConvId) return;
+    const record: ChatMessageRecord = {
+      id: msg.id,
+      conversationId: activeConvId,
+      role: msg.role,
+      content: msg.content,
+      timestamp: msg.timestamp,
+      action: msg.action,
+      attachedFiles: msg.attachedFiles,
+      attachedSymbols: msg.attachedSymbols,
+      attachedSelection: msg.attachedSelection,
+    };
+    await addMessage(record);
+
+    // Auto-title on first user message
+    if (msg.role === "user") {
+      const conv = conversations.find((c) => c.id === activeConvId);
+      if (conv?.title === "New Chat") {
+        const title = deriveTitle(msg.content);
+        await updateConversation(activeConvId, { title });
+        setConversations((prev) => prev.map((c) => c.id === activeConvId ? { ...c, title } : c));
+      }
+    }
+  }, [activeConvId, conversations]);
+
   // Send a chat message
   const sendMessage = useCallback(async (text: string, action?: "explain" | "generate" | "fix") => {
     if (!text.trim() || isStreaming) return;
+
+    // Handle slash commands
+    if (text.startsWith("/")) {
+      const cmd = SLASH_COMMANDS.find((c) => text.trim().startsWith(c.cmd));
+      if (cmd) {
+        if (cmd.cmd === "/clear") {
+          setMessages([]);
+          setInput("");
+          return;
+        }
+        if (cmd.cmd === "/new") {
+          await startNewChat();
+          return;
+        }
+        // For action commands, strip the command and use the rest as prompt
+        const rest = text.slice(cmd.cmd.length).trim();
+        const sel = getEditorSelection();
+        const prompt = rest || (sel ? `${cmd.description}:\n\`\`\`\n${sel}\n\`\`\`` : cmd.description);
+        return sendMessage(prompt, cmd.action);
+      }
+    }
 
     const currentAttached = [...attachedFiles];
     const currentSymbols = [...attachedSymbols];
@@ -248,19 +428,18 @@ export function AiChat({ eventBus, aiApi, indexerApi, visible, onClose, files = 
       attachedSelection: currentSelection ?? undefined,
     };
     setMessages((prev) => [...prev, userMsg]);
+    persistMessage(userMsg);
     setInput("");
     setAttachedFiles([]);
     setAttachedSymbols([]);
     setAttachedSelection(null);
     setIsStreaming(true);
 
-    // Add a placeholder for assistant
     const assistantId = nextId();
     setMessages((prev) => [...prev, { id: assistantId, role: "assistant", content: "Thinking…", timestamp: Date.now() }]);
 
     try {
       const prefix = action === "explain" ? "[EXPLAIN] " : action === "generate" ? "[GENERATE] " : action === "fix" ? "[FIX] " : "";
-      // Build file context from attachments
       let fileContext = "";
       if (currentAttached.length > 0) {
         const fileSnippets = currentAttached.map((uri) => {
@@ -272,13 +451,11 @@ export function AiChat({ eventBus, aiApi, indexerApi, visible, onClose, files = 
         }).filter(Boolean);
         fileContext = `\n\nAttached files:\n${fileSnippets.join("\n\n")}`;
       }
-      // Build symbol context
       let symbolContext = "";
       if (currentSymbols.length > 0) {
         const symDescriptions = currentSymbols.map((s) => `${s.kind} ${s.name} (${s.file}:${s.line})`);
         symbolContext = `\n\nReferenced symbols:\n${symDescriptions.join("\n")}`;
       }
-      // Build selection context
       let selectionContext = "";
       if (currentSelection) {
         selectionContext = `\n\nSelected code (${currentSelection.file} L${currentSelection.startLine}-${currentSelection.endLine}):\n\`\`\`\n${currentSelection.text}\n\`\`\``;
@@ -288,15 +465,19 @@ export function AiChat({ eventBus, aiApi, indexerApi, visible, onClose, files = 
         ...messages.slice(-10).map((m) => ({ role: m.role, content: m.content })),
         { role: "user", content: `${prefix}${text.trim()}${fileContext}${symbolContext}${selectionContext}` },
       ]);
-      setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, content: res.content, timestamp: Date.now() } : m)));
+      const assistantMsg: ChatMessage = { id: assistantId, role: "assistant", content: res.content, timestamp: Date.now() };
+      setMessages((prev) => prev.map((m) => (m.id === assistantId ? assistantMsg : m)));
+      persistMessage(assistantMsg);
     } catch {
-      setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, content: "Sorry, something went wrong. Please try again." } : m)));
+      const errMsg: ChatMessage = { id: assistantId, role: "assistant", content: "Sorry, something went wrong. Please try again.", timestamp: Date.now() };
+      setMessages((prev) => prev.map((m) => (m.id === assistantId ? errMsg : m)));
+      persistMessage(errMsg);
     } finally {
       setIsStreaming(false);
     }
-  }, [aiApi, isStreaming, messages, attachedFiles, attachedSymbols, attachedSelection, files]);
+  }, [aiApi, isStreaming, messages, attachedFiles, attachedSymbols, attachedSelection, files, persistMessage, startNewChat]);
 
-  // Listen for context menu AI actions
+  // Listen for context menu AI actions + attach events
   useEffect(() => {
     const handleExplain = () => {
       const sel = getEditorSelection();
@@ -313,8 +494,6 @@ export function AiChat({ eventBus, aiApi, indexerApi, visible, onClose, files = 
     const handleChatResponse = (p: unknown) => {
       const { action, content } = p as { action?: string; content: string };
       if (action && content) {
-        // If the response came from outside (e.g. command palette AI actions),
-        // show it in the chat panel too
         const exists = messages.some((m) => m.content === content);
         if (!exists) {
           setMessages((prev) => [...prev, {
@@ -324,21 +503,63 @@ export function AiChat({ eventBus, aiApi, indexerApi, visible, onClose, files = 
         }
       }
     };
+    const handleAttachFile = (p: unknown) => {
+      const { uri } = p as { uri: string };
+      if (uri) setAttachedFiles((prev) => prev.includes(uri) ? prev : [...prev, uri]);
+    };
+    const handleAttachFolder = (p: unknown) => {
+      const { uri } = p as { uri: string };
+      if (uri) setAttachedFiles((prev) => prev.includes(uri) ? prev : [...prev, uri]);
+    };
 
     eventBus.on(AiEvents.Explain, handleExplain);
     eventBus.on(AiEvents.Generate, handleGenerate);
     eventBus.on(AiEvents.Fix, handleFix);
     eventBus.on(AiEvents.ChatResponse, handleChatResponse);
+    eventBus.on(AiEvents.AttachFile, handleAttachFile);
+    eventBus.on(AiEvents.AttachFolder, handleAttachFolder);
 
     return () => {
       eventBus.off(AiEvents.Explain, handleExplain);
       eventBus.off(AiEvents.Generate, handleGenerate);
       eventBus.off(AiEvents.Fix, handleFix);
       eventBus.off(AiEvents.ChatResponse, handleChatResponse);
+      eventBus.off(AiEvents.AttachFile, handleAttachFile);
+      eventBus.off(AiEvents.AttachFolder, handleAttachFolder);
     };
   }, [eventBus, sendMessage, messages]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // Slash command dropdown navigation
+    if (slashOpen) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSlashIdx((i) => Math.min(i + 1, filteredSlash.length - 1));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSlashIdx((i) => Math.max(i - 1, 0));
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        const cmd = filteredSlash[slashIdx];
+        if (cmd) {
+          setInput(cmd.cmd + " ");
+          setSlashOpen(false);
+          setSlashQuery("");
+          setSlashIdx(0);
+        }
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setSlashOpen(false);
+        return;
+      }
+    }
+    // Mention dropdown navigation
     if (mentionOpen) {
       if (e.key === "ArrowDown") {
         e.preventDefault();
@@ -375,6 +596,19 @@ export function AiChat({ eventBus, aiApi, indexerApi, visible, onClose, files = 
     const val = e.target.value;
     setInput(val);
 
+    // Detect / slash command (only at start of input)
+    if (val.startsWith("/")) {
+      const afterSlash = val.slice(1).split(" ")[0] ?? "";
+      if (!val.includes(" ")) {
+        setSlashOpen(true);
+        setSlashQuery(afterSlash);
+        setSlashIdx(0);
+        setMentionOpen(false);
+        return;
+      }
+    }
+    setSlashOpen(false);
+
     // Detect # symbol mention (takes priority if cursor is after #)
     const hashIdx = val.lastIndexOf("#");
     const atIdx = val.lastIndexOf("@");
@@ -406,6 +640,7 @@ export function AiChat({ eventBus, aiApi, indexerApi, visible, onClose, files = 
   const clearChat = () => {
     setMessages([]);
     setInput("");
+    setSlashOpen(false);
   };
 
   if (!visible) return null;
@@ -418,6 +653,7 @@ export function AiChat({ eventBus, aiApi, indexerApi, visible, onClose, files = 
       background: t.sidebarBg,
       borderLeft: `1px solid ${t.border}`,
       overflow: "hidden", position: "relative",
+      ...(dragOver ? { outline: `2px dashed ${t.accent}`, outlineOffset: -2 } : {}),
     },
     header: {
       display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -512,7 +748,14 @@ export function AiChat({ eventBus, aiApi, indexerApi, visible, onClose, files = 
   const formatTime = (ts: number) => new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
   return (
-    <div ref={panelRef} className="vsc-ai-chat" style={S.panel}>
+    <div
+      ref={panelRef}
+      className="vsc-ai-chat"
+      style={S.panel}
+      onDragOver={handleDragOver as unknown as React.DragEventHandler}
+      onDragLeave={handleDragLeave as unknown as React.DragEventHandler}
+      onDrop={handleDrop as unknown as React.DragEventHandler}
+    >
       {/* Resize handle (left edge) */}
       <div
         onMouseDown={handleResizeStart}
@@ -532,6 +775,24 @@ export function AiChat({ eventBus, aiApi, indexerApi, visible, onClose, files = 
         </div>
         <div style={S.headerActions}>
           <button
+            title="New chat"
+            style={S.iconBtn}
+            onClick={startNewChat}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = t.hover; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1v6H2v2h6v6h2V9h6V7H10V1H8z"/></svg>
+          </button>
+          <button
+            title="Chat history"
+            style={{ ...S.iconBtn, ...(showHistory ? { background: t.hover } : {}) }}
+            onClick={() => setShowHistory(!showHistory)}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = t.hover; }}
+            onMouseLeave={(e) => { if (!showHistory) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M13.507 12.324a7 7 0 0 0 .065-8.56A7 7 0 0 0 2 4.393V2H1v3.5l.5.5H5V5H2.811a6.008 6.008 0 1 1-.135 5.77l-.887.462a7 7 0 0 0 11.718 1.092zM8 4v4.5l.5.5H12v-1H9V4H8z"/></svg>
+          </button>
+          <button
             title="Clear chat"
             style={S.iconBtn}
             onClick={clearChat}
@@ -550,6 +811,66 @@ export function AiChat({ eventBus, aiApi, indexerApi, visible, onClose, files = 
         </div>
       </div>
 
+      {/* Conversation history sidebar */}
+      {showHistory && (
+        <div style={{
+          position: "absolute", top: 35, left: 0, right: 0, bottom: 0,
+          background: t.sidebarBg, zIndex: 20, display: "flex", flexDirection: "column",
+        }}>
+          <div style={{ padding: "8px 12px", fontSize: 12, fontWeight: 600, color: t.fg, borderBottom: `1px solid ${t.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span>Chat History</span>
+            <button
+              style={{ ...S.iconBtn, fontSize: 11, width: "auto", padding: "2px 6px", color: t.fgDim }}
+              onClick={() => setShowHistory(false)}
+            >✕</button>
+          </div>
+          <div style={{ flex: 1, overflowY: "auto", padding: 4 }}>
+            {conversations.length === 0 && (
+              <div style={{ padding: 16, textAlign: "center", color: t.fgDim, fontSize: 12 }}>No conversations yet</div>
+            )}
+            {conversations.map((conv) => (
+              <div
+                key={conv.id}
+                onClick={() => switchConversation(conv.id)}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  padding: "6px 8px", borderRadius: 4, cursor: "pointer", fontSize: 12,
+                  background: conv.id === activeConvId ? t.listHover : "transparent",
+                  color: conv.id === activeConvId ? t.fg : t.fgDim,
+                  marginBottom: 1,
+                }}
+                onMouseEnter={(e) => { if (conv.id !== activeConvId) (e.currentTarget as HTMLElement).style.background = t.hover; }}
+                onMouseLeave={(e) => { if (conv.id !== activeConvId) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+              >
+                <div style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <div style={{ fontWeight: conv.id === activeConvId ? 500 : 400 }}>{conv.title}</div>
+                  <div style={{ fontSize: 10, color: t.fgDim }}>{new Date(conv.updatedAt).toLocaleDateString()}</div>
+                </div>
+                <button
+                  title="Delete conversation"
+                  style={{ ...S.iconBtn, width: 18, height: 18, fontSize: 12, color: t.fgDim, flexShrink: 0 }}
+                  onClick={(e) => { e.stopPropagation(); handleDeleteConversation(conv.id); }}
+                >✕</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Drag overlay */}
+      {dragOver && (
+        <div style={{
+          position: "absolute", top: 35, left: 0, right: 0, bottom: 0,
+          background: `${t.accent}15`, display: "flex", alignItems: "center", justifyContent: "center",
+          zIndex: 15, pointerEvents: "none",
+        }}>
+          <div style={{
+            padding: "16px 24px", borderRadius: 8, background: t.cardBg,
+            border: `2px dashed ${t.accent}`, color: t.fg, fontSize: 13, fontWeight: 500,
+          }}>Drop files or folders to attach</div>
+        </div>
+      )}
+
       {/* Messages */}
       <div ref={scrollRef} className="vsc-ai-chat-messages" style={S.messages}>
         {messages.length === 0 ? (
@@ -558,7 +879,8 @@ export function AiChat({ eventBus, aiApi, indexerApi, visible, onClose, files = 
             <div style={S.emptyTitle}>How can I help you?</div>
             <div style={S.emptySubtitle}>
               Ask me about your code, or use the suggestions below to get started.
-              <br />Type <strong>@</strong> to attach file, <strong>#</strong> to reference symbol.
+              <br />Type <strong>@</strong> to attach file, <strong>#</strong> to reference symbol, <strong>/</strong> for commands.
+              <br />You can also <strong>drag & drop</strong> files or folders from the explorer.
             </div>
             <div style={S.suggestions}>
               {SUGGESTIONS.map((s) => (
@@ -585,11 +907,12 @@ export function AiChat({ eventBus, aiApi, indexerApi, visible, onClose, files = 
                     {msg.attachedFiles?.map((uri) => {
                       const name = uri.split("/").pop() ?? uri;
                       return (
-                        <span key={uri} style={{
+                        <span key={uri} onClick={() => openFileReference(uri)} style={{
                           display: "inline-flex", alignItems: "center", gap: 3,
                           padding: "2px 6px", borderRadius: 4, fontSize: 11,
                           background: "rgba(255,255,255,0.1)", color: t.fgDim,
-                        }}>
+                          cursor: "pointer",
+                        }} title={`Open ${uri}`}>
                           <span dangerouslySetInnerHTML={{ __html: FileIcon }} style={{ color: fileColor(name) }} />
                           {name}
                         </span>
@@ -660,9 +983,10 @@ export function AiChat({ eventBus, aiApi, indexerApi, visible, onClose, files = 
                   display: "inline-flex", alignItems: "center", gap: 4,
                   padding: "3px 8px", borderRadius: 4, fontSize: 12,
                   background: t.cardBg, border: `1px solid ${t.border}`, color: t.fg,
+                  cursor: "pointer",
                 }}>
-                  <span dangerouslySetInnerHTML={{ __html: FileIcon }} style={{ color: fileColor(name), flexShrink: 0 }} />
-                  <span style={{ maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+                  <span dangerouslySetInnerHTML={{ __html: FileIcon }} onClick={() => openFileReference(uri)} style={{ color: fileColor(name), flexShrink: 0, cursor: "pointer" }} title={`Open ${uri}`} />
+                  <span onClick={() => openFileReference(uri)} style={{ maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }} title={`Open ${uri}`}>{name}</span>
                   <span
                     style={{ cursor: "pointer", color: t.fgDim, marginLeft: 2, fontSize: 14, lineHeight: 1 }}
                     onClick={() => removeAttachment(uri)}
@@ -710,8 +1034,39 @@ export function AiChat({ eventBus, aiApi, indexerApi, visible, onClose, files = 
           </div>
         )}
 
-        {/* Input row with mention dropdown */}
+        {/* Input row with mention/slash dropdown */}
         <div style={{ position: "relative" }}>
+          {/* Slash command dropdown */}
+          {slashOpen && filteredSlash.length > 0 && (
+            <div style={{
+              position: "absolute", bottom: "100%", left: 0, right: 0,
+              background: t.menuBg, border: `1px solid ${t.border}`,
+              borderRadius: 6, boxShadow: "0 -4px 16px rgba(0,0,0,0.4)",
+              maxHeight: 220, overflowY: "auto", zIndex: 10, marginBottom: 4,
+            }}>
+              <div style={{ padding: "4px 8px", fontSize: 11, color: t.fgDim, borderBottom: `1px solid ${t.border}` }}>
+                Slash Commands
+              </div>
+              {filteredSlash.map((cmd, i) => (
+                <div
+                  key={cmd.cmd}
+                  onClick={() => { setInput(cmd.cmd + " "); setSlashOpen(false); setSlashQuery(""); setSlashIdx(0); inputRef.current?.focus(); }}
+                  onMouseEnter={() => setSlashIdx(i)}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 8,
+                    padding: "6px 8px", cursor: "pointer", fontSize: 12,
+                    background: i === slashIdx ? t.listHover : "transparent",
+                    color: t.fg,
+                  }}
+                >
+                  <span style={{ fontSize: 14 }}>{cmd.icon}</span>
+                  <span style={{ fontWeight: 500, color: t.accent }}>{cmd.cmd}</span>
+                  <span style={{ color: t.fgDim, fontSize: 11, flex: 1 }}>{cmd.description}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Unified mention dropdown (@ files, # symbols) */}
           {mentionOpen && mentionItems.length > 0 && (
             <div
@@ -793,7 +1148,7 @@ export function AiChat({ eventBus, aiApi, indexerApi, visible, onClose, files = 
               value={input}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              placeholder="Ask Copilot… (@ file, # symbol)"
+              placeholder="Ask Copilot… (@ file, # symbol, / command)"
               rows={1}
               onInput={(e) => {
                 const el = e.currentTarget;

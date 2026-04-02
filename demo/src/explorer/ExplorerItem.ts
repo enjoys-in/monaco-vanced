@@ -169,6 +169,14 @@ export function renderFileItem(
 
     row.addEventListener("click", (e) => { e.stopPropagation(); callbacks.onFileClick(node.path); });
     row.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); callbacks.onContextMenu(e, node); });
+
+    // Drag support — allows dragging files into AI Chat
+    row.draggable = true;
+    row.addEventListener("dragstart", (e) => {
+      e.dataTransfer?.setData("text/plain", node.path);
+      e.dataTransfer?.setData("application/x-monaco-path", node.path);
+      if (e.dataTransfer) e.dataTransfer.effectAllowed = "copyMove";
+    });
   }
 
   return row;
@@ -232,6 +240,14 @@ export function renderFolderItem(
     e.preventDefault();
     e.stopPropagation();
     callbacks.onContextMenu(e, node);
+  });
+
+  // Drag support — allows dragging folders into AI Chat
+  header.draggable = true;
+  header.addEventListener("dragstart", (e) => {
+    e.dataTransfer?.setData("text/plain", node.path);
+    e.dataTransfer?.setData("application/x-monaco-path", node.path);
+    if (e.dataTransfer) e.dataTransfer.effectAllowed = "copyMove";
   });
 
   return { header, childContainer };
