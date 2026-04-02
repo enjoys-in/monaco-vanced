@@ -1,4 +1,4 @@
-// ── Sidebar: multi-view panels — React views + vanilla Explorer ──
+// ── Sidebar: multi-view panels — pure React ──────────────────
 
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
 import { SidebarEvents } from "@enjoys/monaco-vanced/core/events";
@@ -6,11 +6,9 @@ import type { DOMRefs, WireframeAPIs, OnHandler, VirtualFile } from "../../types
 import { C } from "../../types";
 import { el } from "../../utils";
 import type { MockFsAPI } from "../../../mock-fs";
-import { Explorer } from "../../../explorer";
 import type { ExplorerIconAPI } from "../../../explorer";
 import { VIEW_TITLES } from "./types";
 import { createRoot, type Root } from "react-dom/client";
-import { createElement } from "react";
 import { ThemeProvider } from "../../../components/theme";
 import { SidebarViews } from "../../../components/sidebar";
 
@@ -36,37 +34,26 @@ export function wireSidebar(
   let activeViewId = "explorer";
   let sidebarRoot: Root | null = null;
 
-  // ── Explorer instance (if mockFs is provided) ──────────
-  let explorer: Explorer | null = null;
-  if (mockFs) {
-    explorer = new Explorer({
-      fs: mockFs,
-      eventBus,
-      rootLabel: "MONACO-VANCED",
-      onNotify: (message, type) => apis.notification?.show({ type: type as "info" | "success" ?? "info", message, duration: 3000 }),
-      iconApi: extras?.iconApi,
-    });
-  }
-
-  // ── Mount React sidebar views ──────────────────────────
+  // ── Mount React sidebar views (pure JSX) ───────────────
   function mountSidebarViews() {
     dom.sidebarContent.innerHTML = "";
     if (!sidebarRoot) {
       sidebarRoot = createRoot(dom.sidebarContent);
     }
     sidebarRoot.render(
-      createElement(ThemeProvider, { eventBus },
-        createElement(SidebarViews, {
-          eventBus,
-          files,
-          notificationApi: apis.notification,
-          extensionApi: extras?.extensionApi,
-          vsixApi: extras?.vsixApi,
-          marketplaceApi: extras?.marketplaceApi,
-          indexerApi: extras?.indexerApi,
-          explorerElement: explorer ? explorer.getElement() : null,
-        }),
-      ),
+      <ThemeProvider eventBus={eventBus}>
+        <SidebarViews
+          eventBus={eventBus}
+          files={files}
+          notificationApi={apis.notification}
+          extensionApi={extras?.extensionApi}
+          vsixApi={extras?.vsixApi}
+          marketplaceApi={extras?.marketplaceApi}
+          indexerApi={extras?.indexerApi}
+          mockFs={mockFs}
+          iconApi={extras?.iconApi}
+        />
+      </ThemeProvider>,
     );
   }
 
@@ -74,7 +61,6 @@ export function wireSidebar(
     activeViewId = viewId;
     dom.sidebarHeader.textContent = VIEW_TITLES[viewId] ?? viewId;
     updateToolbar(viewId);
-    // Notify React component via event bus (SidebarViews listens for ViewActivate)
   }
 
   function updateToolbar(viewId: string) {
@@ -107,11 +93,12 @@ export function wireSidebar(
     btn.addEventListener("mouseenter", () => { btn.style.background = "rgba(255,255,255,0.08)"; btn.style.color = C.fg; });
     btn.addEventListener("mouseleave", () => { btn.style.background = "transparent"; btn.style.color = C.fgDim; });
     btn.addEventListener("click", () => {
-      if (viewId === "explorer" && explorer) {
-        if (title === "New File") explorer.newFile();
-        else if (title === "New Folder") explorer.newFolder();
-        else if (title === "Refresh") explorer.refresh();
-        else if (title === "Collapse All") explorer.collapseAll();
+      const explorerApi = (window as any).__explorerApi;
+      if (viewId === "explorer" && explorerApi) {
+        if (title === "New File") explorerApi.newFile();
+        else if (title === "New Folder") explorerApi.newFolder();
+        else if (title === "Refresh") explorerApi.refresh();
+        else if (title === "Collapse All") explorerApi.collapseAll();
       } else if (viewId === "search" && title === "Clear Results") {
         const searchInput = dom.sidebarContent.querySelector("input[type='text']") as HTMLInputElement | null;
         if (searchInput) { searchInput.value = ""; searchInput.dispatchEvent(new Event("input", { bubbles: true })); }
@@ -119,8 +106,6 @@ export function wireSidebar(
     });
     return btn;
   }
-
-
 
   // ═══════════════════════════════════════════════════════════
   // ── Initialize ─────────────────────────────────────────────

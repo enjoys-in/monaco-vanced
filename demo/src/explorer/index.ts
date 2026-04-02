@@ -1,17 +1,22 @@
 // ── Explorer module barrel export ────────────────────────────
 
+// React components (primary)
+export { ExplorerView } from "./ExplorerView";
+export type { ExplorerIconAPI } from "./ExplorerView";
+export { ExplorerTreeView } from "./ExplorerTreeView";
+export { ExplorerFileItem, ExplorerFolderItem, ExplorerInlineInput } from "./ExplorerItemView";
+export { ExplorerContextMenuView } from "./ExplorerContextMenuView";
+
+// Legacy class-based (kept for backward compat)
 export { Explorer } from "./Explorer";
-export type { ExplorerOptions, ExplorerIconAPI } from "./Explorer";
+export type { ExplorerOptions } from "./Explorer";
+
+// Shared (used by both React and legacy)
 export { ExplorerService } from "./ExplorerService";
-export { ExplorerContextMenu } from "./ExplorerContextMenu";
-export { renderTree } from "./ExplorerTree";
-export { renderFileItem, renderFolderItem, renderInlineInput } from "./ExplorerItem";
-export type { ExplorerItemCallbacks } from "./ExplorerItem";
 export type {
   TreeNode,
   ExplorerState,
   InlineInputState,
   ContextMenuAction,
 } from "./ExplorerTypes";
-// Re-exported from core — consumers can also import from @enjoys/monaco-vanced/core/events
 export { ExplorerAction, ExplorerEvents, getExtColor, getFolderColor } from "./ExplorerTypes";

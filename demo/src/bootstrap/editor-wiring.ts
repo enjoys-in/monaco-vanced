@@ -86,21 +86,143 @@ export function wireEditor(deps: EditorWiringDeps) {
     if (p._src === "main" && p.key) return;
 
     const optMap: Record<string, string> = {
+      // ── Font & Typography ──
       "editor.fontSize": "fontSize", "editor.fontFamily": "fontFamily",
       "editor.fontWeight": "fontWeight", "editor.fontLigatures": "fontLigatures",
+      "editor.fontVariations": "fontVariations",
       "editor.lineHeight": "lineHeight", "editor.letterSpacing": "letterSpacing",
-      "editor.tabSize": "tabSize", "editor.insertSpaces": "insertSpaces",
-      "editor.wordWrap": "wordWrap", "editor.lineNumbers": "lineNumbers",
-      "editor.folding": "folding", "editor.glyphMargin": "glyphMargin",
-      "editor.minimap.enabled": "minimap.enabled", "editor.minimap.side": "minimap.side",
-      "editor.smoothScrolling": "smoothScrolling", "editor.scrollBeyondLastLine": "scrollBeyondLastLine",
+      // ── Cursor ──
       "editor.cursorBlinking": "cursorBlinking", "editor.cursorStyle": "cursorStyle",
       "editor.cursorSmoothCaretAnimation": "cursorSmoothCaretAnimation",
-      "editor.bracketPairColorization.enabled": "bracketPairColorization.enabled",
-      "editor.renderWhitespace": "renderWhitespace", "editor.renderLineHighlight": "renderLineHighlight",
+      "editor.cursorWidth": "cursorWidth",
+      "editor.cursorSurroundingLines": "cursorSurroundingLines",
+      "editor.cursorSurroundingLinesStyle": "cursorSurroundingLinesStyle",
+      // ── Indentation ──
+      "editor.tabSize": "tabSize", "editor.insertSpaces": "insertSpaces",
+      "editor.detectIndentation": "detectIndentation",
+      "editor.trimAutoWhitespace": "trimAutoWhitespace",
+      "editor.autoIndent": "autoIndent",
+      "editor.useTabStops": "useTabStops",
+      "editor.stickyTabStops": "stickyTabStops",
+      // ── Minimap ──
+      "editor.minimap.enabled": "minimap.enabled", "editor.minimap.side": "minimap.side",
+      "editor.minimap.maxColumn": "minimap.maxColumn",
+      // ── Sticky Scroll ──
+      "editor.stickyScroll.enabled": "stickyScroll.enabled",
+      // ── Suggestions & Completions ──
       "editor.suggestOnTriggerCharacters": "suggestOnTriggerCharacters",
-      "editor.quickSuggestions": "quickSuggestions", "editor.snippetSuggestions": "snippetSuggestions",
+      "editor.quickSuggestions": "quickSuggestions",
+      "editor.quickSuggestionsDelay": "quickSuggestionsDelay",
+      "editor.snippetSuggestions": "snippetSuggestions",
+      "editor.acceptSuggestionOnEnter": "acceptSuggestionOnEnter",
+      "editor.acceptSuggestionOnCommitCharacter": "acceptSuggestionOnCommitCharacter",
+      "editor.suggestSelection": "suggestSelection",
+      "editor.suggestFontSize": "suggestFontSize",
+      "editor.suggestLineHeight": "suggestLineHeight",
+      "editor.tabCompletion": "tabCompletion",
+      "editor.wordBasedSuggestions": "wordBasedSuggestions",
+      "editor.suggest.showMethods": "suggest.showMethods",
+      "editor.suggest.showFunctions": "suggest.showFunctions",
+      "editor.inlineSuggest.enabled": "inlineSuggest.enabled",
+      "editor.parameterHints.enabled": "parameterHints.enabled",
+      // ── Formatting ──
       "editor.formatOnPaste": "formatOnPaste", "editor.formatOnType": "formatOnType",
+      // ── Scrolling ──
+      "editor.smoothScrolling": "smoothScrolling",
+      "editor.scrollBeyondLastLine": "scrollBeyondLastLine",
+      "editor.scrollBeyondLastColumn": "scrollBeyondLastColumn",
+      "editor.mouseWheelZoom": "mouseWheelZoom",
+      "editor.mouseWheelScrollSensitivity": "mouseWheelScrollSensitivity",
+      "editor.fastScrollSensitivity": "fastScrollSensitivity",
+      // ── Rendering ──
+      "editor.renderWhitespace": "renderWhitespace",
+      "editor.renderControlCharacters": "renderControlCharacters",
+      "editor.renderLineHighlight": "renderLineHighlight",
+      "editor.renderLineHighlightOnlyWhenFocus": "renderLineHighlightOnlyWhenFocus",
+      "editor.renderFinalNewline": "renderFinalNewline",
+      "editor.renderValidationDecorations": "renderValidationDecorations",
+      "editor.bracketPairColorization.enabled": "bracketPairColorization.enabled",
+      "editor.guides.bracketPairs": "guides.bracketPairs",
+      "editor.guides.indentation": "guides.indentation",
+      "editor.colorDecorators": "colorDecorators",
+      "editor.colorDecoratorsActivatedOn": "colorDecoratorsActivatedOn",
+      "editor.colorDecoratorsLimit": "colorDecoratorsLimit",
+      "editor.overviewRulerLanes": "overviewRulerLanes",
+      "editor.overviewRulerBorder": "overviewRulerBorder",
+      "editor.showUnused": "showUnused",
+      "editor.showDeprecated": "showDeprecated",
+      // ── Word Wrap ──
+      "editor.wordWrap": "wordWrap", "editor.wordWrapColumn": "wordWrapColumn",
+      "editor.wrappingIndent": "wrappingIndent", "editor.wrappingStrategy": "wrappingStrategy",
+      // ── Bracket Matching ──
+      "editor.matchBrackets": "matchBrackets",
+      "editor.autoClosingBrackets": "autoClosingBrackets",
+      "editor.autoClosingQuotes": "autoClosingQuotes",
+      "editor.autoClosingComments": "autoClosingComments",
+      "editor.autoClosingDelete": "autoClosingDelete",
+      "editor.autoClosingOvertype": "autoClosingOvertype",
+      "editor.autoSurround": "autoSurround",
+      // ── Folding ──
+      "editor.folding": "folding", "editor.foldingStrategy": "foldingStrategy",
+      "editor.showFoldingControls": "showFoldingControls",
+      "editor.foldingHighlight": "foldingHighlight",
+      "editor.foldingImportsByDefault": "foldingImportsByDefault",
+      "editor.foldingMaximumRegions": "foldingMaximumRegions",
+      "editor.unfoldOnClickAfterEndOfLine": "unfoldOnClickAfterEndOfLine",
+      // ── Line Numbers & Gutter ──
+      "editor.lineNumbers": "lineNumbers",
+      "editor.lineNumbersMinChars": "lineNumbersMinChars",
+      "editor.glyphMargin": "glyphMargin",
+      "editor.selectOnLineNumbers": "selectOnLineNumbers",
+      // ── Selection & Highlighting ──
+      "editor.selectionHighlight": "selectionHighlight",
+      "editor.occurrencesHighlight": "occurrencesHighlight",
+      "editor.columnSelection": "columnSelection",
+      "editor.roundedSelection": "roundedSelection",
+      "editor.linkedEditing": "linkedEditing",
+      // ── Multi-Cursor ──
+      "editor.multiCursorModifier": "multiCursorModifier",
+      "editor.multiCursorMergeOverlapping": "multiCursorMergeOverlapping",
+      "editor.multiCursorPaste": "multiCursorPaste",
+      // ── Clipboard ──
+      "editor.copyWithSyntaxHighlighting": "copyWithSyntaxHighlighting",
+      "editor.emptySelectionClipboard": "emptySelectionClipboard",
+      // ── Hover ──
+      "editor.hover.enabled": "hover.enabled",
+      "editor.hover.delay": "hover.delay",
+      // ── Code Lens ──
+      "editor.codeLens": "codeLens",
+      "editor.codeLensFontFamily": "codeLensFontFamily",
+      "editor.codeLensFontSize": "codeLensFontSize",
+      // ── Links ──
+      "editor.links": "links",
+      // ── Find ──
+      "editor.find.seedSearchStringFromSelection": "find.seedSearchStringFromSelection",
+      "editor.find.autoFindInSelection": "find.autoFindInSelection",
+      // ── Padding ──
+      "editor.padding.top": "padding.top",
+      "editor.padding.bottom": "padding.bottom",
+      // ── Drag & Drop ──
+      "editor.dragAndDrop": "dragAndDrop",
+      // ── Accessibility ──
+      "editor.accessibilitySupport": "accessibilitySupport",
+      // ── Inlay Hints ──
+      "editor.inlayHints.enabled": "inlayHints.enabled",
+      // ── Unicode ──
+      "editor.unicodeHighlight.ambiguousCharacters": "unicodeHighlight.ambiguousCharacters",
+      // ── Performance ──
+      "editor.largeFileOptimizations": "largeFileOptimizations",
+      "editor.maxTokenizationLineLength": "maxTokenizationLineLength",
+      "editor.stopRenderingLineAfter": "stopRenderingLineAfter",
+      // ── Peek ──
+      "editor.stablePeek": "stablePeek",
+      "editor.peekWidgetDefaultFocus": "peekWidgetDefaultFocus",
+      "editor.definitionLinkOpensInPeek": "definitionLinkOpensInPeek",
+      // ── Misc ──
+      "editor.wordSeparators": "wordSeparators",
+      "editor.contextmenu": "contextmenu",
+      "editor.mouseStyle": "mouseStyle",
+      // ── Diff Editor ──
       "diffEditor.renderSideBySide": "renderSideBySide",
     };
     const opt = optMap[settingId];
@@ -115,6 +237,12 @@ export function wireEditor(deps: EditorWiringDeps) {
     }
 
     switch (settingId) {
+      case "editor.rulers": {
+        const val = String(p.value ?? "").trim();
+        const rulers = val ? val.split(",").map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n)) : [];
+        ide.editor.updateOptions({ rulers });
+        break;
+      }
       case "workbench.colorTheme": {
         const themeName = String(p.value);
         apis.theme.apply(themeName).catch((err) => {

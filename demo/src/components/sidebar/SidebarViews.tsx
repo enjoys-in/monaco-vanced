@@ -1,9 +1,12 @@
 // ── Sidebar Container (React) — multi-view panel switching ───
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useTheme } from "../theme";
-import { SidebarEvents, FileEvents, TabEvents } from "@enjoys/monaco-vanced/core/events";
+import { SidebarEvents } from "@enjoys/monaco-vanced/core/events";
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
+import type { MockFsAPI } from "../../mock-fs";
+import type { ExplorerIconAPI } from "../../explorer";
+import { ExplorerView } from "../../explorer/ExplorerView";
 import { SearchView } from "./SearchView";
 import { ScmView } from "./ScmView";
 import { DebugView } from "./DebugView";
@@ -18,23 +21,18 @@ export interface SidebarProps {
   files: FileEntry[];
   notificationApi?: { show(opts: { type: string; message: string; duration: number }): void };
   extensionApi?: { enable(id: string): void; disable(id: string): void };
-  vsixApi?: { fetch(id: string): Promise<unknown>; install(pkg: unknown): Promise<void>; uninstall(id: string): void };
+  vsixApi?: { fetch(id: string): Promise<unknown>; install(pkg: unknown): Promise<void>; uninstall(id: string): void; getInstalled(): { name: string; publisher: string }[] };
   marketplaceApi?: { install(id: string): Promise<void> };
   indexerApi?: { query(q: { query: string }): { name: string; kind: string; path: string; line: number; column: number }[]; isReady(): boolean };
-  /** Explorer element rendered by the vanilla Explorer class — mounted into the explorer view */
-  explorerElement?: HTMLElement | null;
+  /** Mock FS for the explorer view */
+  mockFs?: MockFsAPI;
+  /** Icon API for file/folder icons */
+  iconApi?: ExplorerIconAPI;
 }
 
-const VIEW_TITLES: Record<string, string> = {
-  explorer: "Explorer", search: "Search", scm: "Source Control",
-  debug: "Run and Debug", extensions: "Extensions", accounts: "Accounts",
-  "settings-gear": "Settings",
-};
-
-export function SidebarViews({ eventBus, files, notificationApi, extensionApi, vsixApi, marketplaceApi, indexerApi, explorerElement }: SidebarProps) {
+export function SidebarViews({ eventBus, files, notificationApi, extensionApi, vsixApi, marketplaceApi, indexerApi, mockFs, iconApi }: SidebarProps) {
   const { tokens: t } = useTheme();
   const [activeView, setActiveView] = useState("explorer");
-  const explorerRef = useRef<HTMLDivElement>(null);
 
   // Wire event bus → view switching
   useEffect(() => {
@@ -46,19 +44,20 @@ export function SidebarViews({ eventBus, files, notificationApi, extensionApi, v
     return () => { eventBus.off(SidebarEvents.ViewActivate, onActivate); };
   }, [eventBus]);
 
-  // Mount the vanilla DOM explorer element into our ref
-  useEffect(() => {
-    if (explorerRef.current && explorerElement) {
-      explorerRef.current.innerHTML = "";
-      explorerRef.current.appendChild(explorerElement);
-    }
-  }, [explorerElement, activeView]);
-
   const renderView = () => {
     switch (activeView) {
       case "explorer":
-        // Explorer is a vanilla DOM element, mounted via ref
-        return <div ref={explorerRef} style={{ height: "100%", overflowY: "auto" }} />;
+        return mockFs ? (
+          <ExplorerView
+            fs={mockFs}
+            eventBus={eventBus}
+            rootLabel="MONACO-VANCED"
+            onNotify={(msg, type) => notificationApi?.show({ type: type ?? "info", message: msg, duration: 3000 })}
+            iconApi={iconApi}
+          />
+        ) : (
+          <div style={{ padding: 20, color: t.fgDim, fontSize: 12 }}>No filesystem available</div>
+        );
       case "search":
         return <SearchView eventBus={eventBus} files={files} notificationApi={notificationApi} indexerApi={indexerApi} />;
       case "scm":

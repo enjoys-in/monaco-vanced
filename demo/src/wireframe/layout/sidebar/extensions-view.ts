@@ -19,7 +19,7 @@ interface ExtEntry {
 }
 
 // ── Open VSX API ─────────────────────────────────────────────
-const OPENVSX = "https://open-vsx.org/api";
+const OPENVSX = "https://open-vsx.org";
 
 interface OpenVSXSearchResult {
   totalSize: number;

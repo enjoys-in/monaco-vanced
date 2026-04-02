@@ -16,7 +16,7 @@ interface Props {
   eventBus: InstanceType<typeof EventBus>;
   notificationApi?: { show(opts: { type: string; message: string; duration: number }): void };
   extensionApi?: { enable(id: string): void; disable(id: string): void };
-  vsixApi?: { fetch(id: string): Promise<unknown>; install(pkg: unknown): Promise<void>; uninstall(id: string): void };
+  vsixApi?: { fetch(id: string): Promise<unknown>; install(pkg: unknown): Promise<void>; uninstall(id: string): void; getInstalled(): { name: string; publisher: string }[] };
   marketplaceApi?: { install(id: string): Promise<void> };
 }
 
@@ -80,6 +80,15 @@ export function ExtensionsView({ eventBus, notificationApi, extensionApi, vsixAp
   const [installed, setInstalled] = useState<Set<string>>(new Set());
   const [installing, setInstalling] = useState<Set<string>>(new Set());
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+
+  // Seed installed set from VSIX registry
+  useEffect(() => {
+    if (vsixApi) {
+      const manifests = vsixApi.getInstalled();
+      const ids = new Set(manifests.map((m) => `${m.publisher}.${m.name}`));
+      if (ids.size > 0) setInstalled(ids);
+    }
+  }, [vsixApi]);
 
   const fetchExts = useCallback(async (q: string, category?: string) => {
     setLoading(true); setError(null);
