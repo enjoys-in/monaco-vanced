@@ -16,18 +16,20 @@ export function createReviewPlugin(
   const glClient = config.provider === "gitlab"
     ? new GitLabClient(config.apiUrl ?? "https://gitlab.com/api/v4", config.token)
     : null;
+  const owner = config.owner ?? "";
+  const repo = config.repo ?? "";
   let ctx: PluginContext | null = null;
 
   const api: ReviewModuleAPI = {
     async getPullRequests() {
-      if (ghClient) return ghClient.getPullRequests("owner", "repo");
-      if (glClient) return glClient.getMergeRequests("project-id");
+      if (ghClient) return ghClient.getPullRequests(owner, repo);
+      if (glClient) return glClient.getMergeRequests(repo);
       return [];
     },
 
     async getComments(prId) {
-      if (ghClient) return ghClient.getComments("owner", "repo", prId);
-      if (glClient) return glClient.getNotes("project-id", prId);
+      if (ghClient) return ghClient.getComments(owner, repo, prId);
+      if (glClient) return glClient.getNotes(repo, prId);
       return [];
     },
 

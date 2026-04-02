@@ -12,6 +12,12 @@ export { PluginContext } from "@core/plugin-context";
 export { createMonacoIDE } from "@core/facade";
 export type { CreateIDEOptions, MonacoVancedInstance } from "@core/facade";
 
+// ── Core Utilities ───────────────────────────────────────────
+export { DevMode } from "@core/dev-mode";
+export type { DevModeConfig } from "@core/dev-mode";
+export { Inspector } from "@core/inspector";
+export type { InspectorData, PluginSnapshot, EventSnapshot } from "@core/inspector";
+
 // ── Core Types ───────────────────────────────────────────────
 export type {
   MonacoPlugin,
@@ -183,6 +189,15 @@ export type { StreamingModuleAPI, StreamingModuleConfig, StreamHandle } from "@p
 export { createWorkerPlugin } from "@plugins/platform/worker-module";
 export type { WorkerModuleAPI, WorkerModuleConfig, WorkerTask } from "@plugins/platform/worker-module/types";
 
+export { createAccessibilityPlugin } from "@plugins/platform/accessibility-module";
+export type { AccessibilityModuleAPI, AccessibilityConfig } from "@plugins/platform/accessibility-module/types";
+
+export { createI18nPlugin } from "@plugins/platform/i18n-module";
+export type { I18nModuleAPI, I18nConfig, Locale, TranslationBundle } from "@plugins/platform/i18n-module/types";
+
+export { createOfflinePlugin } from "@plugins/platform/offline-module";
+export type { OfflineModuleAPI, OfflineConfig, QueuedOperation } from "@plugins/platform/offline-module/types";
+
 // ── Plugins: AI ──────────────────────────────────────────────
 export { createAIPlugin } from "@plugins/ai/ai-module";
 export type { AIModuleAPI, AIPluginOptions, ChatMessage } from "@plugins/ai/ai-module/types";
@@ -230,12 +245,18 @@ export type { TaskModuleAPI, TaskConfig, BackgroundTask } from "@plugins/devtool
 export { createTestPlugin } from "@plugins/devtools/test-module";
 export type { TestModuleAPI, TestConfig, TestItem, TestSuite } from "@plugins/devtools/test-module/types";
 
+export { createTestingHarnessPlugin } from "@plugins/devtools/testing-harness-module";
+export type { TestingHarnessModuleAPI, TestingHarnessConfig, PluginTestContext } from "@plugins/devtools/testing-harness-module/types";
+
 // ── Plugins: Infrastructure (extras) ─────────────────────────
 export { createDeepLinkPlugin } from "@plugins/infrastructure/deep-link-module";
 export type { DeepLinkModuleAPI, DeepLinkConfig } from "@plugins/infrastructure/deep-link-module/types";
 
 export { createStoragePlugin } from "@plugins/infrastructure/storage-module";
 export type { StorageModuleAPI, StorageConfig } from "@plugins/infrastructure/storage-module/types";
+
+export { createMigrationPlugin } from "@plugins/infrastructure/migration-module";
+export type { MigrationModuleAPI, MigrationConfig, MigrationStep } from "@plugins/infrastructure/migration-module/types";
 
 // ── Plugins: Auth ────────────────────────────────────────────
 export { createAuthPlugin } from "@plugins/infrastructure/auth-module";

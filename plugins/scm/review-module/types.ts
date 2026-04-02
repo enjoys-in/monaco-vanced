@@ -24,6 +24,8 @@ export interface ReviewConfig {
   readonly provider: "github" | "gitlab";
   readonly apiUrl?: string;
   readonly token?: string;
+  readonly owner?: string;
+  readonly repo?: string;
 }
 
 export interface ReviewModuleAPI {

@@ -6,7 +6,8 @@
     "paths": {
       "@core/*": ["core/*"],
       "@plugins/*": ["plugins/*"],
-      "@enjoys/monaco-vanced": ["src/index.ts"]
+      "@enjoys/monaco-vanced": ["src/index.ts"],
+      "@enjoys/monaco-vanced/*": ["*"]
     }
   },
   "include": [

@@ -1042,9 +1042,9 @@ const actions: monaco.editor.IActionDescriptor[] = [
 
   // ── 3. Telemetry — track user actions ─────────────────────
   {
-    const trackOpen = (p: unknown) => { const { uri } = p as { uri: string }; telemetryApi.recordEvent({ name: "file.open", properties: { uri } }); };
-    const trackSave = (p: unknown) => { const { uri } = p as { uri: string }; telemetryApi.recordEvent({ name: "file.save", properties: { uri } }); };
-    const trackClose = (p: unknown) => { const { uri } = p as { uri: string }; telemetryApi.recordEvent({ name: "tab.close", properties: { uri } }); };
+    const trackOpen = (p: unknown) => { const { uri } = p as { uri: string }; telemetryApi.recordEvent("file.open", { uri }); };
+    const trackSave = (p: unknown) => { const { uri } = p as { uri: string }; telemetryApi.recordEvent("file.save", { uri }); };
+    const trackClose = (p: unknown) => { const { uri } = p as { uri: string }; telemetryApi.recordEvent("tab.close", { uri }); };
     eventBus.on(FileEvents.Open, trackOpen);
     eventBus.on(FileEvents.Save, trackSave);
     eventBus.on(TabEvents.Close, trackClose);
@@ -1054,7 +1054,7 @@ const actions: monaco.editor.IActionDescriptor[] = [
   {
     const logAudit = (action: string) => (p: unknown) => {
       const { uri } = (p ?? {}) as { uri?: string };
-      auditApi.log({ action, resource: uri ?? "unknown", actor: "demo-user", timestamp: Date.now() });
+      auditApi.log({ action, resource: uri ?? "unknown", actor: "demo-user" });
     };
     eventBus.on(FileEvents.Open, logAudit("file.open"));
     eventBus.on(FileEvents.Save, logAudit("file.save"));
@@ -1069,7 +1069,7 @@ const actions: monaco.editor.IActionDescriptor[] = [
     const { uri } = p as { uri: string };
     const model = models.get(uri);
     if (model) {
-      snapshotApi.capture({ label: `Auto-save: ${uri.split("/").pop()}`, files: { [uri]: model.getValue() } });
+      snapshotApi.capture(uri, model.getValue());
     }
   });
 
@@ -1094,7 +1094,7 @@ const actions: monaco.editor.IActionDescriptor[] = [
   });
 
   // ── 8. Workspace — configure with demo project root ───────
-  workspaceApi.addRoot({ uri: "file:///demo-project", name: "demo-project" });
+  workspaceApi.addRoot("file:///demo-project", "demo-project");
 
   // ── 9. Security — validate plugin permissions on load ─────
   eventBus.on(ExtensionEvents.Enabled, (p: unknown) => {
@@ -1111,11 +1111,11 @@ const actions: monaco.editor.IActionDescriptor[] = [
     name: "Default Access",
     roles: ["editor"],
     rules: [
-      { resource: "file:*", action: "read", effect: "allow" },
-      { resource: "file:*", action: "write", effect: "allow" },
-      { resource: "settings:*", action: "read", effect: "allow" },
-      { resource: "settings:*", action: "write", effect: "allow" },
-      { resource: "terminal:*", action: "execute", effect: "allow" },
+      { resource: "file:*", actions: ["read"], effect: "allow" },
+      { resource: "file:*", actions: ["write"], effect: "allow" },
+      { resource: "settings:*", actions: ["read"], effect: "allow" },
+      { resource: "settings:*", actions: ["write"], effect: "allow" },
+      { resource: "terminal:*", actions: ["execute"], effect: "allow" },
     ],
   });
   policyApi.assignRole("demo-user", "editor");
@@ -1156,11 +1156,10 @@ const actions: monaco.editor.IActionDescriptor[] = [
     label: "Task: Run Build",
     handler: () => {
       const id = `build-${Date.now()}`;
-      taskApi.enqueue({ id, label: "Build Project", priority: "high" });
+      taskApi.enqueue({ id, label: "Build Project", priority: "high", cancellable: false });
       statusbarApi.register({ id: "build-task", label: "$(loading~spin) Building…", alignment: "left", priority: 45, tooltip: "Build in progress" });
       // Simulate build completion
       setTimeout(() => {
-        taskApi.complete(id, { success: true });
         statusbarApi.update("build-task", { label: "$(check) Build succeeded" });
         notificationApi.show({ type: "success", message: "Build completed successfully.", duration: 3000 });
         setTimeout(() => statusbarApi.remove("build-task"), 4000);
@@ -1172,13 +1171,12 @@ const actions: monaco.editor.IActionDescriptor[] = [
     label: "Task: Run Lint",
     handler: () => {
       const id = `lint-${Date.now()}`;
-      taskApi.enqueue({ id, label: "Lint Project", priority: "normal" });
+      taskApi.enqueue({ id, label: "Lint Project", priority: "normal", cancellable: false });
       statusbarApi.register({ id: "lint-task", label: "$(loading~spin) Linting…", alignment: "left", priority: 44, tooltip: "Lint in progress" });
       setTimeout(() => {
         const markers = monaco.editor.getModelMarkers({});
         const errors = markers.filter((m) => m.severity === monaco.MarkerSeverity.Error).length;
         const warnings = markers.filter((m) => m.severity === monaco.MarkerSeverity.Warning).length;
-        taskApi.complete(id, { success: errors === 0, errors, warnings });
         statusbarApi.update("lint-task", { label: errors > 0 ? `$(error) ${errors} errors` : "$(check) Lint clean" });
         notificationApi.show({ type: errors > 0 ? "warning" : "success", message: `Lint: ${errors} errors, ${warnings} warnings`, duration: 3000 });
         setTimeout(() => statusbarApi.remove("lint-task"), 4000);
@@ -1191,7 +1189,7 @@ const actions: monaco.editor.IActionDescriptor[] = [
     id: "monacoVanced.runTests",
     label: "Test: Run All Tests",
     handler: () => {
-      eventBus.emit(TestEvents.Run, { suiteId: "all" });
+      testApi.runAll();
       statusbarApi.register({ id: "test-run", label: "$(testing-run-icon) Running tests…", alignment: "left", priority: 43, tooltip: "Tests running" });
       const passed = 12 + Math.floor(Math.random() * 5);
       const failed = Math.floor(Math.random() * 3);
@@ -1214,10 +1212,10 @@ const actions: monaco.editor.IActionDescriptor[] = [
     id: "monacoVanced.notebookExecute",
     label: "Notebook: Execute Active Cell",
     handler: () => {
-      eventBus.emit(NotebookEvents.CellExecuteStart, { cellId: "demo-cell-1", language: "typescript" });
+      eventBus.emit(NotebookEvents.CellExecuteStart, { docId: "demo-doc", cellId: "demo-cell-1" });
       notificationApi.show({ type: "info", message: "Executing notebook cell…", duration: 2000 });
       setTimeout(() => {
-        eventBus.emit(NotebookEvents.CellExecuteComplete, { cellId: "demo-cell-1", outputs: [{ type: "text", data: "Cell executed successfully" }], executionTime: 450 });
+        eventBus.emit(NotebookEvents.CellExecuteComplete, { docId: "demo-doc", cellId: "demo-cell-1", outputs: [{ type: "text", data: "Cell executed successfully" }] });
       }, 500);
     },
   });
@@ -1273,30 +1271,15 @@ const actions: monaco.editor.IActionDescriptor[] = [
   });
 
   // ── 16. AI Agent — register demo actions ──────────────────
-  agentApi.registerAction({
-    id: "explain-code",
-    name: "Explain Code",
-    description: "Explain the currently selected code",
-    handler: async (_ctx) => {
-      const sel = ide.editor.getModel()?.getValueInRange(ide.editor.getSelection()!) ?? "";
-      return { result: `Explanation: This code ${sel.length > 50 ? "is a complex block" : "is a short snippet"} containing ${sel.split("\n").length} lines of logic.` };
-    },
+  agentApi.registerAction("explain-code", async (_input, _ctx) => {
+    const sel = ide.editor.getModel()?.getValueInRange(ide.editor.getSelection()!) ?? "";
+    return { result: `Explanation: This code ${sel.length > 50 ? "is a complex block" : "is a short snippet"} containing ${sel.split("\n").length} lines of logic.` };
   });
-  agentApi.registerAction({
-    id: "refactor-code",
-    name: "Suggest Refactor",
-    description: "Suggest a refactoring for the selected code",
-    handler: async (_ctx) => {
-      return { result: "Refactoring suggestion: Extract this logic into a separate function for better reusability and testability." };
-    },
+  agentApi.registerAction("refactor-code", async (_input, _ctx) => {
+    return { result: "Refactoring suggestion: Extract this logic into a separate function for better reusability and testability." };
   });
-  agentApi.registerAction({
-    id: "generate-docs",
-    name: "Generate Documentation",
-    description: "Generate JSDoc for the current function",
-    handler: async (_ctx) => {
-      return { result: "/**\n * Description of the function.\n * @param param - Description\n * @returns Description of return value\n */" };
-    },
+  agentApi.registerAction("generate-docs", async (_input, _ctx) => {
+    return { result: "/**\n * Description of the function.\n * @param param - Description\n * @returns Description of return value\n */" };
   });
 
   // ── 16b. AI Module — mock backend + wire Explain/Generate/Fix ──
@@ -1436,7 +1419,7 @@ const actions: monaco.editor.IActionDescriptor[] = [
 
   // Track AI status changes in statusbar
   eventBus.on(AiEvents.Status, (p: unknown) => {
-    const status = p as string;
+    const { state: status } = p as { state: string };
     if (status === "streaming") {
       statusbarApi.register({ id: "ai-status", label: "$(sparkle) AI", alignment: "right", priority: 100, tooltip: "AI is active" });
     } else {
@@ -1449,11 +1432,11 @@ const actions: monaco.editor.IActionDescriptor[] = [
     const { uri } = p as { uri: string };
     const model = models.get(uri);
     if (model) {
-      memoryApi.store(`file:${uri}`, {
+      memoryApi.store(`file:${uri}`, JSON.stringify({
         language: model.getLanguageId(),
         lines: model.getLineCount(),
         preview: model.getValueInRange({ startLineNumber: 1, startColumn: 1, endLineNumber: 5, endColumn: 120 }),
-      });
+      }));
     }
   });
 
@@ -1465,24 +1448,21 @@ const actions: monaco.editor.IActionDescriptor[] = [
   // ── 19. Context Fusion — register context sources ─────────
   contextFusionApi.registerSource({
     id: "editor-context",
-    name: "Editor Context",
+    priority: 1,
     gather: async () => {
       const model = ide.editor.getModel();
-      if (!model) return { content: "" };
+      if (!model) return "";
       const sel = ide.editor.getSelection();
-      return {
-        content: sel && !sel.isEmpty() ? model.getValueInRange(sel) : model.getValueInRange({ startLineNumber: Math.max(1, (sel?.startLineNumber ?? 1) - 10), startColumn: 1, endLineNumber: (sel?.startLineNumber ?? 1) + 10, endColumn: 200 }),
-        language: model.getLanguageId(),
-        uri: model.uri.path,
-      };
+      const content = sel && !sel.isEmpty() ? model.getValueInRange(sel) : model.getValueInRange({ startLineNumber: Math.max(1, (sel?.startLineNumber ?? 1) - 10), startColumn: 1, endLineNumber: (sel?.startLineNumber ?? 1) + 10, endColumn: 200 });
+      return `[${model.getLanguageId()}] ${model.uri.path}\n${content}`;
     },
   });
   contextFusionApi.registerSource({
     id: "open-tabs",
-    name: "Open Tabs",
+    priority: 10,
     gather: async () => {
       const uris = Array.from(models.keys());
-      return { content: uris.join("\n"), count: uris.length };
+      return uris.join("\n");
     },
   });
 
@@ -1513,8 +1493,12 @@ const actions: monaco.editor.IActionDescriptor[] = [
   });
 
   // ── 22. Billing — set demo plan + usage metering ──────────
-  billingApi.setPlan({ id: "pro", name: "Pro", limits: { "ai.requests": 1000, "storage.mb": 5120, "collab.users": 25 } });
-  eventBus.on(FileEvents.Save, () => { billingApi.meter({ feature: "storage.writes", quantity: 1 }); });
+  billingApi.setPlan({ id: "pro", name: "Pro", quotas: [
+    { feature: "ai.requests", limit: 1000, current: 0 },
+    { feature: "storage.mb", limit: 5120, current: 0 },
+    { feature: "collab.users", limit: 25, current: 0 },
+  ] });
+  eventBus.on(FileEvents.Save, () => { billingApi.meter("storage.writes", 1); });
 
   // ── 23. Knowledge Graph — log graph build ─────────────────
   eventBus.on(GraphEvents.Built, (p: unknown) => {
@@ -1542,20 +1526,19 @@ const actions: monaco.editor.IActionDescriptor[] = [
   });
 
   // ── 26. Feature flags — register demo flags ───────────────
-  featureFlagApi.set("ai.enabled", true);
-  featureFlagApi.set("collab.enabled", false);
-  featureFlagApi.set("notebook.enabled", true);
-  featureFlagApi.set("preview.markdown", true);
+  featureFlagApi.register({ key: "ai.enabled", defaultValue: true });
+  featureFlagApi.register({ key: "collab.enabled", defaultValue: false });
+  featureFlagApi.register({ key: "notebook.enabled", defaultValue: true });
+  featureFlagApi.register({ key: "preview.markdown", defaultValue: true });
 
   // ── 27. Concurrency — dedupe file reads ───────────────────
   const _origOpenFileInEditor = openFileInEditor;
-  const _fileReadLock = concurrencyApi.createMutex("file-open");
-  const _dedupeOpenFile = concurrencyApi.dedupe(
-    (uri: string) => {
+  const _dedupeOpenFile = (uri: string) => concurrencyApi.dedupe(
+    `file-open:${uri}`,
+    () => {
       _origOpenFileInEditor(uri, DEMO_FILES);
       return Promise.resolve();
     },
-    (uri) => uri,
   );
   // Expose concurrency for dev console
   (window as Record<string, unknown>).__concurrencyApi = concurrencyApi;
@@ -1565,25 +1548,23 @@ const actions: monaco.editor.IActionDescriptor[] = [
     id: "demo-tenant",
     name: "Demo Workspace",
     plan: "pro",
-    config: { maxUsers: 25, maxStorage: 5120, features: ["ai", "collab", "extensions"] },
+    createdAt: Date.now(),
+    config: { features: ["ai", "collab", "extensions"], limits: { maxUsers: 25, maxStorage: 5120 } },
   });
 
   // ── 29. Streaming — wire for AI response streaming ────────
   (window as Record<string, unknown>).__streamingApi = streamingApi;
 
   // ── 30. Fallback — register editor fallback chain ─────────
-  fallbackApi.registerChain({
-    id: "ai-provider",
-    providers: [
-      { id: "openai", fn: async () => ({ result: "OpenAI response" }), priority: 1 },
-      { id: "anthropic", fn: async () => ({ result: "Anthropic response" }), priority: 2 },
-      { id: "local", fn: async () => ({ result: "Local model response" }), priority: 3 },
-    ],
-  });
+  fallbackApi.register("ai-provider", [
+    { id: "openai", check: async () => true, priority: 1 },
+    { id: "anthropic", check: async () => true, priority: 2 },
+    { id: "local", check: async () => true, priority: 3 },
+  ]);
 
   // ── 31. Resource — track model resources ──────────────────
   for (const [uri] of models) {
-    resourceApi.register({ id: `model:${uri}`, type: "monaco-model", dispose: () => { models.get(uri)?.dispose(); } });
+    resourceApi.register("monaco-model", `model:${uri}`, { dispose: () => { models.get(uri)?.dispose(); } });
   }
 
   // ── 32. Worker — expose API for dev console ───────────────
@@ -1607,8 +1588,8 @@ const actions: monaco.editor.IActionDescriptor[] = [
     statusbarApi.register({ id: "indexer-ready", label: "$(symbol-class) Indexed", alignment: "right", priority: 5, tooltip: "Symbol index ready" });
   });
   eventBus.on(IndexSymbolEvents.FileDone, (p: unknown) => {
-    const { path, symbolCount } = p as { path: string; symbolCount: number };
-    if (symbolCount > 0) console.log(`[indexer] ${path}: ${symbolCount} symbols`);
+    const { path, count } = p as { path: string; count: number };
+    if (count > 0) console.log(`[indexer] ${path}: ${count} symbols`);
   });
 
   // ── 34. Context Engine — register demo languages ──────────
@@ -1621,7 +1602,7 @@ const actions: monaco.editor.IActionDescriptor[] = [
   // Register editor context as provider data
   contextEngineApi.registerProviderData("typescript", "symbols", {
     source: "indexer",
-    getSymbols: () => indexerApi.isReady() ? indexerApi.query({}) : [],
+    getSymbols: () => indexerApi.isReady() ? indexerApi.query({ query: "" }) : [],
   });
   contextEngineApi.registerProviderData("typescript", "editor", {
     source: "monaco",

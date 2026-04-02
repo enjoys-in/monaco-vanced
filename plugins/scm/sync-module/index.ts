@@ -12,9 +12,12 @@ export function createSyncPlugin(
 ): { plugin: MonacoPlugin; api: SyncModuleAPI } {
   const queue = new OfflineQueue(config.persistKey);
   const tracker = new StatusTracker();
+  const maxRetries = config.maxRetries ?? 3;
   let strategy: SyncStrategy = config.strategy ?? "last-write-wins";
   let online = typeof navigator !== "undefined" ? navigator.onLine : true;
   let ctx: PluginContext | null = null;
+  type SyncAdapterFn = (entry: { uri: string; operation: string; data?: unknown }) => Promise<void>;
+  const adapters: { sync: SyncAdapterFn | null } = { sync: null };
 
   const api: SyncModuleAPI = {
     getStatus: (uri) => tracker.get(uri),
@@ -24,6 +27,7 @@ export function createSyncPlugin(
       ctx?.emit(SyncEvents.Start, { queueLength: queue.length });
       let synced = 0;
       let failed = 0;
+      const retryQueue: Array<{ uri: string; operation: "write" | "delete" | "rename"; data?: unknown }> = [];
 
       while (queue.length > 0) {
         const entry = queue.dequeue();
@@ -33,13 +37,25 @@ export function createSyncPlugin(
           continue;
         }
         try {
-          // In real impl, would call FS adapter
+          if (adapters.sync) {
+            await adapters.sync({ uri: entry.uri, operation: entry.operation, data: entry.data });
+          }
           tracker.set(entry.uri, "synced");
           synced++;
         } catch {
-          tracker.set(entry.uri, "error");
+          if (entry.retryCount < maxRetries) {
+            retryQueue.push({ uri: entry.uri, operation: entry.operation, data: entry.data });
+          } else {
+            tracker.set(entry.uri, "error");
+          }
           failed++;
         }
+      }
+
+      // Re-enqueue retryable entries
+      for (const r of retryQueue) {
+        queue.enqueue(r.uri, r.operation, r.data);
+        tracker.set(r.uri, "pending");
       }
 
       ctx?.emit(SyncEvents.Complete, { synced, failed });

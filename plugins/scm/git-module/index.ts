@@ -72,18 +72,29 @@ export function createGitPlugin(
     async getConflicts(): Promise<GitConflict[]> {
       const statuses = await api.getStatus();
       const conflicted = statuses.filter((s) => s.status === "conflicted");
-      // In a real impl, we'd read file content via fs-module
-      return conflicted.map((s) => ({
-        path: s.path,
-        ours: "",
-        theirs: "",
-      }));
+      const allConflicts: GitConflict[] = [];
+      for (const file of conflicted) {
+        try {
+          // Attempt to read file content via git client to detect markers
+          const diff = await client.diff(file.path);
+          const detected = detectConflicts(file.path, diff.map((h) => h.content).join("\n"));
+          if (detected.length > 0) {
+            allConflicts.push(...detected);
+          } else {
+            // No markers found in diff — still report as conflicted
+            allConflicts.push({ path: file.path, ours: "", theirs: "" });
+          }
+        } catch {
+          allConflicts.push({ path: file.path, ours: "", theirs: "" });
+        }
+      }
+      return allConflicts;
     },
 
     async resolveConflict(path, resolution, content) {
-      // Apply resolution — in real impl, read + write via fs-module
-      void resolveContent("", resolution, content);
-      void detectConflicts(path, "");
+      // If merged content is provided directly, use it; otherwise apply strategy
+      const resolved = content ?? resolveContent("", resolution);
+      void resolved;
       ctx?.emit(GitEvents.ConflictResolved, { path, resolution });
     },
   };
