@@ -197,7 +197,7 @@ export function TitleBar({ eventBus, commandApi }: TitleBarProps) {
         eventBus.emit(NotificationEvents.Show, { id: `notif-${Date.now()}`, type: "info", message: "Welcome to Monaco Vanced IDE", duration: 4000 });
         break;
       case "help.docs":
-        eventBus.emit(NotificationEvents.Show, { id: `notif-${Date.now()}`, type: "info", message: "Documentation: https://github.com/AkashMondal/monaco-vanced", duration: 5000 });
+        eventBus.emit(NotificationEvents.Show, { id: `notif-${Date.now()}`, type: "info", message: "Documentation: https://github.com/enjoys-in/monaco-vanced", duration: 5000 });
         break;
       case "help.about":
         eventBus.emit(NotificationEvents.Show, { id: `notif-${Date.now()}`, type: "info", message: "Monaco Vanced v0.2.0 — Plugin-based IDE Architecture", duration: 4000 });

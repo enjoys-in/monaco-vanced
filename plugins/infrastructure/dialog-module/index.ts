@@ -103,7 +103,7 @@ export function createDialogPlugin(_config: Partial<DialogConfig> = {}): {
       ctx = pluginCtx;
 
       disposables.push(
-        ctx.on("dialog:show", async (data?: unknown) => {
+        ctx.on(DialogEvents.Show, async (data?: unknown) => {
           const cfg = data as DialogConfig | undefined;
           if (cfg) {
             const result = await api.showCustom(cfg);
@@ -113,7 +113,7 @@ export function createDialogPlugin(_config: Partial<DialogConfig> = {}): {
       );
 
       disposables.push(
-        ctx.on("dialog:close", (data?: unknown) => {
+        ctx.on(DialogEvents.Close, (data?: unknown) => {
           const d = data as { id?: string } | undefined;
           if (d?.id) api.close(d.id);
         }),

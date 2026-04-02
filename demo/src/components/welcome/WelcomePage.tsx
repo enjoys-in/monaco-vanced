@@ -15,10 +15,10 @@ export function WelcomePage({ emit, recentFiles }: { emit: Emit; recentFiles: Fi
   const { tokens: t } = useTheme();
 
   const showAboutDialog = () => {
-    emit(NotificationEvents.Show, { id: "about-dialog", type: "info", message: "Monaco Vanced IDE — v3.0 — Plugin-based Architecture", duration: 4000 });
-    emit("dialog:show", {
+    emit(NotificationEvents.Show, { id: "about-dialog", type: "info", message: "Monaco Vanced IDE — v0.2.0 — Plugin-based Architecture", duration: 4000 });
+    emit(DialogEvents.Show, {
       title: "About Monaco Vanced",
-      body: "Monaco Vanced IDE v3.0\n\nA plugin-based editor built on Monaco Editor with full theming, extensions, filesystem, and language support.\n\nPowered by Bun + Vite 8 + React 19.",
+      body: "Monaco Vanced IDE v0.2.0\n\nA plugin-based editor built on Monaco Editor with full theming, extensions, filesystem, and language support.\n\nPowered by Bun + Vite + React 19.",
       type: "confirm",
       actions: [{ id: "ok", label: "OK", primary: true }],
     });
@@ -26,9 +26,9 @@ export function WelcomePage({ emit, recentFiles }: { emit: Emit; recentFiles: Fi
 
   const showDocsDialog = () => {
     emit(NotificationEvents.Show, { id: "docs-dialog", type: "info", message: "Opening documentation…", duration: 2000 });
-    emit("dialog:show", {
+    emit(DialogEvents.Show, {
       title: "Documentation",
-      body: "Monaco Vanced documentation is available at:\n\nhttps://github.com/AkashMondal/monaco-vanced\n\nIncludes guides for plugin development, theming, filesystem adapters, and extension authoring.",
+      body: "Monaco Vanced documentation is available at:\n\nhttps://github.com/enjoys-in/monaco-vanced\n\nIncludes guides for plugin development, theming, filesystem adapters, and extension authoring.",
       type: "confirm",
       actions: [{ id: "ok", label: "OK", primary: true }],
     });
@@ -60,7 +60,7 @@ export function WelcomePage({ emit, recentFiles }: { emit: Emit; recentFiles: Fi
         Monaco Vanced
       </div>
       <div style={{ fontSize: 13, color: t.fgDim, marginBottom: 32 }}>
-        Plugin-based IDE — v3.0
+        Plugin-based IDE — v0.2.0
       </div>
 
       <div style={{ width: "100%", maxWidth: 680 }}>
@@ -73,7 +73,7 @@ export function WelcomePage({ emit, recentFiles }: { emit: Emit; recentFiles: Fi
               <ActionRow icon="folder" label="Open Folder…" shortcut="Ctrl+K Ctrl+O"
                 onClick={() => {
                   emit(NotificationEvents.Show, { id: "open-folder", type: "info", message: "Open Folder: Not available in browser demo", duration: 3000 });
-                  emit("dialog:show", {
+                  emit(DialogEvents.Show, {
                     title: "Open Folder",
                     body: "The Open Folder feature is not available in the browser demo. In a desktop environment, this would open a native file picker.",
                     type: "confirm",
@@ -83,7 +83,7 @@ export function WelcomePage({ emit, recentFiles }: { emit: Emit; recentFiles: Fi
               <ActionRow icon="clone" label="Clone Repository…"
                 onClick={() => {
                   emit(NotificationEvents.Show, { id: "clone-repo", type: "info", message: "Clone: Not available in browser demo", duration: 3000 });
-                  emit("dialog:show", {
+                  emit(DialogEvents.Show, {
                     title: "Clone Repository",
                     body: "Git clone is not available in the browser demo. This feature requires a backend Git service.",
                     type: "confirm",

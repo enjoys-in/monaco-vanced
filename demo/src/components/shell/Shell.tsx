@@ -12,7 +12,6 @@ import { CommandPalette } from "../command-palette/CommandPalette";
 import { BottomPanel } from "../bottom-panel/BottomPanel";
 import { AiChat, type AiChatProps } from "../ai-chat/AiChat";
 import { WelcomeDialog } from "../dialogs/WelcomeDialog";
-import { DialogOverlay } from "../dialogs/DialogOverlay";
 
 // ── Styles (CSS custom properties for live theming) ──────────
 const S = {
@@ -315,9 +314,6 @@ export const Shell = forwardRef<ShellHandle, {
 
       {/* Command Palette (portal) */}
       <CommandPalette eventBus={eventBus} commandApi={commandApi} />
-
-      {/* Dialog overlay — renders "dialog:show" events */}
-      <DialogOverlay eventBus={eventBus} />
 
       {/* First-visit welcome dialog */}
       <WelcomeDialog />
