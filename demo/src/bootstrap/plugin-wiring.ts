@@ -534,4 +534,70 @@ function wireAIMockBackend(ide: MonacoVancedInstance, eventBus: EventBus, apis: 
     if (status === "streaming") apis.statusbar.register({ id: "ai-status", label: "$(sparkle) AI", alignment: "right", priority: 100, tooltip: "AI is active" });
     else apis.statusbar.remove("ai-status");
   });
+
+  // ── Demo: Register a custom webview in the bottom panel ──
+  registerDemoWebview(apis);
+}
+
+// ── Custom Webview registration helper ───────────────────────
+
+let webviewCounter = 0;
+
+function registerDemoWebview(apis: PluginApis) {
+  // "Build Output" — a theme-aware custom webview panel
+  const container = document.createElement("div");
+  container.style.cssText = "display:flex;flex-direction:column;width:100%;height:100%;overflow:auto;font-family:'JetBrains Mono','Fira Code',monospace;font-size:13px;";
+
+  // Use CSS custom properties so content follows theme automatically
+  container.innerHTML = `
+    <div style="padding:8px 12px;color:var(--vsc-fg-dim);line-height:1.7;">
+      <div style="color:var(--vsc-success-green);">[build] ✓ TypeScript compiled successfully (0 errors)</div>
+      <div style="color:var(--vsc-fg-dim);">[build] Bundling with Vite…</div>
+      <div style="color:var(--vsc-fg-dim);">[build] dist/index.js &nbsp; <span style="color:var(--vsc-accent);">142.3 kB</span> │ gzip: <span style="color:var(--vsc-accent);">41.2 kB</span></div>
+      <div style="color:var(--vsc-fg-dim);">[build] dist/style.css &nbsp; <span style="color:var(--vsc-accent);">8.1 kB</span> │ gzip: <span style="color:var(--vsc-accent);">2.4 kB</span></div>
+      <div style="color:var(--vsc-success-green);">[build] ✓ Build completed in 1.2s</div>
+      <div style="margin-top:8px;color:var(--vsc-fg-dim);">[test] Running 24 tests…</div>
+      <div style="color:var(--vsc-success-green);">[test] ✓ 23 passed</div>
+      <div style="color:var(--vsc-warning-yellow);">[test] ⚠ 1 skipped (snapshot outdated)</div>
+      <div style="margin-top:8px;color:var(--vsc-fg);">Ready. Watching for file changes…</div>
+    </div>
+  `;
+
+  apis.layout.mountWebview("build-output", "bottom", container, "Build", "⚡");
+
+  // Register a palette command to add custom webview panels on the fly
+  apis.command.register({
+    id: "monacoVanced.addWebviewPanel",
+    label: "Add Custom Webview to Bottom Panel",
+    handler: () => {
+      webviewCounter++;
+      const id = `custom-${webviewCounter}`;
+      const el = document.createElement("div");
+      el.style.cssText = "display:flex;align-items:center;justify-content:center;width:100%;height:100%;";
+      el.innerHTML = `<div style="text-align:center;color:var(--vsc-fg-dim);font-size:14px;font-family:system-ui,sans-serif;">
+        <div style="font-size:32px;margin-bottom:8px;color:var(--vsc-accent);">🧩</div>
+        <div style="color:var(--vsc-fg);font-weight:600;">Custom Panel ${webviewCounter}</div>
+        <div style="margin-top:4px;">This is a user-created webview panel.</div>
+        <div style="margin-top:4px;">It follows the active theme via CSS variables.</div>
+      </div>`;
+      apis.layout.mountWebview(id, "bottom", el, `Panel ${webviewCounter}`);
+      apis.notification.show({ type: "info", message: `Custom panel "${id}" added to bottom.`, duration: 3000 });
+    },
+  });
+
+  // Register a command to remove custom webview panels
+  apis.command.register({
+    id: "monacoVanced.removeWebviewPanel",
+    label: "Remove Last Custom Webview Panel",
+    handler: () => {
+      if (webviewCounter <= 0) {
+        apis.notification.show({ type: "info", message: "No custom panels to remove.", duration: 2000 });
+        return;
+      }
+      const id = `custom-${webviewCounter}`;
+      apis.layout.unmountWebview(id);
+      webviewCounter--;
+      apis.notification.show({ type: "info", message: `Custom panel removed.`, duration: 2000 });
+    },
+  });
 }

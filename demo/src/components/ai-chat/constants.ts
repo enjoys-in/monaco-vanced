@@ -1,6 +1,7 @@
 // ── AI Chat — Constants & Helpers ────────────────────────────
 
 import type { SlashCommand, SuggestionPrompt } from "./types";
+import type { ThemeTokens } from "../theme";
 
 // ── SVG Icons ────────────────────────────────────────────────
 export const SparkleIcon = `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l1.7 4.3L14 7l-4.3 1.7L8 13l-1.7-4.3L2 7l4.3-1.7L8 1z"/></svg>`;
@@ -52,19 +53,20 @@ export function symbolKindIcon(kind: string): string {
   return SYMBOL_ICONS[kind.toLowerCase()] || SYMBOL_ICONS.variable;
 }
 
-// ── Symbol kind → color ──────────────────────────────────────
-const SYMBOL_COLORS: Record<string, string> = {
-  file: "#d4d4d4", module: "#c586c0", namespace: "#c586c0", package: "#c586c0",
-  class: "#4ec9b0", method: "#dcdcaa", property: "#9cdcfe", field: "#9cdcfe",
-  constructor: "#dcdcaa", enum: "#b5cea8", interface: "#4ec9b0", function: "#dcdcaa",
-  variable: "#9cdcfe", constant: "#4fc1ff", string: "#ce9178", number: "#b5cea8",
-  boolean: "#569cd6", array: "#9cdcfe", object: "#4ec9b0", key: "#9cdcfe",
-  null: "#569cd6", enummember: "#b5cea8", struct: "#4ec9b0", event: "#dcdcaa",
-  operator: "#d4d4d4", typeparameter: "#4ec9b0", type: "#4ec9b0", import: "#c586c0",
+// ── Symbol kind → theme token key ────────────────────────────
+const SYMBOL_COLOR_KEYS: Record<string, keyof ThemeTokens> = {
+  file: "fgDim", module: "accent", namespace: "accent", package: "accent",
+  class: "accent", method: "warningYellow", property: "textLink", field: "textLink",
+  constructor: "warningYellow", enum: "successGreen", interface: "accent", function: "warningYellow",
+  variable: "textLink", constant: "accentAlt", string: "fg", number: "successGreen",
+  boolean: "accent", array: "textLink", object: "accent", key: "textLink",
+  null: "accent", enummember: "successGreen", struct: "accent", event: "warningYellow",
+  operator: "fgDim", typeparameter: "accent", type: "accent", import: "accent",
 };
 
-export function symbolKindColor(kind: string): string {
-  return SYMBOL_COLORS[kind.toLowerCase()] || "#d4d4d4";
+export function symbolKindColor(kind: string, t: ThemeTokens): string {
+  const key = SYMBOL_COLOR_KEYS[kind.toLowerCase()] || "fgDim";
+  return t[key];
 }
 
 // ── Symbol kind → short label ────────────────────────────────
@@ -82,27 +84,20 @@ export function symbolKindLabel(kind: string): string {
   return SYMBOL_LABELS[kind.toLowerCase()] || kind.slice(0, 4);
 }
 
-// ── File extension → color ───────────────────────────────────
-const FILE_COLORS: Record<string, string> = {
-  ts: "#3178c6", tsx: "#3178c6", js: "#f7df1e", jsx: "#f7df1e",
-  css: "#264de4", html: "#e34c26", json: "#292929", md: "#083fa1",
-  py: "#3572A5", rs: "#dea584", go: "#00ADD8", svg: "#ffb13b",
-};
-
-export function fileColor(name: string): string {
-  const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  return FILE_COLORS[ext] || "#888";
+// ── File extension → color (theme-aware) ─────────────────────
+export function fileColor(_name: string, t: ThemeTokens): string {
+  return t.fgDim;
 }
 
-// ── Slash command colors (same semantic as symbols) ──────────
+// ── Slash command colors (theme-aware) ───────────────────────
 export const SLASH_COMMANDS: SlashCommand[] = [
-  { cmd: "/explain", description: "Explain the selected code", action: "explain", color: "#dcdcaa" },
-  { cmd: "/fix", description: "Fix errors in the selected code", action: "fix", color: "#f44747" },
-  { cmd: "/generate", description: "Generate code from a prompt", action: "generate", color: "#4ec9b0" },
-  { cmd: "/tests", description: "Generate unit tests", action: "generate", color: "#b5cea8" },
-  { cmd: "/refactor", description: "Suggest a refactoring", action: "explain", color: "#c586c0" },
-  { cmd: "/clear", description: "Clear chat history", action: undefined, color: "#9cdcfe" },
-  { cmd: "/new", description: "Start a new conversation", action: undefined, color: "#569cd6" },
+  { cmd: "/explain", description: "Explain the selected code", action: "explain", colorKey: "warningYellow" },
+  { cmd: "/fix", description: "Fix errors in the selected code", action: "fix", colorKey: "errorRed" },
+  { cmd: "/generate", description: "Generate code from a prompt", action: "generate", colorKey: "accent" },
+  { cmd: "/tests", description: "Generate unit tests", action: "generate", colorKey: "successGreen" },
+  { cmd: "/refactor", description: "Suggest a refactoring", action: "explain", colorKey: "accentAlt" },
+  { cmd: "/clear", description: "Clear chat history", action: undefined, colorKey: "textLink" },
+  { cmd: "/new", description: "Start a new conversation", action: undefined, colorKey: "accent" },
 ];
 
 // ── Suggested prompts ────────────────────────────────────────
@@ -114,10 +109,10 @@ export const SUGGESTIONS: SuggestionPrompt[] = [
 ];
 
 // ── Markdown-lite renderer ───────────────────────────────────
-export function renderContent(text: string): string {
+export function renderContent(text: string, t: ThemeTokens): string {
   return text
-    .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre style="background:rgba(0,0,0,0.3);padding:8px 10px;border-radius:4px;overflow-x:auto;margin:6px 0;font-size:12px;line-height:1.45"><code>$2</code></pre>')
-    .replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,0.25);padding:1px 4px;border-radius:3px;font-size:12px">$1</code>')
+    .replace(/```(\w*)\n([\s\S]*?)```/g, `<pre style="background:${t.inputBg};padding:8px 10px;border-radius:4px;overflow-x:auto;margin:6px 0;font-size:12px;line-height:1.45;border:1px solid ${t.border}"><code>$2</code></pre>`)
+    .replace(/`([^`]+)`/g, `<code style="background:${t.inputBg};padding:1px 4px;border-radius:3px;font-size:12px">$1</code>`)
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/^- (.+)$/gm, '<div style="padding-left:12px">• $1</div>')
     .replace(/^(\d+)\. (.+)$/gm, '<div style="padding-left:12px">$1. $2</div>')

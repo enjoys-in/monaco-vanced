@@ -35,8 +35,8 @@ export function AccountsView({ notificationApi }: Props) {
         width: 56, height: 56, borderRadius: "50%",
         background: `linear-gradient(135deg, ${t.accent}, ${t.buttonHoverBg})`,
         display: "flex", alignItems: "center", justifyContent: "center",
-        color: "#fff", fontSize: 22, fontWeight: 600, marginBottom: 12,
-        boxShadow: "0 2px 8px rgba(0,122,204,0.3)",
+        color: t.badgeFg, fontSize: 22, fontWeight: 600, marginBottom: 12,
+        boxShadow: `0 2px 8px color-mix(in srgb, ${t.accent} 30%, transparent)`,
       }}>U</div>
       <div style={{ fontSize: 15, color: t.fg, fontWeight: 500, marginBottom: 2 }}>User</div>
       <div style={{ fontSize: 12, color: t.fgDim, marginBottom: 20 }}>user@example.com</div>

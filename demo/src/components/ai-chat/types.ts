@@ -63,7 +63,7 @@ export interface SlashCommand {
   cmd: string;
   description: string;
   action: ChatAction | undefined;
-  color: string;
+  colorKey: string;
 }
 
 // ── Suggestion prompt ────────────────────────────────────────

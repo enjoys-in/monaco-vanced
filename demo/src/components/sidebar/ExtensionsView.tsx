@@ -240,7 +240,7 @@ export function ExtensionsView({ eventBus, notificationApi, extensionApi, vsixAp
                   <span>{formatDl(ext.downloads)} installs</span>
                   {ext.rating > 0 && <>
                     <span style={{ opacity: 0.5 }}>·</span>
-                    <span style={{ color: "#dcdcaa" }}>{stars(ext.rating)}</span>
+                    <span style={{ color: t.warningYellow }}>{stars(ext.rating)}</span>
                   </>}
                 </div>
                 <div style={{ fontSize: 11, color: t.fgDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 3 }}>

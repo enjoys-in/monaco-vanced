@@ -107,7 +107,7 @@ function FileIconSvg({ ext, filename }: { ext: string; filename?: string }) {
     const key = filename.toLowerCase();
     const fnIcon = FILENAME_ICONS[key];
     if (fnIcon) {
-      const color = getExtColor(key) || "#6a737d";
+      const color = getExtColor(key) || "var(--vsc-fg-dim)";
       return <span style={{ display: "inline-flex", alignItems: "center", flexShrink: 0, marginRight: 6 }}>{fnIcon(color)}</span>;
     }
   }
@@ -329,7 +329,7 @@ export function ExplorerInlineInput({ type, depth, iconApi, onConfirm, onCancel 
         <>
           <span style={{ width: 16 }} />
           <span style={{ marginRight: 4, display: "inline-flex", alignItems: "center" }}>
-            <FolderClosedSvg color="#dcb67a" />
+            <FolderClosedSvg color="var(--vsc-warning-yellow)" />
           </span>
         </>
       ) : (

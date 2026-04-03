@@ -158,7 +158,7 @@ function HeaderBtn({ title, svg, onClick }: { title: string; svg: string; onClic
         width: 28, height: 22, display: "flex", alignItems: "center", justifyContent: "center",
         cursor: "pointer", color: hovered ? "var(--vsc-fg)" : "var(--vsc-fgDim)",
         borderRadius: 4, transition: "background .1s, color .1s",
-        background: hovered ? "rgba(255,255,255,0.1)" : "transparent",
+        background: hovered ? "var(--vsc-hover)" : "transparent",
       }}
       dangerouslySetInnerHTML={{ __html: svg }}
     />

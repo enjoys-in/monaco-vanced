@@ -108,7 +108,7 @@ export function ScmView({ eventBus, files, notificationApi }: Props) {
             <span>Changes ({changedFiles.length})</span>
           </span>
         </div>
-        {(expandedSections.changes ?? true) && renderFileList(changedFiles, "M", "#e2c08d")}
+        {(expandedSections.changes ?? true) && renderFileList(changedFiles, "M", t.warningYellow)}
       </div>
     </div>
   );

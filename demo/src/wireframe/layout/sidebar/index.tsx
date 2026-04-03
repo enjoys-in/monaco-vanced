@@ -92,7 +92,7 @@ export function wireSidebar(
       style: `width:22px;height:22px;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:4px;color:${C.fgDim};transition:all .12s;`,
     });
     btn.innerHTML = svg;
-    btn.addEventListener("mouseenter", () => { btn.style.background = "rgba(255,255,255,0.08)"; btn.style.color = C.fg; });
+    btn.addEventListener("mouseenter", () => { btn.style.background = C.hover; btn.style.color = C.fg; });
     btn.addEventListener("mouseleave", () => { btn.style.background = "transparent"; btn.style.color = C.fgDim; });
     btn.addEventListener("click", () => {
       const explorerApi = window.__explorerApi;

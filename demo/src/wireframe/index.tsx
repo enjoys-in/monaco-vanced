@@ -156,8 +156,8 @@ function wireReactPanelVisibility(
     welcomeVisible = false;
     dom.welcomePage.style.display = "none";
     dom.editorContainer.style.display = "";
-    dom.tabBar.style.display = "";
-    dom.breadcrumbBar.style.display = "";
+    dom.tabBar.style.display = "flex";
+    dom.breadcrumbBar.style.display = "flex";
   }
 
   function openSettings() {
@@ -175,7 +175,7 @@ function wireReactPanelVisibility(
     settingsOpen = false;
     dom.settingsWebview.style.display = "none";
     dom.editorContainer.style.display = "";
-    dom.breadcrumbBar.style.display = "";
+    dom.breadcrumbBar.style.display = "flex";
   }
 
   function openExtDetail(ext: { id: string; name: string }) {
@@ -198,7 +198,7 @@ function wireReactPanelVisibility(
     extDetailOpen = false;
     dom.extensionDetailWebview.style.display = "none";
     dom.editorContainer.style.display = "";
-    dom.breadcrumbBar.style.display = "";
+    dom.breadcrumbBar.style.display = "flex";
   }
 
   // Show welcome on startup

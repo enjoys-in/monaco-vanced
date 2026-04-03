@@ -67,8 +67,8 @@ export function ChatInput({
     : SLASH_COMMANDS;
 
   const mentionItems: MentionItem[] = mentionMode === "file"
-    ? filteredFiles.map((f) => ({ id: f.uri, label: f.uri, secondary: f.name, kind: "file" as const, color: fileColor(f.name) }))
-    : filteredSymbols.map((s) => ({ id: `${s.path}:${s.name}:${s.line}`, label: s.name, secondary: `${symbolKindLabel(s.kind)} — ${s.path}:${s.line}`, kind: "symbol" as const, color: symbolKindColor(s.kind), _sym: s }));
+    ? filteredFiles.map((f) => ({ id: f.uri, label: f.uri, secondary: f.name, kind: "file" as const, color: fileColor(f.name, t) }))
+    : filteredSymbols.map((s) => ({ id: `${s.path}:${s.name}:${s.line}`, label: s.name, secondary: `${symbolKindLabel(s.kind)} — ${s.path}:${s.line}`, kind: "symbol" as const, color: symbolKindColor(s.kind, t), _sym: s }));
 
   // ── Mention handlers ───────────────────────────────────────
   const addFileAttachment = useCallback((uri: string) => {
@@ -182,7 +182,7 @@ export function ChatInput({
                 {iconApi ? (
                   <img src={iconApi.getFileIcon(name)} width={14} height={14} style={{ flexShrink: 0 }} onClick={() => openFileReference(uri)} title={`Open ${uri}`} alt="" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).nextElementSibling as any && ((e.target as HTMLImageElement).nextElementSibling!.style.display = 'inline-flex'); }} />
                 ) : null}
-                <span dangerouslySetInnerHTML={{ __html: FileIcon }} onClick={() => openFileReference(uri)} style={{ color: fileColor(name), flexShrink: 0, display: iconApi ? 'none' : 'inline-flex' }} title={`Open ${uri}`} />
+                <span dangerouslySetInnerHTML={{ __html: FileIcon }} onClick={() => openFileReference(uri)} style={{ color: fileColor(name, t), flexShrink: 0, display: iconApi ? 'none' : 'inline-flex' }} title={`Open ${uri}`} />
                 <span onClick={() => openFileReference(uri)} style={{ maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={`Open ${uri}`}>{name}</span>
                 <span style={{ cursor: "pointer", color: t.fgDim, marginLeft: 2, fontSize: 14, lineHeight: 1 }} onClick={() => onRemoveFile(uri)} title="Remove">×</span>
               </span>
@@ -200,8 +200,8 @@ export function ChatInput({
                 onClick={() => { const name = sym.file.split("/").pop() ?? sym.file; eventBus.emit(FileEvents.Open, { uri: sym.file, label: name, line: sym.line }); }}
                 title={`Open ${sym.file}:${sym.line}`}
               >
-                <span dangerouslySetInnerHTML={{ __html: symbolKindIcon(sym.kind) }} style={{ color: symbolKindColor(sym.kind), flexShrink: 0 }} />
-                <span style={{ color: symbolKindColor(sym.kind), fontWeight: 500 }}>{sym.name}</span>
+                <span dangerouslySetInnerHTML={{ __html: symbolKindIcon(sym.kind) }} style={{ color: symbolKindColor(sym.kind, t), flexShrink: 0 }} />
+                <span style={{ color: symbolKindColor(sym.kind, t), fontWeight: 500 }}>{sym.name}</span>
                 <span style={{ fontSize: 10, color: t.fgDim }}>{symbolKindLabel(sym.kind)}</span>
                 <span style={{ cursor: "pointer", color: t.fgDim, marginLeft: 2, fontSize: 14, lineHeight: 1 }} onClick={(e) => { e.stopPropagation(); onRemoveSymbol(key); }} title="Remove">×</span>
               </span>
@@ -213,7 +213,7 @@ export function ChatInput({
               padding: "3px 8px", borderRadius: 4, fontSize: 12,
               background: t.cardBg, border: `1px solid ${t.border}`, color: t.fg,
             }}>
-              <span dangerouslySetInnerHTML={{ __html: SelectionIcon }} style={{ color: "#569cd6", flexShrink: 0 }} />
+              <span dangerouslySetInnerHTML={{ __html: SelectionIcon }} style={{ color: t.accent, flexShrink: 0 }} />
               <span style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {attachedSelection.file.split("/").pop()} L{attachedSelection.startLine}-{attachedSelection.endLine}
               </span>
@@ -248,7 +248,7 @@ export function ChatInput({
                   color: t.fg,
                 }}
               >
-                <span style={{ fontWeight: 600, color: cmd.color }}>{cmd.cmd}</span>
+                <span style={{ fontWeight: 600, color: t[cmd.colorKey as keyof ThemeTokens] }}>{cmd.cmd}</span>
                 <span style={{ color: t.fgDim, fontSize: 11, flex: 1 }}>{cmd.description}</span>
               </div>
             ))}
@@ -358,7 +358,7 @@ export function ChatInput({
               width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center",
               borderRadius: 6, border: "none", cursor: "pointer",
               background: isStreaming ? t.errorRed : t.accent,
-              color: "#fff", padding: 0, flexShrink: 0,
+              color: t.badgeFg, padding: 0, flexShrink: 0,
               opacity: (input.trim() || isStreaming) ? 1 : 0.4,
             }}
             onClick={() => isStreaming ? onAbort() : onSend()}

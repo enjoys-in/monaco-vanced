@@ -488,7 +488,7 @@ function PluginCard({ plugin, emit, extensionApi }: { plugin: PluginInfo; emit: 
         </div>
         <span style={{
           fontSize: 10, padding: "2px 6px", borderRadius: 3,
-          background: "rgba(255,255,255,0.06)", color: t.fgDim,
+          background: `color-mix(in srgb, ${t.fgDim} 15%, transparent)`, color: t.fgDim,
         }}>
           {plugin.category}
         </span>
@@ -631,7 +631,7 @@ function ThemeCard({ theme, active, onApply }: { theme: ThemeInfo; active: boole
     >
       {/* Preview */}
       <div style={{ height: 64, background: theme.colors.bg, display: "flex", overflow: "hidden" }}>
-        <div style={{ width: 28, background: theme.colors.sidebar, borderRight: "1px solid rgba(255,255,255,0.06)" }} />
+        <div style={{ width: 28, background: theme.colors.sidebar, borderRight: `1px solid ${t.border}` }} />
         <div style={{ flex: 1, padding: "8px 10px" }}>
           <div style={{ width: "50%", height: 4, background: `${theme.colors.fg}30`, borderRadius: 2, marginBottom: 4 }} />
           <div style={{ width: "75%", height: 4, background: `${theme.colors.fg}20`, borderRadius: 2, marginBottom: 4 }} />
@@ -649,7 +649,7 @@ function ThemeCard({ theme, active, onApply }: { theme: ThemeInfo; active: boole
           )}
           <span style={{
             fontSize: 10, padding: "2px 6px", borderRadius: 3,
-            background: "rgba(255,255,255,0.06)", color: t.fgDim,
+            background: `color-mix(in srgb, ${t.fgDim} 15%, transparent)`, color: t.fgDim,
           }}>
             {theme.type}
           </span>

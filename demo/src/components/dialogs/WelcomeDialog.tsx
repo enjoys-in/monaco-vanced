@@ -140,7 +140,7 @@ export function WelcomeDialog() {
               onClick={dismiss}
               style={{
                 padding: "7px 20px", borderRadius: 6, border: "none",
-                background: t.accent, color: "#fff",
+                background: t.accent, color: t.badgeFg,
                 fontSize: 13, fontWeight: 500, cursor: "pointer",
               }}
             >

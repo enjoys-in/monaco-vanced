@@ -369,7 +369,7 @@ export function SearchView({ eventBus, files, notificationApi, indexerApi }: Pro
                     }}>{syms.length}</span>
                   </div>
                   {isExpanded && syms.slice(0, 20).map((sym, i) => {
-                    const kc = symbolKindColor(sym.kind);
+                    const kc = symbolKindColor(sym.kind, t);
                     return (
                       <div
                         key={`${sym.name}-${sym.line}-${i}`}

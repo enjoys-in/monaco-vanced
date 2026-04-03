@@ -96,23 +96,23 @@ if (typeof document !== "undefined" && !document.getElementById("wireframe-anims
 
     /* Tab bar scrollbar */
     .vsc-tab-bar::-webkit-scrollbar { height: 3px; }
-    .vsc-tab-bar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+    .vsc-tab-bar::-webkit-scrollbar-thumb { background: color-mix(in srgb, ${C.fgDim} 40%, transparent); border-radius: 3px; }
     .vsc-tab-bar::-webkit-scrollbar-track { background: transparent; }
 
     /* Sidebar scrollbar */
     .vsc-sidebar-content::-webkit-scrollbar { width: 5px; }
-    .vsc-sidebar-content::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 5px; }
-    .vsc-sidebar-content::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+    .vsc-sidebar-content::-webkit-scrollbar-thumb { background: color-mix(in srgb, ${C.fgDim} 30%, transparent); border-radius: 5px; }
+    .vsc-sidebar-content::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, ${C.fgDim} 50%, transparent); }
     .vsc-sidebar-content::-webkit-scrollbar-track { background: transparent; }
 
     /* Activity bar button hover */
-    .vsc-activity-btn:hover { background: rgba(255,255,255,0.08) !important; }
+    .vsc-activity-btn:hover { background: ${C.hover} !important; }
 
     /* Menu bar hover */
-    .vsc-menu-item:hover { background: rgba(255,255,255,0.08); border-radius: 4px; }
+    .vsc-menu-item:hover { background: ${C.hover}; border-radius: 4px; }
 
     /* Status bar hover */
-    .vsc-status-item:hover { background: rgba(255,255,255,0.12) !important; border-radius: 2px; }
+    .vsc-status-item:hover { background: color-mix(in srgb, ${C.statusFg} 18%, transparent) !important; border-radius: 2px; }
 
     /* Bottom panel tabs */
     .vsc-panel-tab { position: relative; }
@@ -149,10 +149,10 @@ if (typeof document !== "undefined" && !document.getElementById("wireframe-anims
       font-size: 13px; font-family: inherit; cursor: pointer;
       transition: background .15s, box-shadow .15s;
     }
-    .vsc-btn-primary { background: ${C.buttonBg}; color: #fff; }
+    .vsc-btn-primary { background: ${C.buttonBg}; color: ${C.fgBright}; }
     .vsc-btn-primary:hover { background: ${C.buttonHoverBg}; }
     .vsc-btn-secondary { background: transparent; color: ${C.fg}; border: 1px solid ${C.borderLight}; }
-    .vsc-btn-secondary:hover { background: rgba(255,255,255,0.06); }
+    .vsc-btn-secondary:hover { background: ${C.hover}; }
 
     /* Cards / panels */
     .vsc-card {
@@ -167,7 +167,7 @@ if (typeof document !== "undefined" && !document.getElementById("wireframe-anims
       letter-spacing: .5px; color: ${C.fgDim}; cursor: pointer;
       user-select: none; border-radius: 3px;
     }
-    .vsc-section-header:hover { background: rgba(255,255,255,0.04); }
+    .vsc-section-header:hover { background: ${C.hover}; }
 
     /* Badge */
     .vsc-badge {
@@ -179,7 +179,7 @@ if (typeof document !== "undefined" && !document.getElementById("wireframe-anims
     /* Tags */
     .vsc-tag {
       font-size: 10px; padding: 2px 6px; border-radius: 3px;
-      background: rgba(255,255,255,0.06); color: ${C.fgDim};
+      background: color-mix(in srgb, ${C.fgDim} 15%, transparent); color: ${C.fgDim};
       display: inline-flex; align-items: center;
     }
 
@@ -189,7 +189,7 @@ if (typeof document !== "undefined" && !document.getElementById("wireframe-anims
       cursor: pointer; color: ${C.fgDim}; transition: all .15s;
       user-select: none;
     }
-    .vsc-tab-pill:hover { color: ${C.fg}; background: rgba(255,255,255,0.06); }
+    .vsc-tab-pill:hover { color: ${C.fg}; background: ${C.hover}; }
     .vsc-tab-pill[data-active="true"] { color: ${C.fgBright}; background: ${C.listActive}; }
 
     /* Separator line */
@@ -199,7 +199,7 @@ if (typeof document !== "undefined" && !document.getElementById("wireframe-anims
     @keyframes blink { 50% { opacity: 0 } }
 
     /* Smooth scrollbar for all sidebar views */
-    .vsc-sidebar-content * { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.1) transparent; }
+    .vsc-sidebar-content * { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, ${C.fgDim} 30%, transparent) transparent; }
   `;
   document.head.appendChild(style);
 }

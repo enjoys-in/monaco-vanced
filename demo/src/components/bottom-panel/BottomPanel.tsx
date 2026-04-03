@@ -269,8 +269,8 @@ function SymbolRow({ sym, kindColor, onClick }: { sym: SymbolEntry; kindColor: s
 function TerminalContent() {
   const { tokens: t } = useTheme();
   const [history, setHistory] = useState<string[]>([
-    `<span style="color:${t.successGreen};">Welcome to Monaco Vanced Terminal</span>`,
-    `<span style="color:${t.fgDim};">Type commands here. Try: help, ls, pwd, echo, clear</span>`,
+    `<span style="color:var(--vsc-success-green);">Welcome to Monaco Vanced Terminal</span>`,
+    `<span style="color:var(--vsc-fg-dim);">Type commands here. Try: help, ls, pwd, echo, clear</span>`,
     "",
   ]);
   const [inputVal, setInputVal] = useState("");

@@ -3,26 +3,26 @@
 import { useState, useEffect, useRef, useCallback, useMemo, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import * as monaco from "monaco-editor";
-import { useTheme } from "../theme";
+import { useTheme, type ThemeTokens } from "../theme";
 import { HeaderEvents } from "@enjoys/monaco-vanced/core/events";
 import type { ExplorerIconAPI } from "../../explorer";
 
 // Symbol kind → codicon-like label
-const SYMBOL_ICONS: Record<number, { icon: string; color: string }> = {
-  0 /* File */: { icon: "📄", color: "#cccccc" },
-  1 /* Module */: { icon: "📦", color: "#ce9178" },
-  2 /* Namespace */: { icon: "🏷", color: "#4ec9b0" },
-  4 /* Class */: { icon: "◆", color: "#4ec9b0" },
-  5 /* Method */: { icon: "ƒ", color: "#dcdcaa" },
-  6 /* Property */: { icon: "◇", color: "#9cdcfe" },
-  8 /* Constructor */: { icon: "◆", color: "#dcdcaa" },
-  9 /* Enum */: { icon: "▤", color: "#b5cea8" },
-  10 /* Interface */: { icon: "◇", color: "#4ec9b0" },
-  11 /* Function */: { icon: "ƒ", color: "#dcdcaa" },
-  12 /* Variable */: { icon: "𝑥", color: "#9cdcfe" },
-  13 /* Constant */: { icon: "π", color: "#4fc1ff" },
-  22 /* Struct */: { icon: "◆", color: "#4ec9b0" },
-  25 /* TypeParameter */: { icon: "T", color: "#4ec9b0" },
+const SYMBOL_ICONS: Record<number, { icon: string; tokenKey: keyof ThemeTokens }> = {
+  0 /* File */: { icon: "📄", tokenKey: "fgDim" },
+  1 /* Module */: { icon: "📦", tokenKey: "fg" },
+  2 /* Namespace */: { icon: "🏷", tokenKey: "accent" },
+  4 /* Class */: { icon: "◆", tokenKey: "accent" },
+  5 /* Method */: { icon: "ƒ", tokenKey: "warningYellow" },
+  6 /* Property */: { icon: "◇", tokenKey: "textLink" },
+  8 /* Constructor */: { icon: "◆", tokenKey: "warningYellow" },
+  9 /* Enum */: { icon: "▤", tokenKey: "successGreen" },
+  10 /* Interface */: { icon: "◇", tokenKey: "accent" },
+  11 /* Function */: { icon: "ƒ", tokenKey: "warningYellow" },
+  12 /* Variable */: { icon: "𝑥", tokenKey: "textLink" },
+  13 /* Constant */: { icon: "π", tokenKey: "accentAlt" },
+  22 /* Struct */: { icon: "◆", tokenKey: "accent" },
+  25 /* TypeParameter */: { icon: "T", tokenKey: "accent" },
 };
 
 export interface CommandPaletteProps {
@@ -214,7 +214,7 @@ export function CommandPalette({ eventBus, commandApi, editor, iconApi }: Comman
               {symbols.length === 0 ? "No symbols found in this file." : "No matching symbols."}
             </div>
           ) : filteredSymbols.map((sym, i) => {
-            const si = SYMBOL_ICONS[sym.kind] ?? { icon: "?", color: t.fgDim };
+            const si = SYMBOL_ICONS[sym.kind] ?? { icon: "?", tokenKey: "fgDim" as const };
             return (
               <div
                 key={sym.name + sym.range.startLineNumber + i}
@@ -233,7 +233,7 @@ export function CommandPalette({ eventBus, commandApi, editor, iconApi }: Comman
                   background: i === highlightIdx ? t.listActive : "transparent",
                 }}
               >
-                <span style={{ width: 18, textAlign: "center", flexShrink: 0, color: si.color, fontSize: 14, fontWeight: 600 }}>
+                <span style={{ width: 18, textAlign: "center", flexShrink: 0, color: t[si.tokenKey], fontSize: 14, fontWeight: 600 }}>
                   {si.icon}
                 </span>
                 <span style={{ flex: 1 }}>{sym.name}</span>

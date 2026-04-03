@@ -27,7 +27,7 @@ export function ChatMessageList({ messages, tokens: t, eventBus, iconApi }: Chat
     userMsg: { display: "flex", flexDirection: "column", alignItems: "flex-end", marginBottom: 12 },
     userBubble: {
       maxWidth: "85%", padding: "8px 12px", borderRadius: "12px 12px 2px 12px",
-      background: t.accent, color: "#fff",
+      background: t.accent, color: t.badgeFg,
       fontSize: 13, lineHeight: "1.45", wordBreak: "break-word",
     },
     assistantMsg: { display: "flex", gap: 8, marginBottom: 12, alignItems: "flex-start" },
@@ -35,7 +35,7 @@ export function ChatMessageList({ messages, tokens: t, eventBus, iconApi }: Chat
       width: 24, height: 24, minWidth: 24, borderRadius: "50%",
       background: `linear-gradient(135deg, ${t.accent}, ${t.accentAlt || t.accent})`,
       display: "flex", alignItems: "center", justifyContent: "center",
-      color: "#fff", fontSize: 12,
+      color: t.badgeFg, fontSize: 12,
     },
     assistantBubble: {
       maxWidth: "85%", padding: "8px 12px", borderRadius: "2px 12px 12px 12px",
@@ -96,7 +96,7 @@ interface AssistantBubbleProps {
   styles: Record<string, CSSProperties>;
 }
 
-function AssistantBubble({ msg, tokens: _t, styles: S }: AssistantBubbleProps) {
+function AssistantBubble({ msg, tokens: t, styles: S }: AssistantBubbleProps) {
   const isThinking = msg.content === "Thinking…";
 
   return (
@@ -107,7 +107,7 @@ function AssistantBubble({ msg, tokens: _t, styles: S }: AssistantBubbleProps) {
       <div>
         <div
           style={{ ...S.assistantBubble, ...(isThinking ? { fontStyle: "italic", opacity: 0.7 } : {}) }}
-          dangerouslySetInnerHTML={{ __html: isThinking ? "Thinking…" : renderContent(msg.content) }}
+          dangerouslySetInnerHTML={{ __html: isThinking ? "Thinking…" : renderContent(msg.content, t) }}
         />
         <div style={S.timestamp}>{formatTime(msg.timestamp)}</div>
       </div>
@@ -132,7 +132,7 @@ function FileChip({ uri, tokens: t, onClick, iconApi }: { uri: string; tokens: T
       {iconApi ? (
         <img src={iconApi.getFileIcon(name)} width={14} height={14} style={{ display: "block" }} alt="" onError={(e) => { (e.target as HTMLImageElement).replaceWith(document.createRange().createContextualFragment(FileIcon)); }} />
       ) : (
-        <span dangerouslySetInnerHTML={{ __html: FileIcon }} style={{ color: fileColor(name) }} />
+        <span dangerouslySetInnerHTML={{ __html: FileIcon }} style={{ color: fileColor(name, t) }} />
       )}
       {name}
     </span>
@@ -146,13 +146,13 @@ function SymbolChip({ sym, tokens: t, onClick }: { sym: AttachedSymbol; tokens: 
       style={{
         display: "inline-flex", alignItems: "center", gap: 3,
         padding: "2px 6px", borderRadius: 4, fontSize: 11,
-        background: "rgba(255,255,255,0.1)", color: t.fgDim,
+        background: `color-mix(in srgb, ${t.fgDim} 20%, transparent)`, color: t.fgDim,
         cursor: "pointer",
       }}
       title={`Open ${sym.file}:${sym.line}`}
     >
-      <span dangerouslySetInnerHTML={{ __html: symbolKindIcon(sym.kind) }} style={{ display: "inline-flex", color: symbolKindColor(sym.kind), flexShrink: 0 }} />
-      <span style={{ color: symbolKindColor(sym.kind), fontWeight: 500 }}>{sym.name}</span>
+      <span dangerouslySetInnerHTML={{ __html: symbolKindIcon(sym.kind) }} style={{ display: "inline-flex", color: symbolKindColor(sym.kind, t), flexShrink: 0 }} />
+      <span style={{ color: symbolKindColor(sym.kind, t), fontWeight: 500 }}>{sym.name}</span>
       <span style={{ fontSize: 10, color: t.fgDim }}>{symbolKindLabel(sym.kind)}</span>
     </span>
   );
@@ -163,9 +163,9 @@ function SelectionChip({ sel, tokens: t }: { sel: AttachedSelection; tokens: The
     <span style={{
       display: "inline-flex", alignItems: "center", gap: 3,
       padding: "2px 6px", borderRadius: 4, fontSize: 11,
-      background: "rgba(255,255,255,0.1)", color: t.fgDim,
+      background: `color-mix(in srgb, ${t.fgDim} 20%, transparent)`, color: t.fgDim,
     }}>
-      <span dangerouslySetInnerHTML={{ __html: SelectionIcon }} style={{ color: "#569cd6" }} />
+      <span dangerouslySetInnerHTML={{ __html: SelectionIcon }} style={{ color: t.accent }} />
       <span>L{sel.startLine}-{sel.endLine}</span>
     </span>
   );

@@ -96,7 +96,7 @@ function AccountsPopup({ authApi, eventBus, anchorRect, onClose }: {
             <div style={{
               width: 32, height: 32, borderRadius: "50%", background: t.accent,
               display: "flex", alignItems: "center", justifyContent: "center",
-              color: "#fff", fontWeight: 600, fontSize: 14, flexShrink: 0,
+              color: t.badgeFg, fontWeight: 600, fontSize: 14, flexShrink: 0,
             }}>
               {(user.name || "U").charAt(0).toUpperCase()}
             </div>

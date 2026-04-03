@@ -63,6 +63,7 @@ export function mountReactComponents({
 
   // Mount TabBar (React tabs)
   if (tabListEl) {
+    console.log("[mount] TabBar mounting into tabListEl", { hasIconApi: !!iconApi, el: tabListEl.tagName });
     if (!tabBarRoot) {
       tabBarRoot = createRoot(tabListEl);
     }
@@ -77,6 +78,8 @@ export function mountReactComponents({
         />
       </ThemeProvider>,
     );
+  } else {
+    console.warn("[mount] TabBar NOT mounted — tabListEl is falsy");
   }
 
   // Mount Breadcrumbs

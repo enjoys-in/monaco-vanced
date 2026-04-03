@@ -29,7 +29,7 @@ export function CollapsibleSection({
           userSelect: "none", borderRadius: 3,
           transition: "background .1s",
         }}
-        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.04)"; }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--vsc-hover)"; }}
         onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
       >
         <span style={{
@@ -123,7 +123,7 @@ export function TabPill({
         padding: "4px 12px", fontSize: 12, borderRadius: 4,
         cursor: "pointer", userSelect: "none",
         color: active ? t.fgBright : hovered ? t.fg : t.fgDim,
-        background: active ? t.listActive : hovered ? "rgba(255,255,255,0.06)" : "transparent",
+        background: active ? t.listActive : hovered ? t.hover : "transparent",
         transition: "all .15s",
       }}
     >
@@ -160,7 +160,7 @@ export function IconButton({
         display: "flex", alignItems: "center", justifyContent: "center",
         cursor: "pointer", color: hovered ? t.fg : t.fgDim,
         borderRadius: 4,
-        background: hovered ? "rgba(255,255,255,0.1)" : "transparent",
+        background: hovered ? t.hover : "transparent",
         transition: "background .1s, color .1s",
         ...extraStyle,
       }}
