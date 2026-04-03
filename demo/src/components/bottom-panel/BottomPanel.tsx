@@ -1,14 +1,29 @@
-// ── Bottom Panel — React (Problems, Output, Terminal, Debug, Outline) ─
+// ── Bottom Panel — React (Problems, Output, Terminal, Debug, Outline + Webviews) ─
 
 import { useState, useEffect, useRef, useCallback, type CSSProperties } from "react";
 import * as monaco from "monaco-editor";
 import { useTheme } from "../theme";
-import { PanelEvents, FileEvents } from "@enjoys/monaco-vanced/core/events";
+import { PanelEvents, FileEvents, LayoutEvents } from "@enjoys/monaco-vanced/core/events";
 
 // ── Types ────────────────────────────────────────────────────
+
+/** A dynamically registered bottom view (webview or custom) */
+interface DynamicView {
+  id: string;
+  label: string;
+  icon?: string;
+  isWebview: boolean;
+}
+
+/** Layout API subset consumed by BottomPanel */
+export interface BottomPanelLayoutApi {
+  getRegisteredViews(location: "bottom"): { id: string; label: string; icon?: string; isWebview?: boolean; webviewContainer?: HTMLElement }[];
+}
+
 export interface BottomPanelProps {
   eventBus: { emit(ev: string, payload: unknown): void; on(ev: string, fn: (p: unknown) => void): void; off(ev: string, fn: (p: unknown) => void): void };
   files?: { uri: string; name: string }[];
+  layoutApi?: BottomPanelLayoutApi;
 }
 
 const PANEL_TABS = ["Problems", "Output", "Terminal", "Debug Console", "Outline"];
@@ -147,7 +162,7 @@ function ProblemsContent({ eventBus }: { eventBus: BottomPanelProps["eventBus"] 
             {markers.map((m, i) => {
               const sevColor = m.severity === monaco.MarkerSeverity.Error ? t.errorRed : m.severity === monaco.MarkerSeverity.Warning ? t.warningYellow : t.fgDim;
               return (
-                <MarkerRow key={i} marker={m} sevColor={sevColor} onClick={() => eventBus.emit(FileEvents.Open, { uri: file, name: file.split("/").pop() })} />
+                <MarkerRow key={i} marker={m} sevColor={sevColor} onClick={() => eventBus.emit(FileEvents.Open, { uri: file, name: file.split("/").pop(), line: m.startLineNumber, column: m.startColumn })} />
               );
             })}
           </div>
@@ -205,9 +220,9 @@ function OutlineContent({ currentFileUri, eventBus }: { currentFileUri: string; 
 
   const symbols = getSymbols(currentFileUri, model);
   const kindColors: Record<string, string> = {
-    function: "#dcdcaa", class: "#4ec9b0", interface: "#4ec9b0",
-    enum: "#4ec9b0", component: "#4ec9b0", store: "#c586c0",
-    variable: "#9cdcfe", import: "#569cd6",
+    function: t.warningYellow, class: t.accent, interface: t.accent,
+    enum: t.accent, component: t.accent, store: t.textLink,
+    variable: t.fg, import: t.textLink,
   };
 
   if (symbols.length === 0) {
@@ -221,7 +236,7 @@ function OutlineContent({ currentFileUri, eventBus }: { currentFileUri: string; 
       </div>
       <div style={{ overflowY: "auto", fontSize: 13 }}>
         {symbols.map((sym, i) => (
-          <SymbolRow key={`${sym.name}-${sym.line}-${i}`} sym={sym} kindColor={kindColors[sym.kind] || t.fgDim} onClick={() => eventBus.emit(FileEvents.Open, { uri: currentFileUri, name: currentFileUri.split("/").pop() })} />
+          <SymbolRow key={`${sym.name}-${sym.line}-${i}`} sym={sym} kindColor={kindColors[sym.kind] || t.fgDim} onClick={() => eventBus.emit(FileEvents.Open, { uri: currentFileUri, name: currentFileUri.split("/").pop(), line: sym.line })} />
         ))}
       </div>
     </>
@@ -254,7 +269,7 @@ function SymbolRow({ sym, kindColor, onClick }: { sym: SymbolEntry; kindColor: s
 function TerminalContent() {
   const { tokens: t } = useTheme();
   const [history, setHistory] = useState<string[]>([
-    `<span style="color:#89d185;">Welcome to Monaco Vanced Terminal</span>`,
+    `<span style="color:${t.successGreen};">Welcome to Monaco Vanced Terminal</span>`,
     `<span style="color:${t.fgDim};">Type commands here. Try: help, ls, pwd, echo, clear</span>`,
     "",
   ]);
@@ -265,9 +280,13 @@ function TerminalContent() {
   useEffect(() => { inputRef.current?.focus(); }, []);
 
   const handleCommand = (cmd: string) => {
-    const prompt = `<span style="color:#89d185;">user@monaco-vanced</span>:<span style="color:#569cd6;">~/project</span>$ ${escapeHtml(cmd)}`;
+    const prompt = `<span style="color:${t.successGreen};">user@monaco-vanced</span>:<span style="color:${t.accent};">~/project</span>$ ${escapeHtml(cmd)}`;
     const output = execCmd(cmd, t);
-    setHistory((prev) => [...prev, prompt, ...(output ? [output] : [])]);
+    if (output === "__CLEAR__") {
+      setHistory([]);
+    } else {
+      setHistory((prev) => [...prev, prompt, ...(output ? [output] : [])]);
+    }
     setInputVal("");
     requestAnimationFrame(() => {
       if (outputRef.current) outputRef.current.scrollTop = outputRef.current.scrollHeight;
@@ -278,7 +297,7 @@ function TerminalContent() {
     <div style={{ color: t.fg, fontSize: 13, display: "flex", flexDirection: "column", height: "100%" }}>
       <div ref={outputRef} style={{ flex: 1, whiteSpace: "pre-wrap", overflowY: "auto" }} dangerouslySetInnerHTML={{ __html: history.join("\n") }} />
       <div style={{ display: "flex", alignItems: "center", gap: 0, marginTop: 4 }}>
-        <span dangerouslySetInnerHTML={{ __html: `<span style="color:#89d185;">user@monaco-vanced</span>:<span style="color:#569cd6;">~/project</span>$ ` }} />
+        <span dangerouslySetInnerHTML={{ __html: `<span style="color:${t.successGreen};">user@monaco-vanced</span>:<span style="color:${t.accent};">~/project</span>$ ` }} />
         <input
           ref={inputRef}
           type="text"
@@ -303,29 +322,31 @@ function execCmd(cmd: string, t: Record<string, string>): string {
   switch (base) {
     case "help": return `<span style="color:${t.fgDim};">Available commands: help, ls, pwd, echo, clear, date, whoami, cat, node -v, npm -v</span>`;
     case "clear": return "__CLEAR__";
-    case "ls": return `<span style="color:#569cd6;">src/</span>  <span style="color:#569cd6;">public/</span>  <span style="color:${t.fg};">package.json</span>  <span style="color:${t.fg};">tsconfig.json</span>  <span style="color:${t.fg};">README.md</span>  <span style="color:${t.fg};">vite.config.ts</span>`;
+    case "ls": return `<span style="color:${t.accent};">src/</span>  <span style="color:${t.accent};">public/</span>  <span style="color:${t.fg};">package.json</span>  <span style="color:${t.fg};">tsconfig.json</span>  <span style="color:${t.fg};">README.md</span>  <span style="color:${t.fg};">vite.config.ts</span>`;
     case "pwd": return "/home/user/project";
-    case "echo": return parts.slice(1).join(" ");
+    case "echo": return escapeHtml(parts.slice(1).join(" "));
     case "date": return new Date().toString();
     case "whoami": return "user";
     case "cat": return parts[1] ? `<span style="color:${t.fgDim};">cat: ${escapeHtml(parts[1])}: Use the editor to view files</span>` : `<span style="color:${t.errorRed};">cat: missing operand</span>`;
     case "node": return "v22.0.0";
     case "npm": return "10.9.0";
     case "bun": return "1.2.0";
-    case "git": return parts[1] === "status" ? `<span style="color:#89d185;">On branch main\nYour branch is up to date.</span>` : `<span style="color:${t.fgDim};">git: command simulated</span>`;
+    case "git": return parts[1] === "status" ? `<span style="color:${t.successGreen};">On branch main\nYour branch is up to date.</span>` : `<span style="color:${t.fgDim};">git: command simulated</span>`;
     case "": return "";
     default: return `<span style="color:${t.errorRed};">bash: ${escapeHtml(base)}: command not found</span>`;
   }
 }
 
 // ── Main BottomPanel Component ───────────────────────────────
-export function BottomPanel({ eventBus, files = [] }: BottomPanelProps) {
+export function BottomPanel({ eventBus, files = [], layoutApi }: BottomPanelProps) {
   const { tokens: t } = useTheme();
   const [visible, setVisible] = useState(false);
   const [activeTab, setActiveTab] = useState("Terminal");
   const [currentFileUri, setCurrentFileUri] = useState("");
   const [problemsCount, setProblemsCount] = useState(0);
+  const [dynamicViews, setDynamicViews] = useState<DynamicView[]>([]);
   const panelRef = useRef<HTMLDivElement>(null);
+  const webviewMountRef = useRef<HTMLDivElement>(null);
 
   // Resize state
   const [height, setHeight] = useState(200);
@@ -344,7 +365,7 @@ export function BottomPanel({ eventBus, files = [] }: BottomPanelProps) {
   useEffect(() => {
     const onFocusTab = (p: unknown) => {
       const { tab } = p as { tab: string };
-      if (tab && PANEL_TABS.includes(tab)) {
+      if (tab) {
         setActiveTab(tab);
         setVisible(true);
       }
@@ -371,6 +392,37 @@ export function BottomPanel({ eventBus, files = [] }: BottomPanelProps) {
     });
     return () => disposable.dispose();
   }, []);
+
+  // Seed dynamic views from layout API on mount
+  useEffect(() => {
+    if (!layoutApi) return;
+    const views = layoutApi.getRegisteredViews("bottom");
+    if (views.length) {
+      setDynamicViews(views.map((v) => ({ id: v.id, label: v.label, icon: v.icon, isWebview: v.isWebview ?? false })));
+    }
+  }, [layoutApi]);
+
+  // Listen for dynamic view register/unregister
+  useEffect(() => {
+    const onRegister = (p: unknown) => {
+      const { viewId, label, icon, isWebview } = p as { viewId: string; label: string; icon?: string; isWebview: boolean };
+      setDynamicViews((prev) => {
+        if (prev.some((v) => v.id === viewId)) return prev;
+        return [...prev, { id: viewId, label, icon, isWebview }];
+      });
+    };
+    const onUnregister = (p: unknown) => {
+      const { viewId } = p as { viewId: string };
+      setDynamicViews((prev) => prev.filter((v) => v.id !== viewId));
+      setActiveTab((cur) => cur === viewId ? "Terminal" : cur);
+    };
+    eventBus.on(PanelEvents.BottomViewRegister, onRegister);
+    eventBus.on(PanelEvents.BottomViewUnregister, onUnregister);
+    return () => {
+      eventBus.off(PanelEvents.BottomViewRegister, onRegister);
+      eventBus.off(PanelEvents.BottomViewUnregister, onUnregister);
+    };
+  }, [eventBus]);
 
   // Resize handler
   useEffect(() => {
@@ -427,6 +479,14 @@ export function BottomPanel({ eventBus, files = [] }: BottomPanelProps) {
               onClick={() => setActiveTab(tab)}
             />
           ))}
+          {dynamicViews.map((view) => (
+            <PanelTab
+              key={view.id}
+              label={view.label}
+              isActive={view.id === activeTab}
+              onClick={() => setActiveTab(view.id)}
+            />
+          ))}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <div
@@ -440,7 +500,7 @@ export function BottomPanel({ eventBus, files = [] }: BottomPanelProps) {
 
       {/* Content */}
       <div style={{
-        flex: 1, overflow: "auto", padding: "8px 12px",
+        flex: 1, overflow: "auto", padding: activeTab && dynamicViews.some((v) => v.id === activeTab && v.isWebview) ? 0 : "8px 12px",
         fontFamily: "'JetBrains Mono','Fira Code',monospace", fontSize: 13,
       }}>
         {activeTab === "Terminal" && <TerminalContent />}
@@ -456,7 +516,46 @@ export function BottomPanel({ eventBus, files = [] }: BottomPanelProps) {
         {activeTab === "Debug Console" && (
           <div style={{ color: t.fgDim, fontSize: 13 }}>Debug Console — No active session. Start a debug session to see output here.</div>
         )}
+        {dynamicViews.map((view) => (
+          <WebviewContent
+            key={view.id}
+            viewId={view.id}
+            isActive={activeTab === view.id}
+            layoutApi={layoutApi}
+          />
+        ))}
       </div>
     </div>
+  );
+}
+
+// ── Webview Content — mounts a dynamic view's DOM container ──
+function WebviewContent({ viewId, isActive, layoutApi }: {
+  viewId: string;
+  isActive: boolean;
+  layoutApi?: BottomPanelLayoutApi;
+}) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const mountedRef = useRef(false);
+
+  useEffect(() => {
+    if (!isActive || !layoutApi || !hostRef.current) return;
+    const views = layoutApi.getRegisteredViews("bottom");
+    const view = views.find((v) => v.id === viewId);
+    if (!view?.webviewContainer) return;
+    if (mountedRef.current && hostRef.current.contains(view.webviewContainer)) return;
+    hostRef.current.innerHTML = "";
+    hostRef.current.appendChild(view.webviewContainer);
+    mountedRef.current = true;
+  }, [isActive, viewId, layoutApi]);
+
+  return (
+    <div
+      ref={hostRef}
+      style={{
+        display: isActive ? "flex" : "none",
+        flex: 1, width: "100%", height: "100%", overflow: "hidden",
+      }}
+    />
   );
 }

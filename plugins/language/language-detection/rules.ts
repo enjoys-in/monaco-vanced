@@ -49,10 +49,24 @@ export const detectionRules: Record<string, DetectionRule> = {
     extensions: [".ps1", ".psm1", ".psd1"],
   },
 
+  // ── Compiled — Monaco may register but we add content detection ──
+  java: {
+    extensions: [".java"],
+    contentPatterns: [/^\s*(import\s+java\.|public\s+class|package\s+[a-z]+\.)/m],
+  },
+  c: {
+    extensions: [".c", ".h"],
+    contentPatterns: [/^#include\s*[<"]/m],
+  },
+  cpp: {
+    extensions: [".cpp", ".hpp", ".cc", ".cxx", ".hh", ".hxx"],
+    contentPatterns: [/^#include\s*[<"]|\bnamespace\s+\w+/m],
+  },
+
   // ── Languages Monaco does NOT register natively ──
   dockerfile: {
     extensions: [".dockerfile"],
-    filenames: ["Dockerfile", "Containerfile"],
+    filenames: ["Dockerfile", "dockerfile", "Containerfile", "containerfile"],
     contentPatterns: [/^FROM\s+\S+/m],
   },
   dotenv: {
@@ -71,7 +85,7 @@ export const detectionRules: Record<string, DetectionRule> = {
     contentPatterns: [/^\[[\w.-]+\]\s*$/m],
   },
   makefile: {
-    filenames: ["Makefile", "makefile", "GNUmakefile"],
+    filenames: ["Makefile", "makefile", "GNUmakefile", "gnumakefile"],
     contentPatterns: [/^[\w.-]+\s*:(?!=)/m],
   },
   nginx: {
@@ -119,7 +133,7 @@ export const detectionRules: Record<string, DetectionRule> = {
   },
   go: {
     extensions: [".go"],
-    contentPatterns: [/^package\s+\w+/m],
+    contentPatterns: [/^package\s+(?!com\.|org\.|net\.|io\.|[a-z]+\.)\w+/m],
   },
   swift: {
     extensions: [".swift"],

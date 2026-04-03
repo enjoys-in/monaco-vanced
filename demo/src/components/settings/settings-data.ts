@@ -77,9 +77,16 @@ export const EDITOR_SETTINGS: SettingDef[] = [
   { id: "editor.minimap.enabled", label: "Minimap Enabled", type: "checkbox", value: "true", desc: "Controls whether the minimap is shown.", group: "Minimap", category: "Text Editor", tags: ["minimap"] },
   { id: "editor.minimap.side", label: "Minimap Side", type: "select", value: "right", options: ["left", "right"], desc: "Controls the side where minimap is rendered.", group: "Minimap", category: "Text Editor", tags: ["minimap"] },
   { id: "editor.minimap.maxColumn", label: "Minimap Max Column", type: "number", value: "120", desc: "Maximum width of the minimap in columns.", group: "Minimap", category: "Text Editor", tags: ["minimap"] },
+  { id: "editor.minimap.showSlider", label: "Minimap Show Slider", type: "select", value: "mouseover", options: ["always", "mouseover"], desc: "Controls when the minimap slider is shown.", group: "Minimap", category: "Text Editor", tags: ["minimap"] },
+  { id: "editor.minimap.renderCharacters", label: "Minimap Render Characters", type: "checkbox", value: "true", desc: "Render actual characters in minimap (vs color blocks).", group: "Minimap", category: "Text Editor", tags: ["minimap"] },
+  { id: "editor.minimap.scale", label: "Minimap Scale", type: "number", value: "1", desc: "Scale of content drawn in the minimap (1-3).", group: "Minimap", category: "Text Editor", tags: ["minimap"] },
+  { id: "editor.minimap.autohide", label: "Minimap Auto Hide", type: "checkbox", value: "false", desc: "Auto-hide minimap when there is no content to render.", group: "Minimap", category: "Text Editor", tags: ["minimap"] },
+  { id: "editor.minimap.size", label: "Minimap Size", type: "select", value: "proportional", options: ["proportional", "fill", "fit"], desc: "Controls the minimap rendering size.", group: "Minimap", category: "Text Editor", tags: ["minimap"] },
 
   // ── Sticky Scroll ──────────────────────────────────────
   { id: "editor.stickyScroll.enabled", label: "Sticky Scroll", type: "checkbox", value: "false", desc: "Show nested scope headers at the top of the editor.", group: "Sticky Scroll", category: "Text Editor", tags: ["scroll", "sticky"] },
+  { id: "editor.stickyScroll.maxLineCount", label: "Sticky Scroll Max Lines", type: "number", value: "5", desc: "Maximum number of sticky lines to show.", group: "Sticky Scroll", category: "Text Editor", tags: ["scroll", "sticky"] },
+  { id: "editor.stickyScroll.defaultModel", label: "Sticky Scroll Model", type: "select", value: "outlineModel", options: ["outlineModel", "foldingProviderModel", "indentationModel"], desc: "Model to use for determining sticky scroll headers.", group: "Sticky Scroll", category: "Text Editor", tags: ["scroll", "sticky"] },
 
   // ── Suggestions & Completions ──────────────────────────
   { id: "editor.suggestOnTriggerCharacters", label: "Suggest On Trigger", type: "checkbox", value: "true", desc: "Controls whether suggestions auto-show on trigger characters.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
@@ -97,6 +104,35 @@ export const EDITOR_SETTINGS: SettingDef[] = [
   { id: "editor.suggest.showFunctions", label: "Show Functions", type: "checkbox", value: "true", desc: "Show functions in suggestions.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
   { id: "editor.inlineSuggest.enabled", label: "Inline Suggestions", type: "checkbox", value: "true", desc: "Enable inline suggestions (ghost text).", group: "Suggest", category: "Text Editor", tags: ["suggest", "ai"] },
   { id: "editor.parameterHints.enabled", label: "Parameter Hints", type: "checkbox", value: "true", desc: "Show parameter hints on function call.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
+  { id: "editor.suggest.insertMode", label: "Suggest Insert Mode", type: "select", value: "insert", options: ["insert", "replace"], desc: "Controls whether to insert or replace when accepting.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
+  { id: "editor.suggest.preview", label: "Suggest Preview", type: "checkbox", value: "false", desc: "Enable preview of suggestion outcome in the editor.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
+  { id: "editor.suggest.showStatusBar", label: "Suggest Status Bar", type: "checkbox", value: "true", desc: "Show status bar in suggestions widget.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
+  { id: "editor.suggest.filterGraceful", label: "Suggest Filter Graceful", type: "checkbox", value: "true", desc: "Enable graceful matching (e.g. camelCase).", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
+  { id: "editor.suggest.localityBonus", label: "Suggest Locality Bonus", type: "checkbox", value: "false", desc: "Boost suggestions near cursor.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
+  { id: "editor.suggest.shareSuggestSelections", label: "Share Suggest Selections", type: "checkbox", value: "false", desc: "Share remembered selections across editors.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
+  { id: "editor.suggest.showClasses", label: "Show Classes", type: "checkbox", value: "true", desc: "Show class suggestions.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
+  { id: "editor.suggest.showInterfaces", label: "Show Interfaces", type: "checkbox", value: "true", desc: "Show interface suggestions.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
+  { id: "editor.suggest.showModules", label: "Show Modules", type: "checkbox", value: "true", desc: "Show module suggestions.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
+  { id: "editor.suggest.showProperties", label: "Show Properties", type: "checkbox", value: "true", desc: "Show property suggestions.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
+  { id: "editor.suggest.showVariables", label: "Show Variables", type: "checkbox", value: "true", desc: "Show variable suggestions.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
+  { id: "editor.suggest.showConstants", label: "Show Constants", type: "checkbox", value: "true", desc: "Show constant suggestions.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
+  { id: "editor.suggest.showEnums", label: "Show Enums", type: "checkbox", value: "true", desc: "Show enum suggestions.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
+  { id: "editor.suggest.showEnumMembers", label: "Show Enum Members", type: "checkbox", value: "true", desc: "Show enum member suggestions.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
+  { id: "editor.suggest.showKeywords", label: "Show Keywords", type: "checkbox", value: "true", desc: "Show keyword suggestions.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
+  { id: "editor.suggest.showSnippets", label: "Show Snippets", type: "checkbox", value: "true", desc: "Show snippet suggestions.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
+  { id: "editor.suggest.showColors", label: "Show Colors", type: "checkbox", value: "true", desc: "Show color suggestions.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
+  { id: "editor.suggest.showFiles", label: "Show Files", type: "checkbox", value: "true", desc: "Show file suggestions.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
+  { id: "editor.suggest.showReferences", label: "Show References", type: "checkbox", value: "true", desc: "Show reference suggestions.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
+  { id: "editor.suggest.showFolders", label: "Show Folders", type: "checkbox", value: "true", desc: "Show folder suggestions.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
+  { id: "editor.suggest.showTypeParameters", label: "Show Type Parameters", type: "checkbox", value: "true", desc: "Show type parameter suggestions.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
+  { id: "editor.suggest.showValues", label: "Show Values", type: "checkbox", value: "true", desc: "Show value suggestions.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
+  { id: "editor.suggest.showConstructors", label: "Show Constructors", type: "checkbox", value: "true", desc: "Show constructor suggestions.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
+  { id: "editor.suggest.showStructs", label: "Show Structs", type: "checkbox", value: "true", desc: "Show struct suggestions.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
+  { id: "editor.suggest.showEvents", label: "Show Events", type: "checkbox", value: "true", desc: "Show event suggestions.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
+  { id: "editor.suggest.showOperators", label: "Show Operators", type: "checkbox", value: "true", desc: "Show operator suggestions.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
+  { id: "editor.suggest.showUnits", label: "Show Units", type: "checkbox", value: "true", desc: "Show unit suggestions.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
+  { id: "editor.suggest.showWords", label: "Show Words", type: "checkbox", value: "true", desc: "Show word suggestions.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
+  { id: "editor.suggest.showDeprecated", label: "Show Deprecated", type: "checkbox", value: "true", desc: "Show deprecated suggestions.", group: "Suggest", category: "Text Editor", tags: ["suggest"] },
 
   // ── Formatting ─────────────────────────────────────────
   { id: "editor.formatOnPaste", label: "Format on Paste", type: "checkbox", value: "false", desc: "Auto-format pasted content.", group: "Formatting", category: "Text Editor", tags: ["format"] },
@@ -112,6 +148,14 @@ export const EDITOR_SETTINGS: SettingDef[] = [
   { id: "editor.mouseWheelScrollSensitivity", label: "Mouse Wheel Sensitivity", type: "number", value: "1", desc: "Mouse wheel scroll speed multiplier.", group: "Scrolling", category: "Text Editor", tags: ["scroll"] },
   { id: "editor.fastScrollSensitivity", label: "Fast Scroll Sensitivity", type: "number", value: "5", desc: "Fast scroll multiplier with Alt key.", group: "Scrolling", category: "Text Editor", tags: ["scroll"] },
 
+  // ── Scrollbar ──────────────────────────────────────────
+  { id: "editor.scrollbar.vertical", label: "Vertical Scrollbar", type: "select", value: "auto", options: ["auto", "visible", "hidden"], desc: "Vertical scrollbar visibility.", group: "Scrollbar", category: "Text Editor", tags: ["scroll", "scrollbar"] },
+  { id: "editor.scrollbar.horizontal", label: "Horizontal Scrollbar", type: "select", value: "auto", options: ["auto", "visible", "hidden"], desc: "Horizontal scrollbar visibility.", group: "Scrollbar", category: "Text Editor", tags: ["scroll", "scrollbar"] },
+  { id: "editor.scrollbar.verticalScrollbarSize", label: "Vertical Scrollbar Size", type: "number", value: "14", desc: "Width of the vertical scrollbar in pixels.", group: "Scrollbar", category: "Text Editor", tags: ["scroll", "scrollbar"] },
+  { id: "editor.scrollbar.horizontalScrollbarSize", label: "Horizontal Scrollbar Size", type: "number", value: "12", desc: "Height of the horizontal scrollbar in pixels.", group: "Scrollbar", category: "Text Editor", tags: ["scroll", "scrollbar"] },
+  { id: "editor.scrollbar.scrollByPage", label: "Scroll By Page", type: "checkbox", value: "false", desc: "Scroll by page when clicking scrollbar track.", group: "Scrollbar", category: "Text Editor", tags: ["scroll", "scrollbar"] },
+  { id: "editor.scrollbar.useShadows", label: "Scrollbar Shadows", type: "checkbox", value: "true", desc: "Show shadow when content is scrolled.", group: "Scrollbar", category: "Text Editor", tags: ["scroll", "scrollbar"] },
+
   // ── Rendering ──────────────────────────────────────────
   { id: "editor.renderWhitespace", label: "Render Whitespace", type: "select", value: "selection", options: ["none", "boundary", "selection", "trailing", "all"], desc: "How to render whitespace characters.", group: "Rendering", category: "Text Editor", tags: ["whitespace"] },
   { id: "editor.renderControlCharacters", label: "Render Control Characters", type: "checkbox", value: "true", desc: "Render control characters.", group: "Rendering", category: "Text Editor", tags: ["rendering"] },
@@ -122,6 +166,8 @@ export const EDITOR_SETTINGS: SettingDef[] = [
   { id: "editor.bracketPairColorization.enabled", label: "Bracket Pair Colorization", type: "checkbox", value: "true", desc: "Enable bracket pair colorization.", group: "Rendering", category: "Text Editor", tags: ["bracket"] },
   { id: "editor.guides.bracketPairs", label: "Bracket Pair Guides", type: "select", value: "false", options: ["true", "false", "active"], desc: "Enable bracket pair guides.", group: "Rendering", category: "Text Editor", tags: ["bracket", "guides"] },
   { id: "editor.guides.indentation", label: "Indentation Guides", type: "checkbox", value: "true", desc: "Render indentation guides.", group: "Rendering", category: "Text Editor", tags: ["indent", "guides"] },
+  { id: "editor.guides.highlightActiveIndentation", label: "Highlight Active Indentation", type: "select", value: "true", options: ["true", "false", "always"], desc: "Highlight the active indentation guide.", group: "Rendering", category: "Text Editor", tags: ["indent", "guides"] },
+  { id: "editor.guides.highlightActiveBracketPair", label: "Highlight Active Bracket Pair", type: "checkbox", value: "true", desc: "Highlight the active bracket pair guide.", group: "Rendering", category: "Text Editor", tags: ["bracket", "guides"] },
   { id: "editor.colorDecorators", label: "Color Decorators", type: "checkbox", value: "true", desc: "Show inline color decorators.", group: "Rendering", category: "Text Editor", tags: ["color"] },
   { id: "editor.colorDecoratorsActivatedOn", label: "Color Decorators Activation", type: "select", value: "clickAndHover", options: ["clickAndHover", "click", "hover"], desc: "Color picker activation method.", group: "Rendering", category: "Text Editor", tags: ["color"] },
   { id: "editor.colorDecoratorsLimit", label: "Color Decorators Limit", type: "number", value: "500", desc: "Max color decorators per editor.", group: "Rendering", category: "Text Editor", tags: ["color"] },
@@ -180,6 +226,8 @@ export const EDITOR_SETTINGS: SettingDef[] = [
   // ── Hover ──────────────────────────────────────────────
   { id: "editor.hover.enabled", label: "Hover Enabled", type: "checkbox", value: "true", desc: "Controls whether the hover widget is shown.", group: "Hover", category: "Text Editor", tags: ["hover"] },
   { id: "editor.hover.delay", label: "Hover Delay", type: "number", value: "300", desc: "Delay in ms before showing hover.", group: "Hover", category: "Text Editor", tags: ["hover"] },
+  { id: "editor.hover.sticky", label: "Hover Sticky", type: "checkbox", value: "true", desc: "Keep hover visible when mouse moves over it.", group: "Hover", category: "Text Editor", tags: ["hover"] },
+  { id: "editor.hover.above", label: "Hover Above", type: "checkbox", value: "true", desc: "Prefer showing hover above the line.", group: "Hover", category: "Text Editor", tags: ["hover"] },
 
   // ── Code Lens ──────────────────────────────────────────
   { id: "editor.codeLens", label: "Code Lens", type: "checkbox", value: "true", desc: "Show code lens references.", group: "Code Lens", category: "Text Editor", tags: ["codelens"] },
@@ -205,9 +253,18 @@ export const EDITOR_SETTINGS: SettingDef[] = [
 
   // ── Inlay Hints ────────────────────────────────────────
   { id: "editor.inlayHints.enabled", label: "Inlay Hints", type: "select", value: "on", options: ["on", "off", "onUnlessPressed", "offUnlessPressed"], desc: "Enable inlay hints in the editor.", group: "Inlay Hints", category: "Text Editor", tags: ["inlay"] },
+  { id: "editor.inlayHints.fontSize", label: "Inlay Hints Font Size", type: "number", value: "0", desc: "Font size for inlay hints (0 = 90% of editor font).", group: "Inlay Hints", category: "Text Editor", tags: ["inlay", "font"] },
+  { id: "editor.inlayHints.fontFamily", label: "Inlay Hints Font Family", type: "text", value: "", desc: "Font family for inlay hints (empty = editor font).", group: "Inlay Hints", category: "Text Editor", tags: ["inlay", "font"] },
+  { id: "editor.inlayHints.padding", label: "Inlay Hints Padding", type: "checkbox", value: "false", desc: "Add padding around inlay hints.", group: "Inlay Hints", category: "Text Editor", tags: ["inlay"] },
 
   // ── Unicode ────────────────────────────────────────────
   { id: "editor.unicodeHighlight.ambiguousCharacters", label: "Highlight Ambiguous Unicode", type: "checkbox", value: "true", desc: "Highlight ambiguous unicode characters.", group: "Unicode", category: "Text Editor", tags: ["unicode", "security"] },
+  { id: "editor.unicodeHighlight.invisibleCharacters", label: "Highlight Invisible Unicode", type: "checkbox", value: "true", desc: "Highlight invisible unicode characters.", group: "Unicode", category: "Text Editor", tags: ["unicode", "security"] },
+  { id: "editor.unicodeHighlight.nonBasicASCII", label: "Highlight Non-Basic ASCII", type: "select", value: "inUntrustedWorkspace", options: ["true", "false", "inUntrustedWorkspace"], desc: "Highlight non-basic ASCII characters.", group: "Unicode", category: "Text Editor", tags: ["unicode", "security"] },
+
+  // ── Comments ────────────────────────────────────────────
+  { id: "editor.comments.insertSpace", label: "Comment Insert Space", type: "checkbox", value: "true", desc: "Insert a space after the comment delimiter.", group: "Comments", category: "Text Editor", tags: ["comment"] },
+  { id: "editor.comments.ignoreEmptyLines", label: "Comment Ignore Empty Lines", type: "checkbox", value: "true", desc: "Ignore empty lines when toggling comments.", group: "Comments", category: "Text Editor", tags: ["comment"] },
 
   // ── Performance ────────────────────────────────────────
   { id: "editor.largeFileOptimizations", label: "Large File Optimizations", type: "checkbox", value: "true", desc: "Disable memory-intensive features for large files.", group: "Performance", category: "Text Editor", tags: ["performance"] },
@@ -226,6 +283,14 @@ export const EDITOR_SETTINGS: SettingDef[] = [
 
   // ── Diff Editor ────────────────────────────────────────
   { id: "diffEditor.renderSideBySide", label: "Diff: Side by Side", type: "checkbox", value: "true", desc: "Show diff side-by-side or inline.", group: "Diff Editor", category: "Text Editor" },
+  { id: "diffEditor.ignoreTrimWhitespace", label: "Diff: Ignore Trim Whitespace", type: "checkbox", value: "true", desc: "Ignore leading/trailing whitespace changes.", group: "Diff Editor", category: "Text Editor" },
+  { id: "diffEditor.maxComputationTime", label: "Diff: Max Computation Time", type: "number", value: "5000", desc: "Maximum time (ms) for diff computation (0 = no limit).", group: "Diff Editor", category: "Text Editor" },
+  { id: "diffEditor.wordWrap", label: "Diff: Word Wrap", type: "select", value: "inherit", options: ["off", "on", "inherit"], desc: "Word wrap in diff editor.", group: "Diff Editor", category: "Text Editor" },
+
+  // ── Miscellaneous (extra) ───────────────────────────────
+  { id: "editor.dropIntoEditor.enabled", label: "Drop Into Editor", type: "checkbox", value: "true", desc: "Enable dropping files into the editor.", group: "Misc", category: "Text Editor", tags: ["drag"] },
+  { id: "editor.lineDecorationsWidth", label: "Line Decorations Width", type: "number", value: "10", desc: "Width of the line decorations area in pixels.", group: "Misc", category: "Text Editor", tags: ["rendering"] },
+  { id: "editor.revealHorizontalRightPadding", label: "Reveal Horizontal Right Padding", type: "number", value: "30", desc: "Extra pixels to reveal after a horizontal scroll.", group: "Misc", category: "Text Editor", tags: ["scroll"] },
 ];
 
 // ── Workbench Settings ───────────────────────────────────────
@@ -486,10 +551,13 @@ export const CATEGORIES: SettingsCategory[] = [
   { id: "commonly-used", label: "Commonly Used", icon: "star" },
   { id: "text-editor", label: "Text Editor", icon: "edit", children: [
     { id: "font", label: "Font" }, { id: "cursor", label: "Cursor" }, { id: "minimap", label: "Minimap" },
-    { id: "suggest", label: "Suggest" }, { id: "formatting", label: "Formatting" },
-    { id: "scrolling", label: "Scrolling" }, { id: "rendering", label: "Rendering" },
-    { id: "indentation", label: "Indentation" }, { id: "word-wrap", label: "Word Wrap" },
-    { id: "misc", label: "Misc" }, { id: "diff-editor", label: "Diff Editor" },
+    { id: "sticky-scroll", label: "Sticky Scroll" }, { id: "suggest", label: "Suggest" }, { id: "formatting", label: "Formatting" },
+    { id: "scrolling", label: "Scrolling" }, { id: "scrollbar", label: "Scrollbar" }, { id: "rendering", label: "Rendering" },
+    { id: "indentation", label: "Indentation" }, { id: "word-wrap", label: "Word Wrap" }, { id: "brackets", label: "Brackets" },
+    { id: "folding", label: "Folding" }, { id: "line-numbers", label: "Line Numbers" }, { id: "selection", label: "Selection" },
+    { id: "multi-cursor", label: "Multi-Cursor" }, { id: "hover", label: "Hover" }, { id: "code-lens", label: "Code Lens" },
+    { id: "inlay-hints", label: "Inlay Hints" }, { id: "comments", label: "Comments" }, { id: "unicode", label: "Unicode" },
+    { id: "find", label: "Find" }, { id: "diff-editor", label: "Diff Editor" }, { id: "misc", label: "Misc" },
   ]},
   { id: "workbench", label: "Workbench", icon: "window", children: [
     { id: "appearance", label: "Appearance" }, { id: "startup", label: "Startup" },

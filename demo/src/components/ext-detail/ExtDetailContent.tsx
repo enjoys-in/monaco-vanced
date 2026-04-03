@@ -4,6 +4,48 @@ import { useState, useEffect, memo } from "react";
 import { useTheme } from "../theme";
 import type { DetailTab, OpenVSXMetadata } from "./types";
 
+// ── Inject markdown styles once ──────────────────────────────
+if (typeof document !== "undefined" && !document.getElementById("ext-readme-css")) {
+  const css = document.createElement("style");
+  css.id = "ext-readme-css";
+  css.textContent = `
+    .ext-detail-readme h1, .ext-detail-readme h2, .ext-detail-readme h3,
+    .ext-detail-readme h4, .ext-detail-readme h5, .ext-detail-readme h6 {
+      margin-top: 24px; margin-bottom: 12px; font-weight: 600; line-height: 1.25;
+      color: var(--vsc-fg-bright);
+    }
+    .ext-detail-readme h1 { font-size: 1.6em; padding-bottom: 8px; border-bottom: 1px solid var(--vsc-border); }
+    .ext-detail-readme h2 { font-size: 1.35em; padding-bottom: 6px; border-bottom: 1px solid var(--vsc-border); }
+    .ext-detail-readme h3 { font-size: 1.15em; }
+    .ext-detail-readme p { margin: 0 0 12px; }
+    .ext-detail-readme a { color: var(--vsc-text-link); text-decoration: none; }
+    .ext-detail-readme a:hover { text-decoration: underline; }
+    .ext-detail-readme img { max-width: 100%; border-radius: 4px; margin: 8px 0; }
+    .ext-detail-readme code {
+      padding: 2px 6px; border-radius: 3px; font-size: 0.9em;
+      background: var(--vsc-input-bg); color: var(--vsc-fg); font-family: 'JetBrains Mono','Fira Code',monospace;
+    }
+    .ext-detail-readme pre {
+      padding: 12px 16px; border-radius: 6px; overflow-x: auto; margin: 12px 0;
+      background: var(--vsc-input-bg); border: 1px solid var(--vsc-border);
+    }
+    .ext-detail-readme pre code { padding: 0; background: none; font-size: 13px; }
+    .ext-detail-readme ul, .ext-detail-readme ol { padding-left: 24px; margin: 8px 0 12px; }
+    .ext-detail-readme li { margin: 4px 0; }
+    .ext-detail-readme blockquote {
+      margin: 12px 0; padding: 8px 16px; border-left: 3px solid var(--vsc-accent);
+      background: var(--vsc-card-bg); border-radius: 0 4px 4px 0; color: var(--vsc-fg-dim);
+    }
+    .ext-detail-readme table { border-collapse: collapse; margin: 12px 0; width: 100%; }
+    .ext-detail-readme th, .ext-detail-readme td {
+      padding: 6px 12px; border: 1px solid var(--vsc-border); text-align: left;
+    }
+    .ext-detail-readme th { background: var(--vsc-card-bg); font-weight: 600; }
+    .ext-detail-readme hr { border: none; border-top: 1px solid var(--vsc-border); margin: 20px 0; }
+  `;
+  document.head.appendChild(css);
+}
+
 interface Props {
   data: OpenVSXMetadata;
   activeTab: DetailTab;

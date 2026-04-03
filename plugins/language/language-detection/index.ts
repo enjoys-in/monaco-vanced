@@ -23,9 +23,9 @@ export function detectLanguage(
   const filename = getFilename(uri);
   const ext = getExtension(uri);
 
-  // 1. Exact filename match
+  // 1. Exact filename match (case-insensitive for special files)
   for (const [langId, rule] of Object.entries(detectionRules)) {
-    if (rule.filenames?.includes(filename)) {
+    if (rule.filenames?.some((f) => f.toLowerCase() === filename.toLowerCase())) {
       return { languageId: langId, source: "filename" };
     }
   }

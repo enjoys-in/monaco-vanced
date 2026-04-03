@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, type CSSProperties } from "react";
 import { NotificationEvents } from "@enjoys/monaco-vanced/core/events";
+import { useTheme } from "../theme";
 
 // ── Types ────────────────────────────────────────────────────
 interface NotificationData {
@@ -43,14 +44,14 @@ if (typeof document !== "undefined" && !document.getElementById("vsc-notif-css")
     .vsc-toast:hover .vsc-toast-close { opacity:1 }
     .vsc-toast-close { opacity:0; transition:opacity .12s }
     .vsc-toast-action {
-      background:none; border:1px solid rgba(255,255,255,0.2); color:#fff; padding:2px 8px;
+      background:none; border:1px solid var(--vsc-border-light); color:var(--vsc-fg); padding:2px 8px;
       border-radius:2px; cursor:pointer; font-size:12px; font-family:inherit; line-height:18px;
       white-space:nowrap;
     }
-    .vsc-toast-action:hover { background:rgba(255,255,255,0.1) }
-    .vsc-toast-expand-btn { background:none; border:none; color:#858585; cursor:pointer; padding:0; display:flex; align-items:center; transition:transform .15s }
+    .vsc-toast-action:hover { background:var(--vsc-hover) }
+    .vsc-toast-expand-btn { background:none; border:none; color:var(--vsc-fg-dim); cursor:pointer; padding:0; display:flex; align-items:center; transition:transform .15s }
     .vsc-toast-expand-btn[data-expanded="true"] { transform:rotate(90deg) }
-    .vsc-toast-progress { height:2px; background:#3794ff; border-radius:0 0 3px 3px; transition:width .3s linear }
+    .vsc-toast-progress { height:2px; background:var(--vsc-accent); border-radius:0 0 3px 3px; transition:width .3s linear }
   `;
   document.head.appendChild(css);
 }
@@ -59,6 +60,7 @@ if (typeof document !== "undefined" && !document.getElementById("vsc-notif-css")
 function Toast({ n, onDismiss }: {
   n: NotificationData; onDismiss: (id: string) => void;
 }) {
+  const { tokens: t } = useTheme();
   const [expanded, setExpanded] = useState(false);
   const [dismissing, setDismissing] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout>>();
@@ -79,7 +81,7 @@ function Toast({ n, onDismiss }: {
 
   const toastStyle: CSSProperties = {
     display: "flex", flexDirection: "column",
-    background: "#252526", border: "1px solid #3c3c3c", borderRadius: 3,
+    background: t.menuBg, border: `1px solid ${t.border}`, borderRadius: 3,
     boxShadow: "0 4px 16px rgba(0,0,0,.45)", width: 350, maxWidth: 350,
     overflow: "hidden", fontSize: 13, lineHeight: 1.4,
   };
@@ -107,8 +109,8 @@ function Toast({ n, onDismiss }: {
         />
         {/* Message */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ color: "#cccccc", wordWrap: "break-word" }}>
-            {n.category && <span style={{ fontWeight: 600, color: "#cccccc" }}>{n.category}: </span>}
+          <span style={{ color: t.fg, wordWrap: "break-word" }}>
+            {n.category && <span style={{ fontWeight: 600, color: t.fg }}>{n.category}: </span>}
             {displayMsg}
           </span>
         </div>
@@ -127,7 +129,7 @@ function Toast({ n, onDismiss }: {
             className="vsc-toast-close"
             title="Close Notification"
             style={{
-              background: "none", border: "none", color: "#858585",
+              background: "none", border: "none", color: t.fgDim,
               cursor: "pointer", fontSize: 16, lineHeight: 1, padding: "0 2px",
               display: "flex", alignItems: "center",
             }}
@@ -157,10 +159,10 @@ function Toast({ n, onDismiss }: {
 
       {/* Progress bar */}
       {n.progress != null && (
-        <div style={{ height: 2, background: "#2d2d2d", borderRadius: "0 0 3px 3px", overflow: "hidden" }}>
+        <div style={{ height: 2, background: t.inputBg, borderRadius: "0 0 3px 3px", overflow: "hidden" }}>
           <div
             className="vsc-toast-progress"
-            style={{ width: `${Math.min(100, Math.max(0, n.progress))}%` }}
+            style={{ width: `${Math.min(100, Math.max(0, n.progress))}%`, background: t.accent }}
           />
         </div>
       )}

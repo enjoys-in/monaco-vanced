@@ -2,6 +2,7 @@
 import type * as monacoNs from "monaco-editor";
 import type { PluginEngine } from "@enjoys/monaco-vanced/core/plugin-engine";
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
+import type { ConcurrencyModuleAPI, StreamingModuleAPI, WorkerModuleAPI } from "@enjoys/monaco-vanced";
 
 // ── CSS module declarations ──────────────────────────────────
 declare module "*.css" {
@@ -47,17 +48,17 @@ declare global {
     /** Active editor instance */
     editor: monacoNs.editor.IStandaloneCodeEditor;
     /** Plugin engine (register/boot/destroy plugins) */
-    engine: InstanceType<typeof PluginEngine>;
+    engine: PluginEngine;
     /** Shared event bus (emit/on cross-plugin events) */
-    eventBus: InstanceType<typeof EventBus>;
+    eventBus: EventBus;
     /** Dev-only: all plugin APIs */
     __apis: Record<string, unknown>;
     /** Dev-only: concurrency API */
-    __concurrencyApi: unknown;
+    __concurrencyApi: ConcurrencyModuleAPI;
     /** Dev-only: streaming API */
-    __streamingApi: unknown;
+    __streamingApi: StreamingModuleAPI;
     /** Dev-only: worker API */
-    __workerApi: unknown;
+    __workerApi: WorkerModuleAPI;
     /** Dev-only: explorer API */
     __explorerApi: {
       newFile(): void;

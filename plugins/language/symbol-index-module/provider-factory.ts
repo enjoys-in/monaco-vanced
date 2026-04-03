@@ -8,6 +8,8 @@ import { createReferenceProvider } from "./providers/reference";
 import { createDocumentSymbolProvider } from "./providers/document-symbol";
 import { createHoverProvider } from "./providers/hover";
 import { createRenameProvider } from "./providers/rename";
+import { createTypeDefinitionProvider } from "./providers/type-definition";
+import { createDeclarationProvider } from "./providers/declaration";
 
 /**
  * Registers all 6 symbol intelligence providers for a given language.
@@ -22,6 +24,14 @@ export function registerAllProviders(
     monaco.languages.registerDefinitionProvider(
       language,
       createDefinitionProvider(index, monaco),
+    ),
+    monaco.languages.registerTypeDefinitionProvider(
+      language,
+      createTypeDefinitionProvider(index, monaco),
+    ),
+    monaco.languages.registerDeclarationProvider(
+      language,
+      createDeclarationProvider(index, monaco),
     ),
     monaco.languages.registerReferenceProvider(
       language,

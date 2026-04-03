@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, type CSSProperties, type KeyboardEvent, type ChangeEvent } from "react";
 import type { ThemeTokens } from "../theme";
-import type { AttachedSymbol, AttachedSelection, MentionItem, ChatIndexerApi, ChatFile, ChatEventBus, SlashCommand } from "./types";
+import type { AttachedSymbol, AttachedSelection, MentionItem, ChatIndexerApi, ChatFile, ChatEventBus, ChatIconApi, SlashCommand } from "./types";
 import { FileEvents } from "@enjoys/monaco-vanced/core/events";
 import {
   SendIcon, StopIcon, AttachIcon, SelectionIcon, HashIcon, FileIcon, SymbolIcon,
@@ -27,6 +27,7 @@ export interface ChatInputProps {
   onRemoveSymbol: (key: string) => void;
   onSetSelection: (sel: AttachedSelection | null) => void;
   indexerApi?: ChatIndexerApi;
+  iconApi?: ChatIconApi;
   files: ChatFile[];
   eventBus: ChatEventBus;
 }
@@ -35,7 +36,7 @@ export function ChatInput({
   tokens: t, input, onInputChange, onSend, onAbort, isStreaming,
   attachedFiles, attachedSymbols, attachedSelection,
   onAddFile, onRemoveFile, onAddSymbol, onRemoveSymbol, onSetSelection,
-  indexerApi, files, eventBus,
+  indexerApi, iconApi, files, eventBus,
 }: ChatInputProps) {
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionMode, setMentionMode] = useState<"file" | "symbol">("file");
@@ -178,7 +179,10 @@ export function ChatInput({
                 background: t.cardBg, border: `1px solid ${t.border}`, color: t.fg,
                 cursor: "pointer",
               }}>
-                <span dangerouslySetInnerHTML={{ __html: FileIcon }} onClick={() => openFileReference(uri)} style={{ color: fileColor(name), flexShrink: 0 }} title={`Open ${uri}`} />
+                {iconApi ? (
+                  <img src={iconApi.getFileIcon(name)} width={14} height={14} style={{ flexShrink: 0 }} onClick={() => openFileReference(uri)} title={`Open ${uri}`} alt="" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).nextElementSibling as any && ((e.target as HTMLImageElement).nextElementSibling!.style.display = 'inline-flex'); }} />
+                ) : null}
+                <span dangerouslySetInnerHTML={{ __html: FileIcon }} onClick={() => openFileReference(uri)} style={{ color: fileColor(name), flexShrink: 0, display: iconApi ? 'none' : 'inline-flex' }} title={`Open ${uri}`} />
                 <span onClick={() => openFileReference(uri)} style={{ maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={`Open ${uri}`}>{name}</span>
                 <span style={{ cursor: "pointer", color: t.fgDim, marginLeft: 2, fontSize: 14, lineHeight: 1 }} onClick={() => onRemoveFile(uri)} title="Remove">×</span>
               </span>

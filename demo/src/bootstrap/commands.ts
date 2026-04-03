@@ -164,18 +164,4 @@ export function wireCommands(deps: CommandsDeps) {
   });
   commandApi.register({ id: "monacoVanced.aiStatus", label: "AI: Show Status", handler: () => { notificationApi.show({ type: "info", message: `AI Module Status: ${apis.ai.getStatus()}`, duration: 3000 }); } });
   commandApi.register({ id: "monacoVanced.toggleCopilot", label: "Copilot: Toggle Chat Panel", handler: () => eventBus.emit(AiEvents.CopilotToggle, {}) });
-  commandApi.register({
-    id: "monacoVanced.addFileToChat",
-    label: "Add File to Chat",
-    handler: () => {
-      const editor = window.editor;
-      const model = editor?.getModel();
-      if (model) {
-        const uri = model.uri.path.replace(/^\/+/, "");
-        const name = uri.split("/").pop() ?? uri;
-        eventBus.emit(AiEvents.AttachFile, { uri, name });
-        eventBus.emit(AiEvents.OpenChat, {});
-      }
-    },
-  });
 }

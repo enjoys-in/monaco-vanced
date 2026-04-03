@@ -14,6 +14,7 @@ import {
 } from "@enjoys/monaco-vanced/core/events";
 import type { VirtualFile } from "../wireframe";
 import type { PluginApis } from "./plugins";
+import { PLUGIN_CATALOG } from "../components/settings/settings-data";
 
 export interface PluginWiringDeps {
   ide: MonacoVancedInstance;
@@ -116,14 +117,18 @@ export function wirePlugins(deps: PluginWiringDeps) {
   apis.workspace.addRoot("file:///demo-project", "demo-project");
 
   // ── 9. Security ──────────────────────────────────────────
+  const FS_CATEGORIES = new Set(["Filesystem", "Editor", "Language", "Devtools", "SCM"]);
   eventBus.on(ExtensionEvents.Enabled, (p: unknown) => {
     const { id } = p as { id: string };
-    if (!apis.security.checkPermission(id, "fs.read")) console.warn(`[security] Plugin "${id}" lacks fs.read permission`);
+    const plugin = PLUGIN_CATALOG.find((pl) => pl.id === id);
+    if (plugin && FS_CATEGORIES.has(plugin.category)) {
+      if (!apis.security.checkPermission(id, "fs.read")) console.warn(`[security] Plugin "${id}" lacks fs.read permission`);
+    }
   });
 
   // ── 10. Policy ───────────────────────────────────────────
   apis.policy.addPolicy({
-    id: "default-access", name: "Default Access", roles: ["editor"],
+    id: "default-access", name: "Default Access",
     rules: [
       { resource: "file:*", actions: ["read"], effect: "allow" },
       { resource: "file:*", actions: ["write"], effect: "allow" },
@@ -361,12 +366,7 @@ export function wirePlugins(deps: PluginWiringDeps) {
     }
   });
   eventBus.on(IndexSymbolEvents.Ready, () => {
-    console.log("[indexer] Symbol index ready");
     apis.statusbar.register({ id: "indexer-ready", label: "$(symbol-class) Indexed", alignment: "right", priority: 5, tooltip: "Symbol index ready" });
-  });
-  eventBus.on(IndexSymbolEvents.FileDone, (p: unknown) => {
-    const { path, count } = p as { path: string; count: number };
-    if (count > 0) console.log(`[indexer] ${path}: ${count} symbols`);
   });
 
   // ── 34. Context Engine — lazy CDN loading ────────────────
@@ -423,8 +423,9 @@ export function wirePlugins(deps: PluginWiringDeps) {
     });
   });
   eventBus.on(LspEvents.Diagnostics, (p: unknown) => {
-    const { uri, diagnostics } = p as { uri: string; diagnostics: { severity: number; message: string }[] };
-    if (diagnostics.length > 0) console.log(`[lsp] ${diagnostics.length} diagnostics for ${uri}`);
+    const { uri, diagnostics, count } = p as { uri: string; diagnostics?: { severity: number; message: string }[]; count?: number };
+    const total = count ?? diagnostics?.length ?? 0;
+    if (total > 0) console.log(`[lsp] ${total} diagnostics for ${uri}`);
   });
 
   // ── Startup settings + plugin enable/disable ─────────────

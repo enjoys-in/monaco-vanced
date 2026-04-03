@@ -5,9 +5,22 @@
 // theme change.
 
 import type { ThemeTokens } from "./ThemeProvider";
-import { THEME_MAP, DEFAULT_TOKENS } from "./ThemeProvider";
+import { THEME_MAP, THEME_DEFS, DEFAULT_TOKENS } from "./ThemeProvider";
 
 const PREFIX = "--vsc";
+
+/** Module-level active theme cache — stays in sync across all mount points */
+let _activeThemeName = "Dracula";
+let _activeTokens: ThemeTokens | null = null;
+
+export function setActiveTheme(name: string, tokens: ThemeTokens): void {
+  _activeThemeName = name;
+  _activeTokens = tokens;
+}
+
+export function getActiveTheme(): { name: string; tokens: ThemeTokens } {
+  return { name: _activeThemeName, tokens: _activeTokens ?? DEFAULT_TOKENS };
+}
 
 /** Apply theme tokens as CSS custom properties on :root */
 export function applyThemeVars(tokens: ThemeTokens): void {
@@ -26,7 +39,11 @@ export function initThemeVars(): void {
 /** Resolve a theme by name and apply its CSS vars */
 export function switchTheme(name: string): ThemeTokens | undefined {
   const tokens = THEME_MAP[name];
-  if (tokens) applyThemeVars(tokens);
+  if (tokens) {
+    applyThemeVars(tokens);
+    const def = THEME_DEFS[name];
+    setActiveTheme(def?.name ?? name, tokens);
+  }
   return tokens;
 }
 

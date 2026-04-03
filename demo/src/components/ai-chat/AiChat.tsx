@@ -19,7 +19,7 @@ import { ChatHistory } from "./ChatHistory";
 export type { AiChatProps };
 
 // ── Component ────────────────────────────────────────────────
-export function AiChat({ eventBus, aiApi, indexerApi, visible, onClose, files = [] }: AiChatProps) {
+export function AiChat({ eventBus, aiApi, indexerApi, iconApi, visible, onClose, files = [] }: AiChatProps) {
   const { tokens: t } = useTheme();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -237,6 +237,23 @@ export function AiChat({ eventBus, aiApi, indexerApi, visible, onClose, files = 
     const currentAttached = [...attachedFiles];
     const currentSymbols = [...attachedSymbols];
     const currentSelection = attachedSelection;
+
+    // ── Auto-detect symbols mentioned in the message ─────────
+    if (indexerApi?.isReady() && currentSymbols.length === 0) {
+      // Extract potential identifiers (camelCase, PascalCase, snake_case words ≥ 2 chars)
+      const words = new Set(text.match(/\b[A-Za-z_]\w{1,}\b/g) ?? []);
+      for (const word of words) {
+        const results = indexerApi.query({ query: word });
+        const exact = results.find((s) => s.name === word);
+        if (exact) {
+          const key = `${exact.path}:${exact.name}:${exact.line}`;
+          if (!currentSymbols.some((s) => `${s.file}:${s.name}:${s.line}` === key)) {
+            currentSymbols.push({ name: exact.name, kind: exact.kind, file: exact.path, line: exact.line });
+          }
+        }
+      }
+    }
+
     const userMsg: ChatMessage = {
       id: nextId(), role: "user", content: text.trim(), timestamp: Date.now(), action,
       attachedFiles: currentAttached.length > 0 ? currentAttached : undefined,
@@ -269,8 +286,18 @@ export function AiChat({ eventBus, aiApi, indexerApi, visible, onClose, files = 
       }
       let symbolContext = "";
       if (currentSymbols.length > 0) {
-        const symDescriptions = currentSymbols.map((s) => `${s.kind} ${s.name} (${s.file}:${s.line})`);
-        symbolContext = `\n\nReferenced symbols:\n${symDescriptions.join("\n")}`;
+        const symSnippets = currentSymbols.map((s) => {
+          const src = getFileContent(s.file);
+          if (src) {
+            const lines = src.split("\n");
+            const start = Math.max(0, s.line - 1);
+            const end = Math.min(lines.length, s.line + 15);
+            const snippet = lines.slice(start, end).join("\n");
+            return `${s.kind} ${s.name} (${s.file}:${s.line}):\n\`\`\`\n${snippet}\n\`\`\``;
+          }
+          return `${s.kind} ${s.name} (${s.file}:${s.line})`;
+        });
+        symbolContext = `\n\nReferenced symbols:\n${symSnippets.join("\n\n")}`;
       }
       let selectionContext = "";
       if (currentSelection) {
@@ -443,7 +470,7 @@ export function AiChat({ eventBus, aiApi, indexerApi, visible, onClose, files = 
         {messages.length === 0 ? (
           <ChatEmpty tokens={t} onSend={(prompt) => sendMessage(prompt)} />
         ) : (
-          <ChatMessageList messages={messages} tokens={t} eventBus={eventBus} />
+          <ChatMessageList messages={messages} tokens={t} eventBus={eventBus} iconApi={iconApi} />
         )}
       </div>
 
@@ -464,6 +491,7 @@ export function AiChat({ eventBus, aiApi, indexerApi, visible, onClose, files = 
         onRemoveSymbol={removeSymbolAttachment}
         onSetSelection={setAttachedSelection}
         indexerApi={indexerApi}
+        iconApi={iconApi}
         files={files}
         eventBus={eventBus}
       />

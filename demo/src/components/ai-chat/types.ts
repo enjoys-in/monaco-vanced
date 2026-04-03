@@ -83,11 +83,17 @@ export interface MentionItem {
   _sym?: { name: string; kind: string; path: string; line: number };
 }
 
+// ── Icon API (mirrors ExplorerIconAPI) ────────────────────────
+export interface ChatIconApi {
+  getFileIcon(filename: string, isDirectory?: boolean, isOpen?: boolean): string;
+}
+
 // ── Props ────────────────────────────────────────────────────
 export interface AiChatProps {
   eventBus: ChatEventBus;
   aiApi: ChatAiApi;
   indexerApi?: ChatIndexerApi;
+  iconApi?: ChatIconApi;
   visible: boolean;
   onClose: () => void;
   files?: ChatFile[];

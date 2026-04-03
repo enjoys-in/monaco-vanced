@@ -311,6 +311,13 @@ export class ExplorerService {
   // ── Notify subscribers ──────────────────────────────────
 
   private notify(): void {
+    // Create new Set references so React detects changes on shallow comparison
+    this.state = {
+      ...this.state,
+      expandedPaths: new Set(this.state.expandedPaths),
+      openFileUris: new Set(this.state.openFileUris),
+      modifiedFileUris: new Set(this.state.modifiedFileUris),
+    };
     for (const listener of this.listeners) {
       try { listener(); } catch (e) { console.warn("[ExplorerService] listener error:", e); }
     }

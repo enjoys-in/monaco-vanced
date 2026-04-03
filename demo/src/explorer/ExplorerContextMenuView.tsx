@@ -20,6 +20,24 @@ interface MenuOption {
   separator?: boolean;
 }
 
+/** File extensions that can be previewed */
+const PREVIEWABLE = new Set([
+  "md", "markdown", "mdown", "mkd",
+  "png", "jpg", "jpeg", "gif", "webp", "svg", "ico", "bmp",
+  "mp4", "webm", "ogg", "mov",
+  "mp3", "wav", "flac", "aac",
+  "html", "htm",
+  "pdf",
+  "json",
+  "csv",
+]);
+
+function isPreviewable(name: string): boolean {
+  const dot = name.lastIndexOf(".");
+  if (dot < 0) return false;
+  return PREVIEWABLE.has(name.slice(dot + 1).toLowerCase());
+}
+
 const FILE_MENU: MenuOption[] = [
   { label: "Open File", action: ExplorerAction.Open },
   { label: "Open to the Side", action: ExplorerAction.OpenSide, separator: true },
@@ -48,7 +66,15 @@ const FOLDER_MENU: MenuOption[] = [
 export function ExplorerContextMenuView({ x, y, node, onAction, onClose }: Props) {
   const { tokens: t } = useTheme();
   const ref = useRef<HTMLDivElement>(null);
-  const items = node.isDirectory ? FOLDER_MENU : FILE_MENU;
+  const baseItems = node.isDirectory ? FOLDER_MENU : FILE_MENU;
+  // Insert "Open Preview" after "Open to the Side" for previewable files
+  const items = (!node.isDirectory && isPreviewable(node.name))
+    ? [
+        ...baseItems.slice(0, 2),
+        { label: "Open Preview", action: ExplorerAction.Preview, shortcut: "Ctrl+Shift+V", separator: true },
+        ...baseItems.slice(2),
+      ]
+    : baseItems;
 
   // Position adjustment
   useEffect(() => {
@@ -99,7 +125,7 @@ export function ExplorerContextMenuView({ x, y, node, onAction, onClose }: Props
               display: "flex", alignItems: "center", justifyContent: "space-between",
               padding: "5px 12px", cursor: "pointer", color: t.fg, borderRadius: 3, margin: "0 4px",
             }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = `${t.accent}22`; }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = t.listActive; }}
             onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
             onClick={() => handleClick(item.action)}
           >

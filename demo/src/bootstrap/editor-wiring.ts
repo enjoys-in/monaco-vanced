@@ -12,6 +12,18 @@ import type { VirtualFile } from "../wireframe";
 import type { MockFsAPI } from "../mock-fs";
 import type { PluginApis } from "./plugins";
 
+/** Infer Monaco language ID from file path extension */
+function inferLanguage(path: string): string {
+  const ext = path.includes(".") ? path.split(".").pop()!.toLowerCase() : "";
+  const map: Record<string, string> = {
+    ts: "typescript", tsx: "typescriptreact", js: "javascript", jsx: "javascriptreact",
+    json: "json", css: "css", scss: "scss", less: "less", html: "html", htm: "html",
+    md: "markdown", yaml: "yaml", yml: "yaml", py: "python", rs: "rust", go: "go",
+    toml: "toml", sh: "shell", sql: "sql", graphql: "graphql", xml: "xml", svg: "xml",
+  };
+  return map[ext] ?? "plaintext";
+}
+
 export interface EditorWiringDeps {
   ide: MonacoVancedInstance;
   eventBus: EventBus;
@@ -35,15 +47,34 @@ export function wireEditor(deps: EditorWiringDeps) {
   eventBus.on(FileEvents.Open, (payload: unknown) => {
     const { uri, line, column } = payload as { uri: string; line?: number; column?: number };
     console.log("[monaco-vanced] file:open →", uri, line ? `L${line}` : "");
-    const file = DEMO_FILES.find((f) => f.uri === uri);
-    if (!file) return;
-    let model = models.get(file.uri);
+
+    // Try static demo files first, then fall back to live mock FS for runtime-created files
+    let file = DEMO_FILES.find((f) => f.uri === uri);
+    let content: string | null = null;
+    let language = "plaintext";
+
+    if (file) {
+      content = file.content;
+      language = file.language;
+    } else {
+      // File was created at runtime (New File, Duplicate, etc.)
+      content = mockFs.readFile(uri);
+      if (content == null) return;
+      const detected = monaco.editor.getModel(monaco.Uri.parse(`file:///${uri}`));
+      language = detected?.getLanguageId() ?? inferLanguage(uri);
+    }
+
+    let model = models.get(uri);
     if (!model || model.isDisposed()) {
-      const monacoUri = monaco.Uri.parse(`file:///${file.uri}`);
-      model = monaco.editor.getModel(monacoUri) ?? monaco.editor.createModel(file.content, file.language, monacoUri);
-      models.set(file.uri, model);
+      const monacoUri = monaco.Uri.parse(`file:///${uri}`);
+      model = monaco.editor.getModel(monacoUri) ?? monaco.editor.createModel(content, language, monacoUri);
+      models.set(uri, model);
     }
     if (ide.editor.getModel() !== model) ide.editor.setModel(model);
+    // Seed original content for dirty tracking on first open
+    if (!originalContents.has(uri)) {
+      originalContents.set(uri, model.getValue());
+    }
 
     // Reveal and highlight the target line if provided
     if (line && line > 0) {
@@ -75,8 +106,12 @@ export function wireEditor(deps: EditorWiringDeps) {
     const currentValue = model.getValue();
     mockFs.writeFile(uri, currentValue);
     eventBus.emit(FileEvents.Modified, { uri });
-    const original = originalContents.get(uri);
-    const dirty = original !== undefined && original !== currentValue;
+    // Track original content on first edit if not already tracked
+    if (!originalContents.has(uri)) {
+      originalContents.set(uri, currentValue);
+    }
+    const original = originalContents.get(uri)!;
+    const dirty = original !== currentValue;
     eventBus.emit(TabEvents.Dirty, { uri, dirty });
   });
 

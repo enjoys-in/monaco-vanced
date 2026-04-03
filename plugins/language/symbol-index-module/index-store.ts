@@ -1,24 +1,57 @@
 // ── In-memory symbol index store ─────────────────────────────
 import type { SymbolEntry, SymbolIndex, SymbolKind } from "./types";
+import type { CompiledSymbolPattern } from "./lang-data-fetcher";
 
 /**
  * Fast in-memory symbol index.
  * Keyed by filePath → SymbolEntry[].
  * Also maintains a name → filePaths reverse map for workspace-wide lookup.
+ *
+ * Patterns are dynamic — loaded per language from CDN via lang-data-fetcher.
  */
 export class IndexStore implements SymbolIndex {
   /** filePath → all symbols in that file */
   private readonly fileMap = new Map<string, SymbolEntry[]>();
   /** symbolName (lowercase) → Set<filePath> for fast cross-file lookup */
   private readonly nameIndex = new Map<string, Set<string>>();
+  /** langId → compiled patterns (set externally by the plugin) */
+  private readonly patternMap = new Map<string, CompiledSymbolPattern[]>();
+  /** filePath → langId (so re-indexing knows which patterns to use) */
+  private readonly fileLangMap = new Map<string, string>();
+
+  // ── Pattern management ───────────────────────────────────
+
+  /** Register compiled patterns for a language */
+  setPatterns(langId: string, patterns: CompiledSymbolPattern[]): void {
+    this.patternMap.set(langId, patterns);
+  }
+
+  /** Check if patterns are loaded for a language */
+  hasPatterns(langId: string): boolean {
+    return this.patternMap.has(langId);
+  }
+
+  /** Get all language IDs that have patterns loaded */
+  getLoadedLanguages(): string[] {
+    return Array.from(this.patternMap.keys());
+  }
 
   // ── Indexing ─────────────────────────────────────────────
 
-  indexFile(path: string, content: string): void {
+  indexFile(path: string, content: string, langId?: string): void {
     // Remove existing symbols for this file before re-indexing
     this.removeFile(path);
 
-    const symbols = parseSymbols(path, content);
+    // Track the langId for this file path
+    if (langId) {
+      this.fileLangMap.set(path, langId);
+    }
+    const resolvedLang = langId ?? this.fileLangMap.get(path);
+    const patterns = resolvedLang ? this.patternMap.get(resolvedLang) : undefined;
+
+    const symbols = patterns?.length
+      ? parseWithPatterns(path, content, patterns)
+      : [];
     this.fileMap.set(path, symbols);
 
     // Update reverse name index
@@ -113,6 +146,8 @@ export class IndexStore implements SymbolIndex {
   clear(): void {
     this.fileMap.clear();
     this.nameIndex.clear();
+    this.patternMap.clear();
+    this.fileLangMap.clear();
   }
 
   /** Total number of indexed files */
@@ -128,55 +163,23 @@ export class IndexStore implements SymbolIndex {
   }
 }
 
-// ── Lightweight regex-based symbol parser ────────────────────
-// This is a best-effort parser for common JS/TS/Python/Go/Rust patterns.
-// For full accuracy, the LSP bridge module should be used instead.
+// ── Dynamic pattern-based symbol parser ──────────────────────
+// Uses patterns fetched from CDN per language. No hardcoded regexes.
 
-const PATTERNS: Array<{
-  regex: RegExp;
-  kind: SymbolKind;
-  nameGroup: number;
-}> = [
-  // TS/JS: export function foo(…
-  { regex: /^(?:export\s+)?(?:async\s+)?function\s+(\w+)/gm, kind: 11 /* Function */, nameGroup: 1 },
-  // TS/JS: export class Foo
-  { regex: /^(?:export\s+)?(?:abstract\s+)?class\s+(\w+)/gm, kind: 4 /* Class */, nameGroup: 1 },
-  // TS/JS: export interface Foo
-  { regex: /^(?:export\s+)?interface\s+(\w+)/gm, kind: 10 /* Interface */, nameGroup: 1 },
-  // TS/JS: export type Foo
-  { regex: /^(?:export\s+)?type\s+(\w+)/gm, kind: 25 /* TypeParameter */, nameGroup: 1 },
-  // TS/JS: export enum Foo
-  { regex: /^(?:export\s+)?(?:const\s+)?enum\s+(\w+)/gm, kind: 9 /* Enum */, nameGroup: 1 },
-  // TS/JS: export const/let/var foo
-  { regex: /^(?:export\s+)?(?:const|let|var)\s+(\w+)/gm, kind: 12 /* Variable */, nameGroup: 1 },
-  // Python: def foo(
-  { regex: /^(?:async\s+)?def\s+(\w+)/gm, kind: 11 /* Function */, nameGroup: 1 },
-  // Python: class Foo
-  { regex: /^class\s+(\w+)/gm, kind: 4 /* Class */, nameGroup: 1 },
-  // Go: func Foo(
-  { regex: /^func\s+(?:\([^)]*\)\s+)?(\w+)/gm, kind: 11 /* Function */, nameGroup: 1 },
-  // Go: type Foo struct/interface
-  { regex: /^type\s+(\w+)\s+(?:struct|interface)/gm, kind: 4 /* Class */, nameGroup: 1 },
-  // Rust: fn foo(
-  { regex: /^(?:pub\s+)?(?:async\s+)?fn\s+(\w+)/gm, kind: 11 /* Function */, nameGroup: 1 },
-  // Rust: struct Foo
-  { regex: /^(?:pub\s+)?struct\s+(\w+)/gm, kind: 22 /* Struct */, nameGroup: 1 },
-  // Rust: enum Foo
-  { regex: /^(?:pub\s+)?enum\s+(\w+)/gm, kind: 9 /* Enum */, nameGroup: 1 },
-  // Rust: trait Foo
-  { regex: /^(?:pub\s+)?trait\s+(\w+)/gm, kind: 10 /* Interface */, nameGroup: 1 },
-];
-
-function parseSymbols(filePath: string, content: string): SymbolEntry[] {
+function parseWithPatterns(
+  filePath: string,
+  content: string,
+  patterns: CompiledSymbolPattern[],
+): SymbolEntry[] {
   const entries: SymbolEntry[] = [];
 
-  for (const { regex, kind, nameGroup } of PATTERNS) {
+  for (const { regex, captureGroup, kind } of patterns) {
     // Reset lastIndex for global regex
     regex.lastIndex = 0;
     let match: RegExpExecArray | null;
 
     while ((match = regex.exec(content)) !== null) {
-      const name = match[nameGroup];
+      const name = match[captureGroup];
       if (!name) continue;
 
       // Calculate line/col from match index
@@ -191,7 +194,7 @@ function parseSymbols(filePath: string, content: string): SymbolEntry[] {
 
       entries.push({
         name,
-        kind,
+        kind: kind as SymbolKind,
         filePath,
         range: {
           startLine: line,
@@ -205,7 +208,7 @@ function parseSymbols(filePath: string, content: string): SymbolEntry[] {
           endLine: line,
           endColumn: nameCol + name.length,
         },
-        exportedAs: match[0].startsWith("export") ? "named" : "none",
+        exportedAs: match[0].includes("export") ? "named" : "none",
       });
     }
   }

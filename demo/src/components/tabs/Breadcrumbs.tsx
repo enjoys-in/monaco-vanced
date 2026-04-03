@@ -6,6 +6,7 @@ import { FileEvents, TabEvents, WelcomeEvents } from "@enjoys/monaco-vanced/core
 import { useTheme } from "../theme";
 import type { MockFsAPI, FsEntry } from "../../mock-fs";
 import type { ExplorerIconAPI } from "../../explorer";
+import { fileIconSvg, getExt } from "../../wireframe/utils";
 
 export interface BreadcrumbsProps {
   eventBus: InstanceType<typeof EventBus>;
@@ -214,6 +215,12 @@ export function Breadcrumbs({ eventBus, fsApi, iconApi }: BreadcrumbsProps) {
             }}
             onClick={(e) => handleSegmentClick(i, parts, e)}
           >
+            {i === parts.length - 1 && (() => {
+              const ext = getExt(part);
+              const iconSrc = iconApi?.getFileIcon(part, false, false);
+              if (iconSrc) return <img src={iconSrc} alt="" width={14} height={14} style={{ flexShrink: 0, marginRight: 2 }} />;
+              return <span style={{ display: "inline-flex", alignItems: "center", flexShrink: 0, marginRight: 2 }} dangerouslySetInnerHTML={{ __html: fileIconSvg(ext) }} />;
+            })()}
             {part}
             {fsApi && (
               <svg

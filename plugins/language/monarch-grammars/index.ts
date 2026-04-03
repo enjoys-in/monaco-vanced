@@ -3,7 +3,7 @@ import type * as monacoNs from "monaco-editor";
 import type { MonacoPlugin, Monaco } from "@core/types";
 
 const CDN_BASE =
-  "https://cdn.jsdelivr.net/npm/@enjoys/context-engine/data/monarchTokens";
+  "https://cdn.jsdelivr.net/npm/@enjoys/context-engine@latest/data/monarchTokens";
 
 const languageIds = [
   "dockerfile",
@@ -21,6 +21,70 @@ const languageIds = [
 
 export type MonarchLanguageId = (typeof languageIds)[number];
 
+/** Inline fallback tokenizers for CDN entries that lack a valid `tokenizer` property */
+const fallbackTokenizers: Partial<
+  Record<string, monacoNs.languages.IMonarchLanguage>
+> = {
+  ignore: {
+    tokenPostfix: ".ignore",
+    defaultToken: "",
+    tokenizer: {
+      root: [
+        [/#.*$/, "comment"],
+        [/!/, "keyword"],
+        [/\*\*/, "keyword"],
+        [/[*?]/, "keyword"],
+        [/[^\s]/, "string"],
+      ],
+    },
+  },
+  prisma: {
+    tokenPostfix: ".prisma",
+    defaultToken: "",
+    keywords: [
+      "model",
+      "enum",
+      "datasource",
+      "generator",
+      "type",
+    ],
+    typeKeywords: [
+      "String",
+      "Int",
+      "Float",
+      "Boolean",
+      "DateTime",
+      "Json",
+      "Bytes",
+      "BigInt",
+    ],
+    tokenizer: {
+      root: [
+        [/\/\/.*$/, "comment"],
+        [/\/\*/, "comment", "@comment"],
+        [/@\w+/, "annotation"],
+        [/"([^"\\]|\\.)*"/, "string"],
+        [/\d+(\.\d+)?/, "number"],
+        [/[{}()\[\]]/, "delimiter"],
+        [
+          /[a-zA-Z_]\w*/,
+          {
+            cases: {
+              "@keywords": "keyword",
+              "@typeKeywords": "type",
+              "@default": "identifier",
+            },
+          },
+        ],
+      ],
+      comment: [
+        [/\*\//, "comment", "@pop"],
+        [/./, "comment"],
+      ],
+    },
+  },
+};
+
 async function fetchTokenizer(
   langId: string,
 ): Promise<monacoNs.languages.IMonarchLanguage> {
@@ -29,7 +93,16 @@ async function fetchTokenizer(
   if (!res.ok) {
     throw new Error(`[monarch-grammars] ${langId}: HTTP ${res.status}`);
   }
-  return res.json() as Promise<monacoNs.languages.IMonarchLanguage>;
+  const data = await res.json();
+  if (data && typeof data.tokenizer === "object") {
+    return data as monacoNs.languages.IMonarchLanguage;
+  }
+  const fallback = fallbackTokenizers[langId];
+  if (fallback) {
+    console.warn(`[monarch-grammars] ${langId}: CDN definition missing tokenizer, using fallback`);
+    return fallback;
+  }
+  throw new Error(`[monarch-grammars] ${langId}: CDN definition missing required 'tokenizer' attribute`);
 }
 
 export function createMonarchGrammarsPlugin(): MonacoPlugin {

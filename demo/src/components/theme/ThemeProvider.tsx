@@ -4,6 +4,7 @@ import { createContext, useContext, useState, useEffect, useCallback, type React
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
 import type { ThemeDefinition } from "../../../../plugins/theming/theme-module/types";
 import { ThemeEvents } from "@enjoys/monaco-vanced/core/events";
+import { applyThemeVars, setActiveTheme, getActiveTheme } from "./css-vars";
 
 // ── Theme token interface (wireframe/UI tokens) ──────────────
 export interface ThemeTokens {
@@ -193,8 +194,10 @@ export function ThemeProvider({
   eventBus: InstanceType<typeof EventBus>;
   children: ReactNode;
 }) {
-  const [themeName, setThemeName] = useState(DEFAULT_THEME);
-  const [tokens, setTokens] = useState<ThemeTokens>(DEFAULT_TOKENS);
+  // Initialize from the module-level active theme (stays in sync across mounts)
+  const active = getActiveTheme();
+  const [themeName, setThemeName] = useState(active.name);
+  const [tokens, setTokens] = useState<ThemeTokens>(active.tokens);
 
   const handleThemeChange = useCallback((payload: unknown) => {
     const p = payload as { name?: string; themeId?: string };
@@ -202,8 +205,12 @@ export function ThemeProvider({
     const newTokens = THEME_MAP[key];
     if (newTokens) {
       const def = THEME_DEFS[key];
-      setThemeName(def?.name ?? key);
+      const name = def?.name ?? key;
+      setThemeName(name);
       setTokens(newTokens);
+      // Keep CSS vars and module-level cache in sync
+      applyThemeVars(newTokens);
+      setActiveTheme(name, newTokens);
     }
   }, []);
 

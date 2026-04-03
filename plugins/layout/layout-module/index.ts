@@ -93,6 +93,7 @@ export function createLayoutPlugin(
     registerBottomView(view: PanelView): void {
       const v = { ...view, location: "bottom" as const };
       panelManager.registerView(v);
+      ctx?.emit(PanelEvents.BottomViewRegister, { viewId: v.id, label: v.label, icon: v.icon, isWebview: v.isWebview ?? false });
     },
 
     registerRightView(view: PanelView): void {
@@ -174,11 +175,19 @@ export function createLayoutPlugin(
       };
       panelManager.registerView(view);
       ctx?.emit(LayoutEvents.WebviewMounted, { id, location });
+      if (location === "bottom") {
+        ctx?.emit(PanelEvents.BottomViewRegister, { viewId: view.id, label: title, icon, isWebview: true });
+      }
     },
 
     unmountWebview(id: string): void {
+      const views = panelManager.getViews("bottom");
+      const wasBottom = views.some((v) => v.id === `webview:${id}`);
       panelManager.unregisterView(`webview:${id}`);
       ctx?.emit(LayoutEvents.WebviewUnmounted, { id });
+      if (wasBottom) {
+        ctx?.emit(PanelEvents.BottomViewUnregister, { viewId: `webview:${id}` });
+      }
     },
 
     getWebviewViews(location: PanelViewLocation): PanelView[] {

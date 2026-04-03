@@ -79,7 +79,11 @@ export function createLspBridgePlugin(
         }
       }
 
-      createClients();
+      try {
+        createClients();
+      } catch (err) {
+        console.warn("[lsp-bridge] Client creation failed (mode:", mode, "):", err);
+      }
 
       // ── V1: Auto-connect on startup ─────────────────────
 
@@ -223,16 +227,18 @@ export function createLspBridgePlugin(
     },
 
     onDispose() {
-      customClient?.dispose();
-      builtinClient?.dispose();
-      nativeClient?.dispose();
-      bridge?.dispose();
+      try { customClient?.dispose(); } catch { /* swallow */ }
+      try { builtinClient?.dispose(); } catch { /* swallow */ }
+      try { nativeClient?.dispose(); } catch { /* swallow */ }
+      try { bridge?.dispose(); } catch { /* swallow */ }
       customClient = null;
       builtinClient = null;
       nativeClient = null;
       bridge = null;
 
-      for (const d of disposables) d.dispose();
+      for (const d of disposables) {
+        try { d.dispose(); } catch { /* swallow */ }
+      }
       disposables.length = 0;
     },
   };

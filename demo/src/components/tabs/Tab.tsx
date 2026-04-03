@@ -41,7 +41,7 @@ export function Tab({
     if (e.button === 1) { e.preventDefault(); onClose(); }
   }, [onClose]);
 
-  const showClose = hovered || isActive;
+  const showClose = hovered;
   const showDirtyDot = isDirty && !hovered;
   const isDragTarget = dragOverUri === uri;
 
@@ -131,6 +131,7 @@ function FileIcon({ label, isSpecial, iconApi }: { label: string; isSpecial?: bo
 // ── Close Button ─────────────────────────────────────────────
 
 function CloseBtn({ color, onClick }: { color: string; onClick: (e: RME) => void }) {
+  const { tokens: t } = useTheme();
   const [hover, setHover] = useState(false);
   return (
     <span
@@ -141,7 +142,7 @@ function CloseBtn({ color, onClick }: { color: string; onClick: (e: RME) => void
         cursor: "pointer", borderRadius: 3, display: "flex",
         alignItems: "center", justifyContent: "center",
         width: 18, height: 18, color,
-        background: hover ? "rgba(255,255,255,0.1)" : "transparent",
+        background: hover ? t.hover : "transparent",
         transition: "background .1s",
       }}
     >

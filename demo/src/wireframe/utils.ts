@@ -31,18 +31,25 @@ export function langColor(ext: string): string {
     sql: "#e38c00", sh: "#89e051", bash: "#89e051", vue: "#41b883",
     svelte: "#ff3e00", java: "#b07219", kt: "#a97bff", swift: "#f05138",
     rb: "#cc342d", php: "#4f5d95", c: "#555555", cpp: "#f34b7d", h: "#555555",
+    hpp: "#f34b7d", cc: "#f34b7d", cxx: "#f34b7d",
+    lua: "#000080", r: "#198ce7", dart: "#00b4ab", zig: "#f7a41d",
     xml: "#0060ac", svg: "#ffb13b", txt: C.fgDim, lock: "#6c6c6c",
-    gitignore: "#f05032", env: "#ecd53f", dockerfile: "#384d54",
+    gitignore: "#f05032", env: "#ecd53f", dockerfile: "#384d54", makefile: "#427819",
     png: "#a074c4", jpg: "#a074c4", gif: "#a074c4", webp: "#a074c4",
     wasm: "#654ff0",
   };
   return map[ext] ?? C.fgDim;
 }
 
-/** Get file extension from a filename */
+/** Get file extension from a filename; returns special key for known extensionless files */
 export function getExt(name: string): string {
   const dot = name.lastIndexOf(".");
-  return dot >= 0 ? name.slice(dot + 1).toLowerCase() : "";
+  if (dot >= 0) return name.slice(dot + 1).toLowerCase();
+  // Handle extensionless special files
+  const lower = name.toLowerCase();
+  if (lower === "dockerfile" || lower.startsWith("dockerfile.")) return "dockerfile";
+  if (lower === "makefile" || lower === "gnumakefile") return "makefile";
+  return "";
 }
 
 /** Language-specific icon glyph for common extensions */
@@ -51,8 +58,11 @@ function langGlyph(ext: string): string | null {
     ts: "TS", tsx: "TX", js: "JS", jsx: "JX", json: "{ }", css: "#", scss: "S#",
     html: "<>", md: "M↓", py: "Py", rs: "Rs", go: "Go", yml: "Y", yaml: "Y",
     sql: "SQ", sh: "$_", vue: "V", svelte: "S", java: "Jv", swift: "Sw",
-    rb: "Rb", php: "<?", c: "C", cpp: "C+", h: ".h", xml: "<>", toml: "⚙",
+    rb: "Rb", php: "<?", c: "C", cpp: "C+", h: ".h", hpp: "C+", cc: "C+",
+    lua: "Lu", r: "R", dart: "Dt", zig: "Zg", kt: "Kt",
+    xml: "<>", toml: "⚙",
     svg: "◇", lock: "🔒", txt: "Tx", env: ".e",
+    dockerfile: "Dk", makefile: "Mk",
   };
   return glyphs[ext] ?? null;
 }
@@ -63,7 +73,7 @@ export function fileIconSvg(ext: string): string {
   const cached = _iconSvgCache.get(ext);
   if (cached) return cached;
   const color = langColor(ext);
-  const glyph = langGlyph(ext) ?? ext.slice(0, 3);
+  const glyph = langGlyph(ext) ?? (ext.slice(0, 3) || "…");
   const svg = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 1h6.5L13 4.5V14a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z" stroke="${color}" stroke-width="1" fill="none"/><path d="M9.5 1v3.5H13" stroke="${color}" stroke-width="1" fill="none"/><text x="4" y="12" font-size="5" fill="${color}" font-family="monospace" font-weight="600">${glyph.slice(0, 3)}</text></svg>`;
   _iconSvgCache.set(ext, svg);
   return svg;

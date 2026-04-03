@@ -428,8 +428,9 @@ function PluginCard({ plugin, emit, extensionApi }: { plugin: PluginInfo; emit: 
     if (extensionApi) {
       if (next) extensionApi.enable(plugin.id);
       else extensionApi.disable(plugin.id);
+    } else {
+      emit(next ? ExtensionEvents.Enabled : ExtensionEvents.Disabled, { id: plugin.id, name: plugin.name });
     }
-    emit(next ? ExtensionEvents.Enabled : ExtensionEvents.Disabled, { id: plugin.id, name: plugin.name });
   }, [enabled, extensionApi, plugin, emit]);
 
   return (

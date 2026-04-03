@@ -212,6 +212,16 @@ export class NativeLspClient implements LspClient {
             type: number;
             message: string;
           };
+
+          // Suppress known non-actionable messages (e.g. TS server rejecting non-TS didOpen)
+          if (
+            typeof text === "string" &&
+            text.includes("Cannot open document")
+          ) {
+            listener(message);
+            return;
+          }
+
           const levelMap: Record<number, string> = {
             1: "error",
             2: "warn",
@@ -278,11 +288,17 @@ export class NativeLspClient implements LspClient {
 
   disconnect(): void {
     if (this.nativeClient) {
-      this.nativeClient.dispose();
+      try {
+        if (typeof this.nativeClient.dispose === "function") {
+          this.nativeClient.dispose();
+        }
+      } catch {
+        // MonacoLspClient may not support dispose in all builds
+      }
       this.nativeClient = null;
     }
     if (this.rawTransport) {
-      this.rawTransport.close();
+      try { this.rawTransport.close(); } catch { /* already closed */ }
       this.rawTransport = null;
     }
     for (const d of this.stateDisposables) d.dispose();

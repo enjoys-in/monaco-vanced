@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTheme } from "../components/theme";
-import { ExplorerAction, PanelEvents, SettingsEvents, ThemeEvents, AiEvents } from "@enjoys/monaco-vanced/core/events";
+import { ExplorerAction, PanelEvents, SettingsEvents, ThemeEvents, AiEvents, PreviewEvents } from "@enjoys/monaco-vanced/core/events";
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
 import type { MockFsAPI } from "../mock-fs";
 import { ExplorerService } from "./ExplorerService";
@@ -136,6 +136,10 @@ export function ExplorerView({ fs, eventBus, rootLabel = "MONACO-VANCED", onNoti
         if (node.isDirectory) {
           eventBus.emit(AiEvents.AttachFolder, { uri: node.path, name: node.name });
           eventBus.emit(AiEvents.OpenChat, {});
+        } break;
+      case ExplorerAction.Preview:
+        if (!node.isDirectory) {
+          eventBus.emit(PreviewEvents.OpenRequest, { uri: node.path, label: node.name });
         } break;
     }
   }, [svc, fs, eventBus, onNotify]);

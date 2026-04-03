@@ -51,6 +51,84 @@ PATTERNS.javascript = PATTERNS.typescript;
 PATTERNS.typescriptreact = PATTERNS.typescript;
 PATTERNS.javascriptreact = PATTERNS.javascript;
 
+// ── Java ─────────────────────────────────────────────────────
+PATTERNS.java = [
+  { regex: /(?:public\s+|private\s+|protected\s+)?(?:abstract\s+)?(?:static\s+)?class\s+(\w+)/g, kind: "class", nameGroup: 1 },
+  { regex: /(?:public\s+|private\s+|protected\s+)?interface\s+(\w+)/g, kind: "interface", nameGroup: 1 },
+  { regex: /(?:public\s+|private\s+|protected\s+)?enum\s+(\w+)/g, kind: "enum", nameGroup: 1 },
+  { regex: /(?:public\s+|private\s+|protected\s+)?(?:static\s+)?(?:abstract\s+)?[\w<>\[\]]+\s+(\w+)\s*\(/g, kind: "function", nameGroup: 1 },
+];
+
+// ── C ────────────────────────────────────────────────────────
+PATTERNS.c = [
+  { regex: /^(?:static\s+)?(?:inline\s+)?[\w*]+\s+(\w+)\s*\([^)]*\)\s*\{/gm, kind: "function", nameGroup: 1 },
+  { regex: /typedef\s+struct\s+(\w+)/g, kind: "struct", nameGroup: 1 },
+  { regex: /typedef\s+enum\s+(\w+)/g, kind: "enum", nameGroup: 1 },
+  { regex: /#define\s+(\w+)/g, kind: "constant", nameGroup: 1 },
+];
+
+// ── C++ ──────────────────────────────────────────────────────
+PATTERNS.cpp = [
+  { regex: /(?:class|struct)\s+(\w+)/g, kind: "class", nameGroup: 1 },
+  { regex: /namespace\s+(\w+)/g, kind: "module", nameGroup: 1 },
+  { regex: /template\s*<[^>]*>\s*(?:class|struct)\s+(\w+)/g, kind: "class", nameGroup: 1 },
+  { regex: /(?:virtual\s+)?[\w:*&<>]+\s+(\w+)\s*\([^)]*\)\s*(?:const\s*)?(?:override\s*)?\{/gm, kind: "function", nameGroup: 1 },
+  { regex: /#define\s+(\w+)/g, kind: "constant", nameGroup: 1 },
+];
+
+// ── Ruby ─────────────────────────────────────────────────────
+PATTERNS.ruby = [
+  { regex: /^class\s+(\w+)/gm, kind: "class", nameGroup: 1 },
+  { regex: /^module\s+(\w+)/gm, kind: "module", nameGroup: 1 },
+  { regex: /^\s*def\s+(\w+)/gm, kind: "function", nameGroup: 1 },
+  { regex: /^\s*attr_(?:reader|writer|accessor)\s+:(\w+)/gm, kind: "property", nameGroup: 1 },
+];
+
+// ── PHP ──────────────────────────────────────────────────────
+PATTERNS.php = [
+  { regex: /(?:abstract\s+)?class\s+(\w+)/g, kind: "class", nameGroup: 1 },
+  { regex: /interface\s+(\w+)/g, kind: "interface", nameGroup: 1 },
+  { regex: /trait\s+(\w+)/g, kind: "class", nameGroup: 1 },
+  { regex: /(?:public|private|protected|static)\s+function\s+(\w+)/g, kind: "function", nameGroup: 1 },
+  { regex: /^function\s+(\w+)/gm, kind: "function", nameGroup: 1 },
+];
+
+// ── Lua ──────────────────────────────────────────────────────
+PATTERNS.lua = [
+  { regex: /function\s+([\w.:]+)\s*\(/g, kind: "function", nameGroup: 1 },
+  { regex: /local\s+function\s+(\w+)/g, kind: "function", nameGroup: 1 },
+  { regex: /(\w+)\s*=\s*\{/g, kind: "variable", nameGroup: 1 },
+];
+
+// ── Shell ────────────────────────────────────────────────────
+PATTERNS.shell = [
+  { regex: /^(\w+)\s*\(\)\s*\{/gm, kind: "function", nameGroup: 1 },
+  { regex: /^function\s+(\w+)/gm, kind: "function", nameGroup: 1 },
+  { regex: /^(\w+)=/gm, kind: "variable", nameGroup: 1 },
+];
+PATTERNS.shellscript = PATTERNS.shell;
+PATTERNS.bash = PATTERNS.shell;
+
+// ── SQL ──────────────────────────────────────────────────────
+PATTERNS.sql = [
+  { regex: /CREATE\s+(?:OR\s+REPLACE\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)/gi, kind: "class", nameGroup: 1 },
+  { regex: /CREATE\s+(?:OR\s+REPLACE\s+)?VIEW\s+(\w+)/gi, kind: "class", nameGroup: 1 },
+  { regex: /CREATE\s+(?:OR\s+REPLACE\s+)?(?:FUNCTION|PROCEDURE)\s+(\w+)/gi, kind: "function", nameGroup: 1 },
+  { regex: /CREATE\s+INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)/gi, kind: "variable", nameGroup: 1 },
+];
+
+// ── Makefile ─────────────────────────────────────────────────
+PATTERNS.makefile = [
+  { regex: /^([\w.-]+)\s*:/gm, kind: "function", nameGroup: 1 },
+  { regex: /^(\w+)\s*[?:]?=/gm, kind: "variable", nameGroup: 1 },
+];
+
+// ── Dockerfile ───────────────────────────────────────────────
+PATTERNS.dockerfile = [
+  { regex: /^FROM\s+(\S+)/gm, kind: "module", nameGroup: 1 },
+  { regex: /^(?:RUN|CMD|ENTRYPOINT|COPY|ADD|ENV|ARG|EXPOSE|WORKDIR|LABEL|VOLUME|USER)\b/gm, kind: "function", nameGroup: 0 },
+];
+
 /** Generic fallback patterns for unknown languages */
 const FALLBACK_PATTERNS: SymbolPattern[] = [
   { regex: /(?:class|struct|interface|enum)\s+(\w+)/g, kind: "class", nameGroup: 1 },

@@ -104,6 +104,7 @@ async function bootstrap() {
     marketplaceApi: pluginApis.marketplace,
     aiApi: pluginApis.ai,
     indexerApi: pluginApis.indexer,
+    layoutApi: pluginApis.layout,
   });
 
   // ── 7. Register builtin themes ───────────────────────────

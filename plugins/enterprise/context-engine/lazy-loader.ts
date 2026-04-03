@@ -7,7 +7,7 @@ import type { ContextEngineManifest, ManifestLanguageEntry, LanguageFileMap } fr
 import type { ContextEngineAPI } from "./api";
 import { checkLspHealth } from "../../language/lsp-bridge-module/health";
 
-const DEFAULT_CDN_BASE = "https://cdn.jsdelivr.net/npm/@enjoys/context-engine/data";
+const DEFAULT_CDN_BASE = "https://cdn.jsdelivr.net/npm/@enjoys/context-engine@latest/data";
 
 export interface LazyLoaderConfig {
   cdnBaseUrl?: string;

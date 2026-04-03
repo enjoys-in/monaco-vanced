@@ -35,17 +35,25 @@ const EXT_LANG: Record<string, string> = {
   ts: "typescript", tsx: "typescriptreact", js: "javascript", jsx: "javascriptreact",
   json: "json", css: "css", scss: "scss", less: "less",
   html: "html", htm: "html", md: "markdown", yaml: "yaml", yml: "yaml",
-  py: "python", rs: "rust", go: "go", toml: "toml", sh: "shell",
+  py: "python", rs: "rust", go: "go", toml: "toml", sh: "shell", bash: "shell",
   svg: "xml", xml: "xml", sql: "sql", graphql: "graphql",
   dockerfile: "dockerfile", env: "plaintext", gitignore: "plaintext",
   lock: "plaintext", txt: "plaintext",
+  lua: "lua", rb: "ruby", java: "java", kt: "kotlin",
+  c: "c", h: "c", cpp: "cpp", hpp: "cpp",
+  php: "php", r: "r", swift: "swift",
+  zig: "zig", nim: "nim", dart: "dart",
+  makefile: "makefile", cmake: "cmake",
 };
 
 function detectLanguage(path: string): string {
   const name = path.split("/").pop() ?? "";
-  if (name === "Dockerfile") return "dockerfile";
+  if (name === "Dockerfile" || name.startsWith("Dockerfile.")) return "dockerfile";
+  if (name === "Makefile" || name === "makefile") return "makefile";
+  if (name === "CMakeLists.txt") return "cmake";
   if (name === ".env" || name.startsWith(".env.")) return "plaintext";
   if (name === ".gitignore") return "plaintext";
+  if (name === "Gemfile") return "ruby";
   const ext = name.includes(".") ? name.split(".").pop()!.toLowerCase() : "";
   return EXT_LANG[ext] ?? "plaintext";
 }
@@ -1093,5 +1101,881 @@ export default [
     },
   },
 ];
+`);
+
+  // ═══════════════════════════════════════════════════════════
+  // Multilang showcase — diverse language files for testing
+  // ═══════════════════════════════════════════════════════════
+
+  // ── Go ─────────────────────────────────────────────────────
+  fs.writeFile("services/server.go", `package main
+
+import (
+	"fmt"
+	"log"
+	"net/http"
+	"encoding/json"
+)
+
+type User struct {
+	ID    int    \`json:"id"\`
+	Name  string \`json:"name"\`
+	Email string \`json:"email"\`
+}
+
+type APIResponse struct {
+	Status  string      \`json:"status"\`
+	Data    interface{} \`json:"data"\`
+	Message string      \`json:"message,omitempty"\`
+}
+
+func NewUser(id int, name, email string) *User {
+	return &User{ID: id, Name: name, Email: email}
+}
+
+func (u *User) Validate() error {
+	if u.Name == "" {
+		return fmt.Errorf("name is required")
+	}
+	return nil
+}
+
+func handleGetUsers(w http.ResponseWriter, r *http.Request) {
+	users := []User{
+		{ID: 1, Name: "Alice", Email: "alice@example.com"},
+		{ID: 2, Name: "Bob", Email: "bob@example.com"},
+	}
+	json.NewEncoder(w).Encode(APIResponse{Status: "ok", Data: users})
+}
+
+func handleHealthCheck(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintf(w, "healthy")
+}
+
+func main() {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/users", handleGetUsers)
+	mux.HandleFunc("/health", handleHealthCheck)
+	log.Println("Server starting on :8080")
+	log.Fatal(http.ListenAndServe(":8080", mux))
+}
+`);
+
+  // ── Python ─────────────────────────────────────────────────
+  fs.writeFile("services/analytics.py", `"""Analytics service — data processing pipeline."""
+
+from dataclasses import dataclass, field
+from typing import List, Dict, Optional
+from datetime import datetime
+import json
+
+@dataclass
+class Event:
+    name: str
+    timestamp: datetime
+    properties: Dict[str, str] = field(default_factory=dict)
+    user_id: Optional[str] = None
+
+@dataclass
+class AggregatedMetric:
+    metric_name: str
+    value: float
+    count: int
+    period: str
+
+class EventProcessor:
+    """Processes raw analytics events into aggregated metrics."""
+
+    def __init__(self, batch_size: int = 100):
+        self._buffer: List[Event] = []
+        self._batch_size = batch_size
+        self._metrics: Dict[str, AggregatedMetric] = {}
+
+    def ingest(self, event: Event) -> None:
+        self._buffer.append(event)
+        if len(self._buffer) >= self._batch_size:
+            self.flush()
+
+    def flush(self) -> List[AggregatedMetric]:
+        results = self._aggregate(self._buffer)
+        self._buffer.clear()
+        return results
+
+    def _aggregate(self, events: List[Event]) -> List[AggregatedMetric]:
+        counts: Dict[str, int] = {}
+        for event in events:
+            counts[event.name] = counts.get(event.name, 0) + 1
+        return [
+            AggregatedMetric(metric_name=name, value=float(count), count=count, period="batch")
+            for name, count in counts.items()
+        ]
+
+    def get_metrics(self) -> Dict[str, AggregatedMetric]:
+        return dict(self._metrics)
+
+
+def create_pipeline(config: dict) -> EventProcessor:
+    batch_size = config.get("batch_size", 100)
+    return EventProcessor(batch_size=batch_size)
+
+
+async def run_pipeline(processor: EventProcessor, events: List[dict]) -> List[AggregatedMetric]:
+    for raw in events:
+        event = Event(
+            name=raw["name"],
+            timestamp=datetime.fromisoformat(raw["timestamp"]),
+            properties=raw.get("properties", {}),
+            user_id=raw.get("user_id"),
+        )
+        processor.ingest(event)
+    return processor.flush()
+`);
+
+  // ── Rust ───────────────────────────────────────────────────
+  fs.writeFile("services/cache.rs", `// Cache service — thread-safe LRU cache with TTL
+
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
+use std::time::{Duration, Instant};
+
+pub struct CacheEntry<V> {
+    value: V,
+    inserted_at: Instant,
+    ttl: Duration,
+}
+
+pub struct LruCache<K, V> {
+    store: Arc<RwLock<HashMap<K, CacheEntry<V>>>>,
+    max_size: usize,
+    default_ttl: Duration,
+}
+
+pub trait Cacheable: Clone + Send + Sync + 'static {}
+impl<T: Clone + Send + Sync + 'static> Cacheable for T {}
+
+pub enum CacheError {
+    NotFound,
+    Expired,
+    Full,
+}
+
+impl<K: std::hash::Hash + Eq + Clone, V: Cacheable> LruCache<K, V> {
+    pub fn new(max_size: usize, default_ttl: Duration) -> Self {
+        Self {
+            store: Arc::new(RwLock::new(HashMap::with_capacity(max_size))),
+            max_size,
+            default_ttl,
+        }
+    }
+
+    pub fn get(&self, key: &K) -> Result<V, CacheError> {
+        let store = self.store.read().unwrap();
+        match store.get(key) {
+            Some(entry) if entry.inserted_at.elapsed() < entry.ttl => {
+                Ok(entry.value.clone())
+            }
+            Some(_) => Err(CacheError::Expired),
+            None => Err(CacheError::NotFound),
+        }
+    }
+
+    pub fn insert(&self, key: K, value: V) -> Result<(), CacheError> {
+        let mut store = self.store.write().unwrap();
+        if store.len() >= self.max_size && !store.contains_key(&key) {
+            self.evict_expired(&mut store);
+            if store.len() >= self.max_size {
+                return Err(CacheError::Full);
+            }
+        }
+        store.insert(key, CacheEntry {
+            value,
+            inserted_at: Instant::now(),
+            ttl: self.default_ttl,
+        });
+        Ok(())
+    }
+
+    fn evict_expired(&self, store: &mut HashMap<K, CacheEntry<V>>) {
+        store.retain(|_, entry| entry.inserted_at.elapsed() < entry.ttl);
+    }
+
+    pub fn clear(&self) {
+        self.store.write().unwrap().clear();
+    }
+
+    pub fn len(&self) -> usize {
+        self.store.read().unwrap().len()
+    }
+}
+`);
+
+  // ── Lua ────────────────────────────────────────────────────
+  fs.writeFile("scripts/game_logic.lua", `-- Game logic module — entity component system
+
+local GameState = {}
+GameState.__index = GameState
+
+function GameState.new(width, height)
+  local self = setmetatable({}, GameState)
+  self.width = width
+  self.height = height
+  self.entities = {}
+  self.score = 0
+  self.running = false
+  return self
+end
+
+function GameState:addEntity(entity)
+  table.insert(self.entities, entity)
+  return #self.entities
+end
+
+function GameState:removeEntity(id)
+  table.remove(self.entities, id)
+end
+
+function GameState:update(dt)
+  for _, entity in ipairs(self.entities) do
+    if entity.update then
+      entity:update(dt)
+    end
+    -- Boundary check
+    if entity.x and entity.y then
+      entity.x = math.max(0, math.min(self.width, entity.x))
+      entity.y = math.max(0, math.min(self.height, entity.y))
+    end
+  end
+end
+
+local function createPlayer(x, y)
+  return {
+    x = x, y = y,
+    speed = 200,
+    health = 100,
+    update = function(self, dt)
+      -- Movement handled by input system
+    end
+  }
+end
+
+local function createEnemy(x, y, patrol_radius)
+  local origin_x, origin_y = x, y
+  local angle = 0
+  return {
+    x = x, y = y,
+    speed = 80,
+    health = 50,
+    update = function(self, dt)
+      angle = angle + dt
+      self.x = origin_x + math.cos(angle) * patrol_radius
+      self.y = origin_y + math.sin(angle) * patrol_radius
+    end
+  }
+end
+
+return {
+  GameState = GameState,
+  createPlayer = createPlayer,
+  createEnemy = createEnemy,
+}
+`);
+
+  // ── Ruby ───────────────────────────────────────────────────
+  fs.writeFile("services/mailer.rb", `# Mailer service — template-based email delivery
+
+require "json"
+
+module Mailer
+  class Template
+    attr_reader :name, :subject, :body_html
+
+    def initialize(name:, subject:, body_html:)
+      @name = name
+      @subject = subject
+      @body_html = body_html
+    end
+
+    def render(variables = {})
+      result = @body_html.dup
+      variables.each do |key, value|
+        result.gsub!("{{#{key}}}", value.to_s)
+      end
+      result
+    end
+  end
+
+  class Delivery
+    attr_reader :to, :from, :subject, :html_body, :status
+
+    def initialize(to:, from:, subject:, html_body:)
+      @to = to
+      @from = from
+      @subject = subject
+      @html_body = html_body
+      @status = :pending
+    end
+
+    def deliver!
+      validate!
+      @status = :sent
+      puts "[Mailer] Sent '#{@subject}' to #{@to}"
+      self
+    rescue => e
+      @status = :failed
+      raise e
+    end
+
+    private
+
+    def validate!
+      raise ArgumentError, "Missing recipient" if @to.nil? || @to.empty?
+      raise ArgumentError, "Missing subject" if @subject.nil? || @subject.empty?
+    end
+  end
+
+  class Service
+    def initialize
+      @templates = {}
+    end
+
+    def register_template(template)
+      @templates[template.name] = template
+    end
+
+    def send_email(template_name:, to:, from: "noreply@example.com", variables: {})
+      template = @templates[template_name]
+      raise "Template '#{template_name}' not found" unless template
+
+      html = template.render(variables)
+      delivery = Delivery.new(to: to, from: from, subject: template.subject, html_body: html)
+      delivery.deliver!
+    end
+  end
+end
+`);
+
+  // ── Java ───────────────────────────────────────────────────
+  fs.writeFile("services/TaskScheduler.java", `package com.example.scheduler;
+
+import java.util.*;
+import java.util.concurrent.*;
+import java.time.Instant;
+
+public class TaskScheduler {
+
+    public interface Task {
+        String getId();
+        void execute() throws Exception;
+    }
+
+    public enum TaskStatus {
+        PENDING, RUNNING, COMPLETED, FAILED, CANCELLED
+    }
+
+    public static class TaskResult {
+        private final String taskId;
+        private final TaskStatus status;
+        private final Instant completedAt;
+        private final String error;
+
+        public TaskResult(String taskId, TaskStatus status, Instant completedAt, String error) {
+            this.taskId = taskId;
+            this.status = status;
+            this.completedAt = completedAt;
+            this.error = error;
+        }
+
+        public String getTaskId() { return taskId; }
+        public TaskStatus getStatus() { return status; }
+    }
+
+    private final ExecutorService executor;
+    private final Map<String, Future<?>> activeTasks = new ConcurrentHashMap<>();
+    private final List<TaskResult> history = Collections.synchronizedList(new ArrayList<>());
+
+    public TaskScheduler(int poolSize) {
+        this.executor = Executors.newFixedThreadPool(poolSize);
+    }
+
+    public void schedule(Task task) {
+        Future<?> future = executor.submit(() -> {
+            try {
+                task.execute();
+                history.add(new TaskResult(task.getId(), TaskStatus.COMPLETED, Instant.now(), null));
+            } catch (Exception e) {
+                history.add(new TaskResult(task.getId(), TaskStatus.FAILED, Instant.now(), e.getMessage()));
+            } finally {
+                activeTasks.remove(task.getId());
+            }
+        });
+        activeTasks.put(task.getId(), future);
+    }
+
+    public boolean cancel(String taskId) {
+        Future<?> future = activeTasks.get(taskId);
+        if (future != null) {
+            boolean cancelled = future.cancel(true);
+            if (cancelled) {
+                history.add(new TaskResult(taskId, TaskStatus.CANCELLED, Instant.now(), null));
+            }
+            return cancelled;
+        }
+        return false;
+    }
+
+    public List<TaskResult> getHistory() {
+        return Collections.unmodifiableList(history);
+    }
+
+    public void shutdown() {
+        executor.shutdown();
+    }
+}
+`);
+
+  // ── PHP ────────────────────────────────────────────────────
+  fs.writeFile("services/Router.php", [
+    '<?php',
+    'declare(strict_types=1);',
+    '',
+    'namespace App\\Http;',
+    '',
+    'class Route',
+    '{',
+    '    public string $method;',
+    '    public string $path;',
+    '    /** @var callable */',
+    '    public $handler;',
+    '    /** @var string[] */',
+    '    public array $middleware;',
+    '',
+    '    public function __construct(string $method, string $path, callable $handler, array $middleware = [])',
+    '    {',
+    '        $this->method = $method;',
+    '        $this->path = $path;',
+    '        $this->handler = $handler;',
+    '        $this->middleware = $middleware;',
+    '    }',
+    '}',
+    '',
+    'class Request',
+    '{',
+    '    public string $method;',
+    '    public string $uri;',
+    '    public array $params;',
+    '    public array $headers;',
+    '',
+    '    public function __construct(string $method, string $uri, array $params = [], array $headers = [])',
+    '    {',
+    '        $this->method = $method;',
+    '        $this->uri = $uri;',
+    '        $this->params = $params;',
+    '        $this->headers = $headers;',
+    '    }',
+    '}',
+    '',
+    'class Response',
+    '{',
+    '    private int $statusCode = 200;',
+    '    private array $headers = [];',
+    "    private string $body = '';",
+    '',
+    '    public function status(int $code): self',
+    '    {',
+    '        $this->statusCode = $code;',
+    '        return $this;',
+    '    }',
+    '',
+    '    public function json(array $data): self',
+    '    {',
+    "        $this->headers['Content-Type'] = 'application/json';",
+    '        $this->body = json_encode($data);',
+    '        return $this;',
+    '    }',
+    '',
+    '    public function send(): void',
+    '    {',
+    '        http_response_code($this->statusCode);',
+    '        foreach ($this->headers as $key => $value) {',
+    '            header("$key: $value");',
+    '        }',
+    '        echo $this->body;',
+    '    }',
+    '}',
+    '',
+    'class Router',
+    '{',
+    '    /** @var Route[] */',
+    '    private array $routes = [];',
+    '',
+    '    public function get(string $path, callable $handler, array $middleware = []): void',
+    '    {',
+    "        $this->routes[] = new Route('GET', $path, $handler, $middleware);",
+    '    }',
+    '',
+    '    public function post(string $path, callable $handler, array $middleware = []): void',
+    '    {',
+    "        $this->routes[] = new Route('POST', $path, $handler, $middleware);",
+    '    }',
+    '',
+    '    public function dispatch(Request $request): Response',
+    '    {',
+    '        foreach ($this->routes as $route) {',
+    '            if ($route->method === $request->method && $this->matchPath($route->path, $request->uri, $request->params)) {',
+    '                $response = new Response();',
+    '                ($route->handler)($request, $response);',
+    '                return $response;',
+    '            }',
+    '        }',
+    "        return (new Response())->status(404)->json(['error' => 'Not found']);",
+    '    }',
+    '',
+    '    private function matchPath(string $pattern, string $uri, array &$params): bool',
+    '    {',
+    "        $regex = preg_replace('/\\\\{(\\\\w+)\\\\}/', '(?P<$1>[^/]+)', $pattern);",
+    '        if (preg_match("#^{$regex}$#", $uri, $matches)) {',
+    '            foreach ($matches as $key => $value) {',
+    '                if (is_string($key)) $params[$key] = $value;',
+    '            }',
+    '            return true;',
+    '        }',
+    '        return false;',
+    '    }',
+    '}',
+  ].join('\n') + '\n');
+
+  // ── C ──────────────────────────────────────────────────────
+  fs.writeFile("lib/hashmap.c", `/* hashmap.c — simple open-addressing hash map */
+
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+
+#define INITIAL_CAPACITY 16
+#define LOAD_FACTOR 0.75
+
+typedef struct {
+    char *key;
+    void *value;
+    int occupied;
+} Entry;
+
+typedef struct {
+    Entry *entries;
+    size_t capacity;
+    size_t size;
+} HashMap;
+
+static unsigned long hash_string(const char *str) {
+    unsigned long hash = 5381;
+    int c;
+    while ((c = *str++))
+        hash = ((hash << 5) + hash) + c;
+    return hash;
+}
+
+HashMap *hashmap_create(void) {
+    HashMap *map = malloc(sizeof(HashMap));
+    map->capacity = INITIAL_CAPACITY;
+    map->size = 0;
+    map->entries = calloc(map->capacity, sizeof(Entry));
+    return map;
+}
+
+void hashmap_put(HashMap *map, const char *key, void *value) {
+    if ((double)map->size / map->capacity > LOAD_FACTOR) {
+        /* resize logic omitted for brevity */
+    }
+    unsigned long idx = hash_string(key) % map->capacity;
+    while (map->entries[idx].occupied) {
+        if (strcmp(map->entries[idx].key, key) == 0) {
+            map->entries[idx].value = value;
+            return;
+        }
+        idx = (idx + 1) % map->capacity;
+    }
+    map->entries[idx].key = strdup(key);
+    map->entries[idx].value = value;
+    map->entries[idx].occupied = 1;
+    map->size++;
+}
+
+void *hashmap_get(HashMap *map, const char *key) {
+    unsigned long idx = hash_string(key) % map->capacity;
+    size_t start = idx;
+    while (map->entries[idx].occupied) {
+        if (strcmp(map->entries[idx].key, key) == 0)
+            return map->entries[idx].value;
+        idx = (idx + 1) % map->capacity;
+        if (idx == start) break;
+    }
+    return NULL;
+}
+
+void hashmap_free(HashMap *map) {
+    for (size_t i = 0; i < map->capacity; i++) {
+        if (map->entries[i].occupied)
+            free(map->entries[i].key);
+    }
+    free(map->entries);
+    free(map);
+}
+
+int hashmap_size(HashMap *map) {
+    return (int)map->size;
+}
+`);
+
+  // ── SQL ────────────────────────────────────────────────────
+  fs.writeFile("db/migrations/001_init.sql", `-- Initial database schema
+
+CREATE TABLE users (
+    id          SERIAL PRIMARY KEY,
+    email       VARCHAR(255) UNIQUE NOT NULL,
+    name        VARCHAR(100) NOT NULL,
+    password    VARCHAR(255) NOT NULL,
+    role        VARCHAR(20) DEFAULT 'user',
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE projects (
+    id          SERIAL PRIMARY KEY,
+    name        VARCHAR(200) NOT NULL,
+    description TEXT,
+    owner_id    INT REFERENCES users(id) ON DELETE CASCADE,
+    visibility  VARCHAR(20) DEFAULT 'private',
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE tasks (
+    id          SERIAL PRIMARY KEY,
+    title       VARCHAR(300) NOT NULL,
+    body        TEXT,
+    status      VARCHAR(20) DEFAULT 'open',
+    priority    INT DEFAULT 0,
+    project_id  INT REFERENCES projects(id) ON DELETE CASCADE,
+    assignee_id INT REFERENCES users(id) ON DELETE SET NULL,
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    due_date    DATE
+);
+
+CREATE INDEX idx_tasks_project ON tasks(project_id);
+CREATE INDEX idx_tasks_assignee ON tasks(assignee_id);
+CREATE INDEX idx_tasks_status ON tasks(status);
+
+-- Views
+CREATE VIEW active_tasks AS
+SELECT t.*, u.name AS assignee_name, p.name AS project_name
+FROM tasks t
+LEFT JOIN users u ON t.assignee_id = u.id
+LEFT JOIN projects p ON t.project_id = p.id
+WHERE t.status != 'closed';
+`);
+
+  // ── Dockerfile ─────────────────────────────────────────────
+  fs.writeFile("Dockerfile", `# Multi-stage build for production
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --production=false
+COPY . .
+RUN npm run build
+
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+RUN addgroup --system --gid 1001 appgroup && \\
+    adduser --system --uid 1001 appuser
+
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./
+
+EXPOSE 3000
+USER appuser
+CMD ["node", "dist/server.js"]
+`);
+
+  // ── Shell ──────────────────────────────────────────────────
+  fs.writeFile("scripts/deploy.sh", [
+    '#!/usr/bin/env bash',
+    'set -euo pipefail',
+    '',
+    '# Deploy script — builds, tests, and pushes to registry',
+    '',
+    'PROJECT_NAME="monaco-vanced-demo"',
+    'REGISTRY="ghcr.io/user"',
+    'VERSION="${1:-latest}"',
+    '',
+    'log() { echo "[deploy] $(date +%T) $*"; }',
+    'error() { echo "[deploy] ERROR: $*" >&2; exit 1; }',
+    '',
+    'check_prerequisites() {',
+    '    command -v docker >/dev/null 2>&1 || error "docker not found"',
+    '    command -v git >/dev/null 2>&1 || error "git not found"',
+    '    log "Prerequisites OK"',
+    '}',
+    '',
+    'run_tests() {',
+    '    log "Running tests..."',
+    '    npm test || error "Tests failed"',
+    '    log "Tests passed"',
+    '}',
+    '',
+    'build_image() {',
+    '    local tag="${REGISTRY}/${PROJECT_NAME}:${VERSION}"',
+    '    log "Building Docker image: ${tag}"',
+    '    docker build -t "${tag}" .',
+    '    log "Image built successfully"',
+    '}',
+    '',
+    'push_image() {',
+    '    local tag="${REGISTRY}/${PROJECT_NAME}:${VERSION}"',
+    '    log "Pushing image: ${tag}"',
+    '    docker push "${tag}"',
+    '    log "Image pushed"',
+    '}',
+    '',
+    'main() {',
+    '    check_prerequisites',
+    '    run_tests',
+    '    build_image',
+    '    push_image',
+    '    log "Deployment complete: ${VERSION}"',
+    '}',
+    '',
+    'main "$@"',
+  ].join('\n') + '\n');
+
+  // ── YAML (docker-compose) ──────────────────────────────────
+  fs.writeFile("docker-compose.yml", `version: "3.9"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://user:pass@db:5432/app
+      REDIS_URL: redis://cache:6379
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_started
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: app
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  cache:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  pgdata:
+`);
+
+  // ── C++ ────────────────────────────────────────────────────
+  fs.writeFile("lib/vector.hpp", `#pragma once
+#include <cstddef>
+#include <stdexcept>
+#include <algorithm>
+
+namespace containers {
+
+template<typename T>
+class Vector {
+public:
+    Vector() : data_(nullptr), size_(0), capacity_(0) {}
+    ~Vector() { delete[] data_; }
+
+    void push_back(const T& value) {
+        if (size_ >= capacity_) grow();
+        data_[size_++] = value;
+    }
+
+    T& operator[](size_t index) {
+        if (index >= size_) throw std::out_of_range("index out of bounds");
+        return data_[index];
+    }
+
+    const T& operator[](size_t index) const {
+        if (index >= size_) throw std::out_of_range("index out of bounds");
+        return data_[index];
+    }
+
+    size_t size() const { return size_; }
+    bool empty() const { return size_ == 0; }
+    T* begin() { return data_; }
+    T* end() { return data_ + size_; }
+
+    void clear() { size_ = 0; }
+
+private:
+    void grow() {
+        size_t new_cap = capacity_ == 0 ? 4 : capacity_ * 2;
+        T* new_data = new T[new_cap];
+        std::copy(data_, data_ + size_, new_data);
+        delete[] data_;
+        data_ = new_data;
+        capacity_ = new_cap;
+    }
+
+    T* data_;
+    size_t size_;
+    size_t capacity_;
+};
+
+} // namespace containers
+`);
+
+  // ── Makefile ───────────────────────────────────────────────
+  fs.writeFile("Makefile", `# Project Makefile
+
+.PHONY: all build test clean dev lint docker
+
+all: build
+
+build:
+	npm run build
+
+dev:
+	npm run dev
+
+test:
+	npm test
+
+lint:
+	npm run lint
+
+clean:
+	rm -rf dist node_modules .cache
+
+docker:
+	docker build -t monaco-vanced-demo .
+
+docker-run:
+	docker run -p 3000:3000 monaco-vanced-demo
+
+install:
+	npm ci
 `);
 }

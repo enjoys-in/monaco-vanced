@@ -2,47 +2,70 @@
 // Offloads file parsing to a background thread so the main thread stays responsive.
 // Communicates via structured-clone postMessage.
 //
+// Patterns are provided dynamically per language from the main thread.
+// The worker caches compiled patterns in memory for the session.
+//
 // Usage from main thread:
 //   const worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
-//   worker.postMessage({ type: "index", path: "/foo.ts", content: "..." });
+//   worker.postMessage({ type: "set-patterns", langId: "typescript", patterns: [...] });
+//   worker.postMessage({ type: "index", path: "/foo.ts", content: "...", langId: "typescript" });
 //   worker.onmessage = (e) => { /* e.data = { type: "indexed", path, symbols } */ };
 
 import type { SymbolEntry } from "./types";
 
-// ── Same regex parser as index-store (duplicated here because workers have isolated scope) ──
+// ── CDN pattern shape (sent from main thread) ───────────────
 
-interface PatternDef {
-  regex: RegExp;
+interface RawPattern {
+  name: string;
+  pattern: string;
+  captureGroup: number;
   kind: number;
-  nameGroup: number;
+  type: string;
 }
 
-const PATTERNS: PatternDef[] = [
-  { regex: /^(?:export\s+)?(?:async\s+)?function\s+(\w+)/gm, kind: 11, nameGroup: 1 },
-  { regex: /^(?:export\s+)?(?:abstract\s+)?class\s+(\w+)/gm, kind: 4, nameGroup: 1 },
-  { regex: /^(?:export\s+)?interface\s+(\w+)/gm, kind: 10, nameGroup: 1 },
-  { regex: /^(?:export\s+)?type\s+(\w+)/gm, kind: 25, nameGroup: 1 },
-  { regex: /^(?:export\s+)?(?:const\s+)?enum\s+(\w+)/gm, kind: 9, nameGroup: 1 },
-  { regex: /^(?:export\s+)?(?:const|let|var)\s+(\w+)/gm, kind: 12, nameGroup: 1 },
-  { regex: /^(?:async\s+)?def\s+(\w+)/gm, kind: 11, nameGroup: 1 },
-  { regex: /^class\s+(\w+)/gm, kind: 4, nameGroup: 1 },
-  { regex: /^func\s+(?:\([^)]*\)\s+)?(\w+)/gm, kind: 11, nameGroup: 1 },
-  { regex: /^type\s+(\w+)\s+(?:struct|interface)/gm, kind: 4, nameGroup: 1 },
-  { regex: /^(?:pub\s+)?(?:async\s+)?fn\s+(\w+)/gm, kind: 11, nameGroup: 1 },
-  { regex: /^(?:pub\s+)?struct\s+(\w+)/gm, kind: 22, nameGroup: 1 },
-  { regex: /^(?:pub\s+)?enum\s+(\w+)/gm, kind: 9, nameGroup: 1 },
-  { regex: /^(?:pub\s+)?trait\s+(\w+)/gm, kind: 10, nameGroup: 1 },
-];
+interface CompiledPattern {
+  regex: RegExp;
+  captureGroup: number;
+  kind: number;
+}
 
-function parseSymbols(filePath: string, content: string): SymbolEntry[] {
+/** langId → compiled patterns */
+const patternCache = new Map<string, CompiledPattern[]>();
+
+function compilePatterns(raw: RawPattern[]): CompiledPattern[] {
+  const compiled: CompiledPattern[] = [];
+  for (const p of raw) {
+    try {
+      compiled.push({
+        regex: new RegExp(p.pattern, "gm"),
+        captureGroup: p.captureGroup,
+        kind: p.kind,
+      });
+    } catch {
+      // Skip invalid regex
+    }
+  }
+  return compiled;
+}
+
+function getPatterns(langId: string): CompiledPattern[] {
+  return patternCache.get(langId) ?? [];
+}
+
+// ── Parser ───────────────────────────────────────────────────
+
+function parseSymbols(filePath: string, content: string, langId: string): SymbolEntry[] {
+  const patterns = getPatterns(langId);
+  if (!patterns.length) return [];
+
   const entries: SymbolEntry[] = [];
 
-  for (const { regex, kind, nameGroup } of PATTERNS) {
+  for (const { regex, captureGroup, kind } of patterns) {
     regex.lastIndex = 0;
     let match: RegExpExecArray | null;
 
     while ((match = regex.exec(content)) !== null) {
-      const name = match[nameGroup];
+      const name = match[captureGroup];
       if (!name) continue;
 
       const before = content.slice(0, match.index);
@@ -68,7 +91,7 @@ function parseSymbols(filePath: string, content: string): SymbolEntry[] {
           endLine: line,
           endColumn: nameCol + name.length,
         },
-        exportedAs: match[0].startsWith("export") ? "named" : "none",
+        exportedAs: match[0].includes("export") ? "named" : "none",
       });
     }
   }
@@ -78,15 +101,22 @@ function parseSymbols(filePath: string, content: string): SymbolEntry[] {
 
 // ── Message types ────────────────────────────────────────────
 
+export interface SetPatternsRequest {
+  type: "set-patterns";
+  langId: string;
+  patterns: RawPattern[];
+}
+
 export interface IndexRequest {
   type: "index";
   path: string;
   content: string;
+  langId: string;
 }
 
 export interface IndexBatchRequest {
   type: "index-batch";
-  files: Array<{ path: string; content: string }>;
+  files: Array<{ path: string; content: string; langId: string }>;
 }
 
 export interface IndexResponse {
@@ -106,7 +136,7 @@ export interface ErrorResponse {
   message: string;
 }
 
-export type WorkerRequest = IndexRequest | IndexBatchRequest;
+export type WorkerRequest = SetPatternsRequest | IndexRequest | IndexBatchRequest;
 export type WorkerResponse = IndexResponse | IndexBatchResponse | ErrorResponse;
 
 // ── Worker message handler ───────────────────────────────────
@@ -116,9 +146,15 @@ const ctx = globalThis as unknown as Worker;
 ctx.onmessage = (e: MessageEvent<WorkerRequest>) => {
   const msg = e.data;
 
+  if (msg.type === "set-patterns") {
+    const compiled = compilePatterns(msg.patterns);
+    patternCache.set(msg.langId, compiled);
+    return;
+  }
+
   if (msg.type === "index") {
     try {
-      const symbols = parseSymbols(msg.path, msg.content);
+      const symbols = parseSymbols(msg.path, msg.content, msg.langId);
       ctx.postMessage({
         type: "indexed",
         path: msg.path,
@@ -137,7 +173,7 @@ ctx.onmessage = (e: MessageEvent<WorkerRequest>) => {
       try {
         results.push({
           path: file.path,
-          symbols: parseSymbols(file.path, file.content),
+          symbols: parseSymbols(file.path, file.content, file.langId),
         });
       } catch {
         results.push({ path: file.path, symbols: [] });

@@ -30,6 +30,8 @@ export enum PanelEvents {
   BottomResize = "bottom-panel:resize",
   BottomViewActivate = "bottom-view:activate",
   BottomFocusTab = "bottom-panel:focus-tab",
+  BottomViewRegister = "bottom-view:register",
+  BottomViewUnregister = "bottom-view:unregister",
 }
 
 export enum StatusbarEvents {

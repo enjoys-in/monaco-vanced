@@ -47,7 +47,7 @@ function ActivityButton({ id, label, svg, isActive, onClick }: {
         cursor: "pointer", color: isActive ? t.activeIcon : t.inactiveIcon,
         borderLeft: `2px solid ${isActive ? t.fgBright : "transparent"}`,
         boxSizing: "border-box", position: "relative",
-        background: hovered ? "rgba(255,255,255,0.08)" : "transparent",
+        background: hovered ? t.hover : "transparent",
       }}
       dangerouslySetInnerHTML={{ __html: svg.replace(/<svg /, '<svg style="width:22px;height:22px;" ') }}
     />

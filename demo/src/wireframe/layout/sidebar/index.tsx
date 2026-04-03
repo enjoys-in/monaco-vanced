@@ -21,6 +21,7 @@ export interface SidebarExtras {
   marketplaceApi?: import("@enjoys/monaco-vanced/extensions/marketplace-module").MarketplaceModuleAPI;
   aiApi?: { chat(messages: { role: string; content: string }[], opts?: Record<string, unknown>): Promise<{ content: string; metadata?: Record<string, unknown> }>; abort(): void; getStatus(): string };
   indexerApi?: ChatIndexerApi;
+  layoutApi?: { getRegisteredViews(location: "bottom"): { id: string; label: string; icon?: string; isWebview?: boolean; webviewContainer?: HTMLElement }[] };
 }
 
 export function wireSidebar(

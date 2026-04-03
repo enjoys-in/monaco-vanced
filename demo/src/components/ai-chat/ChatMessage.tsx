@@ -2,7 +2,7 @@
 
 import type { CSSProperties } from "react";
 import type { ThemeTokens } from "../theme";
-import type { ChatMessage, AttachedSymbol, AttachedSelection, ChatEventBus } from "./types";
+import type { ChatMessage, AttachedSymbol, AttachedSelection, ChatEventBus, ChatIconApi } from "./types";
 import { FileEvents } from "@enjoys/monaco-vanced/core/events";
 import {
   SparkleIcon, FileIcon, SelectionIcon,
@@ -14,9 +14,10 @@ export interface ChatMessageListProps {
   messages: ChatMessage[];
   tokens: ThemeTokens;
   eventBus: ChatEventBus;
+  iconApi?: ChatIconApi;
 }
 
-export function ChatMessageList({ messages, tokens: t, eventBus }: ChatMessageListProps) {
+export function ChatMessageList({ messages, tokens: t, eventBus, iconApi }: ChatMessageListProps) {
   const openFile = (uri: string, line?: number) => {
     const name = uri.split("/").pop() ?? uri;
     eventBus.emit(FileEvents.Open, { uri, label: name, line });
@@ -48,7 +49,7 @@ export function ChatMessageList({ messages, tokens: t, eventBus }: ChatMessageLi
     <>
       {messages.map((msg) =>
         msg.role === "user" ? (
-          <UserBubble key={msg.id} msg={msg} tokens={t} styles={S} onOpenFile={openFile} />
+          <UserBubble key={msg.id} msg={msg} tokens={t} styles={S} onOpenFile={openFile} iconApi={iconApi} />
         ) : msg.role === "assistant" ? (
           <AssistantBubble key={msg.id} msg={msg} tokens={t} styles={S} />
         ) : null,
@@ -63,9 +64,10 @@ interface UserBubbleProps {
   tokens: ThemeTokens;
   styles: Record<string, CSSProperties>;
   onOpenFile: (uri: string, line?: number) => void;
+  iconApi?: ChatIconApi;
 }
 
-function UserBubble({ msg, tokens: t, styles: S, onOpenFile }: UserBubbleProps) {
+function UserBubble({ msg, tokens: t, styles: S, onOpenFile, iconApi }: UserBubbleProps) {
   const hasAttach = (msg.attachedFiles?.length ?? 0) > 0 || (msg.attachedSymbols?.length ?? 0) > 0 || !!msg.attachedSelection;
 
   return (
@@ -73,7 +75,7 @@ function UserBubble({ msg, tokens: t, styles: S, onOpenFile }: UserBubbleProps) 
       {hasAttach && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 4, justifyContent: "flex-end" }}>
           {msg.attachedFiles?.map((uri) => (
-            <FileChip key={uri} uri={uri} tokens={t} onClick={() => onOpenFile(uri)} />
+            <FileChip key={uri} uri={uri} tokens={t} onClick={() => onOpenFile(uri)} iconApi={iconApi} />
           ))}
           {msg.attachedSymbols?.map((sym) => (
             <SymbolChip key={`${sym.file}:${sym.name}:${sym.line}`} sym={sym} tokens={t} onClick={() => onOpenFile(sym.file, sym.line)} />
@@ -114,7 +116,7 @@ function AssistantBubble({ msg, tokens: _t, styles: S }: AssistantBubbleProps) {
 }
 
 // ── Chips (file, symbol, selection) ──────────────────────────
-function FileChip({ uri, tokens: t, onClick }: { uri: string; tokens: ThemeTokens; onClick: () => void }) {
+function FileChip({ uri, tokens: t, onClick, iconApi }: { uri: string; tokens: ThemeTokens; onClick: () => void; iconApi?: ChatIconApi }) {
   const name = uri.split("/").pop() ?? uri;
   return (
     <span
@@ -122,12 +124,16 @@ function FileChip({ uri, tokens: t, onClick }: { uri: string; tokens: ThemeToken
       style={{
         display: "inline-flex", alignItems: "center", gap: 3,
         padding: "2px 6px", borderRadius: 4, fontSize: 11,
-        background: "rgba(255,255,255,0.1)", color: t.fgDim,
+        background: t.hover, color: t.fgDim,
         cursor: "pointer",
       }}
       title={`Open ${uri}`}
     >
-      <span dangerouslySetInnerHTML={{ __html: FileIcon }} style={{ color: fileColor(name) }} />
+      {iconApi ? (
+        <img src={iconApi.getFileIcon(name)} width={14} height={14} style={{ display: "block" }} alt="" onError={(e) => { (e.target as HTMLImageElement).replaceWith(document.createRange().createContextualFragment(FileIcon)); }} />
+      ) : (
+        <span dangerouslySetInnerHTML={{ __html: FileIcon }} style={{ color: fileColor(name) }} />
+      )}
       {name}
     </span>
   );

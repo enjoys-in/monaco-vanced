@@ -46,14 +46,17 @@ const EXT_COLORS: Record<string, string> = {
   html: "#e44d26", htm: "#e44d26", md: "#ffffff", mdx: "#ffffff",
   py: "#3572a5", rs: "#dea584", go: "#00add8", rb: "#cc342d",
   java: "#b07219", kt: "#a97bff", c: "#555555", cpp: "#f34b7d", h: "#555555",
+  hpp: "#f34b7d", cc: "#f34b7d", cxx: "#f34b7d", hh: "#555555", hxx: "#555555",
   yml: "#cb171e", yaml: "#cb171e", toml: "#9c4221",
   sh: "#89e051", bash: "#89e051", zsh: "#89e051",
   sql: "#e38c00", graphql: "#e535ab",
+  lua: "#000080", php: "#4f5d95", r: "#198ce7",
+  swift: "#f05138", dart: "#00b4ab", zig: "#f7a41d",
   svg: "#ffb13b", xml: "#0060ac",
   env: "#ecd53f", gitignore: "#f54d27",
   lock: "#6a737d", txt: "#6a737d",
   vue: "#41b883", svelte: "#ff3e00", astro: "#ff5d01",
-  dockerfile: "#384d54", docker: "#384d54",
+  dockerfile: "#384d54", docker: "#384d54", makefile: "#427819",
   png: "#a074c4", jpg: "#a074c4", jpeg: "#a074c4", gif: "#a074c4", webp: "#a074c4", ico: "#a074c4",
 };
 

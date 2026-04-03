@@ -9,7 +9,7 @@ import { TitleBar, type TitleBarProps } from "../title-bar/TitleBar";
 import { StatusBar, type StatusBarProps } from "../status-bar/StatusBar";
 import { ContextMenu } from "../context-menu/ContextMenu";
 import { CommandPalette } from "../command-palette/CommandPalette";
-import { BottomPanel } from "../bottom-panel/BottomPanel";
+import { BottomPanel, type BottomPanelLayoutApi } from "../bottom-panel/BottomPanel";
 import { AiChat, type AiChatProps } from "../ai-chat/AiChat";
 import { WelcomeDialog } from "../dialogs/WelcomeDialog";
 import { SplitEditor } from "../editor/SplitEditor";
@@ -179,8 +179,10 @@ export const Shell = forwardRef<ShellHandle, {
   contextMenuApi?: { dismiss(): void };
   aiApi?: AiChatProps["aiApi"];
   indexerApi?: AiChatProps["indexerApi"];
+  iconApi?: AiChatProps["iconApi"];
+  layoutApi?: BottomPanelLayoutApi;
   files?: { uri: string; name: string }[];
-}>(function Shell({ rootEl, eventBus, authApi, commandApi, statusbarApi, contextMenuApi, aiApi, indexerApi, files }, ref) {
+}>(function Shell({ rootEl, eventBus, authApi, commandApi, statusbarApi, contextMenuApi, aiApi, indexerApi, iconApi, layoutApi, files }, ref) {
   const [chatVisible, setChatVisible] = useState(false);
 
   // Listen for copilot toggle from activity bar or command
@@ -298,7 +300,7 @@ export const Shell = forwardRef<ShellHandle, {
           <div ref={setRef("welcomePage")} style={S.welcomePage} />
 
           {/* Bottom Panel */}
-          <BottomPanel eventBus={eventBus} files={files} />
+          <BottomPanel eventBus={eventBus} files={files} layoutApi={layoutApi} />
         </div>
 
         {/* AI Chat Panel (right side) */}
@@ -307,6 +309,7 @@ export const Shell = forwardRef<ShellHandle, {
             eventBus={eventBus}
             aiApi={aiApi}
             indexerApi={indexerApi}
+            iconApi={iconApi}
             visible={chatVisible}
             onClose={() => setChatVisible(false)}
             files={files}
@@ -329,7 +332,7 @@ export const Shell = forwardRef<ShellHandle, {
       <ContextMenu eventBus={eventBus} commandApi={commandApi} contextMenuApi={contextMenuApi} />
 
       {/* Command Palette (portal) */}
-      <CommandPalette eventBus={eventBus} commandApi={commandApi} />
+      <CommandPalette eventBus={eventBus} commandApi={commandApi} editor={window.editor} />
 
       {/* First-visit welcome dialog */}
       <WelcomeDialog />

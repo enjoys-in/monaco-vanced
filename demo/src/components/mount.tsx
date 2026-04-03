@@ -116,6 +116,8 @@ export function buildReactShell(
     contextMenuApi?: { dismiss(): void };
     aiApi?: { chat(messages: { role: string; content: string }[], opts?: Record<string, unknown>): Promise<{ content: string; metadata?: Record<string, unknown> }>; abort(): void; getStatus(): string };
     indexerApi?: ChatIndexerApi;
+    iconApi?: { getFileIcon(filename: string, isDirectory?: boolean, isOpen?: boolean): string };
+    layoutApi?: { getRegisteredViews(location: "bottom"): { id: string; label: string; icon?: string; isWebview?: boolean; webviewContainer?: HTMLElement }[] };
     files?: { uri: string; name: string }[];
   },
 ): DOMRefs {
@@ -142,6 +144,8 @@ export function buildReactShell(
           contextMenuApi={extras?.contextMenuApi}
           aiApi={extras?.aiApi}
           indexerApi={extras?.indexerApi}
+          iconApi={extras?.iconApi}
+          layoutApi={extras?.layoutApi}
           files={extras?.files}
         />
       </ThemeProvider>,

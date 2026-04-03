@@ -29,4 +29,5 @@ export enum ExplorerAction {
   OpenInTerminal = "explorer:open-in-terminal",
   AddFileToChat = "explorer:add-file-to-chat",
   AddFolderToChat = "explorer:add-folder-to-chat",
+  Preview = "explorer:preview",
 }

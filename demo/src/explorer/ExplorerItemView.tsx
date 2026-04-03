@@ -42,12 +42,32 @@ const SPECIAL_ICONS: Record<string, (color: string) => JSX.Element> = {
   html: () => <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="2" fill="#e44d26" /><text x="2" y="12" fontSize="7" fontWeight="bold" fill="white" fontFamily="sans-serif">{"<>"}</text></svg>,
   md: () => <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="2" fill="#354a5f" /><text x="2" y="12" fontSize="8" fontWeight="bold" fill="white" fontFamily="sans-serif">M</text></svg>,
   py: () => <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="2" fill="#3572a5" /><text x="3.5" y="12" fontSize="8" fontWeight="bold" fill="#ffd43b" fontFamily="sans-serif">Py</text></svg>,
+  go: () => <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="2" fill="#00add8" /><text x="3" y="12" fontSize="8" fontWeight="bold" fill="white" fontFamily="sans-serif">Go</text></svg>,
+  rs: () => <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="2" fill="#dea584" /><text x="3" y="12" fontSize="8" fontWeight="bold" fill="#1e1e1e" fontFamily="sans-serif">Rs</text></svg>,
+  java: () => <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="2" fill="#b07219" /><text x="3.5" y="12" fontSize="7" fontWeight="bold" fill="white" fontFamily="sans-serif">Jv</text></svg>,
+  rb: () => <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="2" fill="#cc342d" /><text x="3" y="12" fontSize="8" fontWeight="bold" fill="white" fontFamily="sans-serif">Rb</text></svg>,
+  lua: () => <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="2" fill="#000080" /><text x="2" y="12" fontSize="7" fontWeight="bold" fill="white" fontFamily="sans-serif">Lua</text></svg>,
+  php: () => <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="2" fill="#4f5d95" /><text x="1.5" y="12" fontSize="6.5" fontWeight="bold" fill="white" fontFamily="sans-serif">PHP</text></svg>,
+  c: (cc) => <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="2" fill={cc} /><text x="5" y="12" fontSize="9" fontWeight="bold" fill="white" fontFamily="sans-serif">C</text></svg>,
+  cpp: () => <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="2" fill="#f34b7d" /><text x="1.5" y="12" fontSize="6" fontWeight="bold" fill="white" fontFamily="sans-serif">C++</text></svg>,
+  hpp: () => <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="2" fill="#f34b7d" /><text x="1.5" y="12" fontSize="6" fontWeight="bold" fill="white" fontFamily="sans-serif">C++</text></svg>,
+  sql: () => <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="2" fill="#e38c00" /><text x="1.5" y="12" fontSize="6.5" fontWeight="bold" fill="white" fontFamily="sans-serif">SQL</text></svg>,
+  sh: () => <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="2" fill="#89e051" /><text x="3.5" y="12" fontSize="7" fontWeight="bold" fill="#1e1e1e" fontFamily="sans-serif">Sh</text></svg>,
+  yml: () => <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="2" fill="#cb171e" /><text x="1.5" y="12" fontSize="6.5" fontWeight="bold" fill="white" fontFamily="sans-serif">YML</text></svg>,
+  yaml: () => <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="2" fill="#cb171e" /><text x="1.5" y="12" fontSize="6.5" fontWeight="bold" fill="white" fontFamily="sans-serif">YML</text></svg>,
 };
 
 function getExt(name: string): string {
   const dot = name.lastIndexOf(".");
   return dot >= 0 ? name.slice(dot + 1).toLowerCase() : "";
 }
+
+/** Map special filenames (no extension) → icon key in SPECIAL_ICONS or inline SVG */
+const FILENAME_ICONS: Record<string, (color: string) => JSX.Element> = {
+  dockerfile: (c) => <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="2" fill={c} /><text x="1.5" y="11.5" fontSize="5.5" fontWeight="bold" fill="white" fontFamily="sans-serif">Dkr</text></svg>,
+  makefile: (c) => <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="2" fill={c} /><text x="1" y="12" fontSize="5.5" fontWeight="bold" fill="white" fontFamily="sans-serif">Mk</text></svg>,
+  gemfile: () => <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="2" fill="#cc342d" /><text x="2" y="12" fontSize="7" fontWeight="bold" fill="white" fontFamily="sans-serif">Gm</text></svg>,
+};
 
 // ── Lazy Icon — uses icon API with lazy loading ─────────────
 
@@ -81,7 +101,16 @@ function LazyIcon({ src }: { src: string }) {
 
 // ── Fallback file icon SVG ──────────────────────────────────
 
-function FileIconSvg({ ext }: { ext: string }) {
+function FileIconSvg({ ext, filename }: { ext: string; filename?: string }) {
+  // Check filename-based icons for extensionless files (Dockerfile, Makefile, etc.)
+  if (!ext && filename) {
+    const key = filename.toLowerCase();
+    const fnIcon = FILENAME_ICONS[key];
+    if (fnIcon) {
+      const color = getExtColor(key) || "#6a737d";
+      return <span style={{ display: "inline-flex", alignItems: "center", flexShrink: 0, marginRight: 6 }}>{fnIcon(color)}</span>;
+    }
+  }
   const color = getExtColor(ext);
   const special = SPECIAL_ICONS[ext];
   if (special) return <span style={{ display: "inline-flex", alignItems: "center", flexShrink: 0, marginRight: 6 }}>{special(color)}</span>;
@@ -130,7 +159,7 @@ export const ExplorerFileItem = memo(function ExplorerFileItem({
 
   const icon = iconApi
     ? <LazyIcon src={iconApi.getFileIcon(node.name, false, false)} />
-    : <FileIconSvg ext={ext} />;
+    : <FileIconSvg ext={ext} filename={node.name} />;
 
   if (isRenaming) {
     return (

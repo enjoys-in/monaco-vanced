@@ -58,7 +58,7 @@ export interface SymbolEntry {
 // ── SymbolIndex interface ────────────────────────────────────
 
 export interface SymbolIndex {
-  indexFile(path: string, content: string): void;
+  indexFile(path: string, content: string, langId?: string): void;
   removeFile(path: string): void;
   lookup(name: string, fromFile?: string): SymbolEntry[];
   lookupInFile(path: string): SymbolEntry[];
