@@ -4,6 +4,8 @@ import { useState, useCallback, useRef, useMemo } from "react";
 import { useTheme } from "../theme";
 import { FileEvents } from "@enjoys/monaco-vanced/core/events";
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
+import type { ChatIndexerApi } from "../ai-chat/types";
+import { symbolKindIcon, symbolKindColor, symbolKindLabel } from "../ai-chat/constants";
 import { fileIconSvg, getExt } from "../../wireframe/utils";
 
 interface FileEntry { uri: string; name: string; content: string; language: string }
@@ -12,7 +14,7 @@ interface Props {
   eventBus: InstanceType<typeof EventBus>;
   files: FileEntry[];
   notificationApi?: { show(opts: { type: string; message: string; duration: number }): void };
-  indexerApi?: { query(q: { query: string; kind?: string | string[]; path?: string; limit?: number }): { name: string; kind: string; path: string; line: number; column: number }[]; getFileSymbols(path: string): { name: string; kind: string; path: string; line: number; column: number }[]; isReady(): boolean };
+  indexerApi?: ChatIndexerApi;
 }
 
 function esc(s: string): string {
@@ -75,14 +77,14 @@ export function SearchView({ eventBus, files, notificationApi, indexerApi }: Pro
 
   const totalMatches = textResults.reduce((s, r) => s + r.matches.length, 0);
 
-  // Symbol search results
+  // Symbol search results — show all symbols by default, filter on query
   const symbolResults = useMemo(() => {
-    if (!query.trim() || mode !== "symbols" || !indexerApi?.isReady()) return [];
-    return indexerApi.query({ query: query.trim() });
+    if (mode !== "symbols" || !indexerApi?.isReady()) return [];
+    return indexerApi.query({ query: query.trim(), limit: 500 });
   }, [query, mode, indexerApi]);
 
   const symbolsByFile = useMemo(() => {
-    const map = new Map<string, typeof symbolResults>();
+    const map = new Map<string, { name: string; kind: string; path: string; line: number; column: number }[]>();
     for (const sym of symbolResults) {
       const arr = map.get(sym.path) ?? [];
       arr.push(sym);
@@ -240,23 +242,23 @@ export function SearchView({ eventBus, files, notificationApi, indexerApi }: Pro
           <span style={{ color: t.fg, fontWeight: 500 }}>{textResults.length}</span> file{textResults.length !== 1 ? "s" : ""}
         </div>
       )}
-      {hasQuery && mode === "symbols" && symbolResults.length > 0 && (
+      {mode === "symbols" && symbolResults.length > 0 && (
         <div style={{
           padding: "4px 14px", fontSize: 11, color: t.fgDim,
           borderBottom: `1px solid ${t.separator}`, display: "flex", alignItems: "center", gap: 8, minHeight: 24,
         }}>
-          <span style={{ color: t.fg, fontWeight: 500 }}>{symbolResults.length}</span> symbol{symbolResults.length !== 1 ? "s" : ""} found
+          <span style={{ color: t.fg, fontWeight: 500 }}>{symbolResults.length}</span> symbol{symbolResults.length !== 1 ? "s" : ""}{hasQuery ? " found" : " indexed"}
         </div>
       )}
 
       {/* Results */}
       <div style={{ flex: 1, overflowY: "auto" }}>
-        {!hasQuery && (
+        {!hasQuery && mode === "text" && (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 20px", color: t.fgDim, gap: 10 }}>
             <svg width="32" height="32" viewBox="0 0 16 16" fill="currentColor" style={{ opacity: 0.5 }}>
               <path d="M11.742 10.344a6.5 6.5 0 10-1.397 1.398h-.001l3.85 3.85 1.06-1.06-3.85-3.85zm-5.242.156a5 5 0 110-10 5 5 0 010 10z" />
             </svg>
-            <div style={{ fontSize: 12, textAlign: "center" }}>{mode === "symbols" ? "Search to find symbols" : "Search to find in files"}</div>
+            <div style={{ fontSize: 12, textAlign: "center" }}>Search to find in files</div>
           </div>
         )}
 
@@ -266,10 +268,10 @@ export function SearchView({ eventBus, files, notificationApi, indexerApi }: Pro
           </div>
         )}
 
-        {hasQuery && mode === "symbols" && symbolResults.length === 0 && (
+        {mode === "symbols" && symbolResults.length === 0 && (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "40px 20px", color: t.fgDim }}>
             <div style={{ fontSize: 12 }}>
-              {!indexerApi?.isReady() ? "Symbol index is not available." : `No symbols found for "${query}"`}
+              {!indexerApi?.isReady() ? "Symbol index is not available." : hasQuery ? `No symbols found for "${query}"` : "No symbols indexed yet."}
             </div>
           </div>
         )}
@@ -308,7 +310,7 @@ export function SearchView({ eventBus, files, notificationApi, indexerApi }: Pro
                       key={i}
                       className="vsc-file-item"
                       style={{ display: "flex", alignItems: "center", padding: "2px 8px 2px 36px", cursor: "pointer", borderRadius: 3, minHeight: 22 }}
-                      onClick={() => openFile(file.uri, file.name)}
+                      onClick={() => eventBus.emit(FileEvents.Open, { uri: file.uri, label: file.name, line: m.line })}
                     >
                       <span style={{ color: t.fgDim, marginRight: 10, minWidth: 28, textAlign: "right", fontSize: 11, fontFamily: "'JetBrains Mono',monospace", opacity: 0.7, flexShrink: 0 }}>
                         {m.line}
@@ -338,10 +340,11 @@ export function SearchView({ eventBus, files, notificationApi, indexerApi }: Pro
         )}
 
         {/* Symbol results */}
-        {hasQuery && mode === "symbols" && symbolResults.length > 0 && (
+        {mode === "symbols" && symbolResults.length > 0 && (
           <div style={{ padding: "4px 8px 16px" }}>
             {[...symbolsByFile.entries()].map(([filePath, syms]) => {
               const fileName = filePath.split("/").pop() ?? filePath;
+              const isExpanded = expandedFiles[filePath] ?? true;
               return (
                 <div key={filePath} style={{ marginBottom: 2, borderRadius: 4, overflow: "hidden" }}>
                   <div
@@ -349,40 +352,48 @@ export function SearchView({ eventBus, files, notificationApi, indexerApi }: Pro
                     style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 8px", cursor: "pointer", borderRadius: 4, userSelect: "none" }}
                     onClick={() => openFile(filePath, fileName)}
                   >
+                    <span
+                      onClick={(e) => { e.stopPropagation(); toggleFileExpanded(filePath); }}
+                      style={{ display: "flex", color: t.fgDim, transition: "transform .15s", transform: isExpanded ? "rotate(90deg)" : "rotate(0)", flexShrink: 0 }}
+                    >
+                      <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
+                        <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </span>
                     <span dangerouslySetInnerHTML={{ __html: fileIconSvg(getExt(fileName)) }} style={{ display: "inline-flex", flexShrink: 0 }} />
                     <span style={{ fontSize: 12, color: t.fg, fontWeight: 500, flexShrink: 0 }}>{fileName}</span>
                     <span style={{ fontSize: 11, color: t.fgDim, opacity: 0.7, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}>{filePath}</span>
                     <span style={{
-                      fontSize: 10, padding: "0 5px", borderRadius: 8, fontWeight: 600, lineHeight: "16px",
+                      fontSize: 10, padding: "0 5px", borderRadius: 8, fontWeight: 600, lineHeight: "16px", minWidth: 16, textAlign: "center", flexShrink: 0,
                       background: `color-mix(in srgb, ${t.accent} 18%, transparent)`, color: t.accent,
                     }}>{syms.length}</span>
                   </div>
-                  {syms.slice(0, 20).map((sym, i) => {
-                    const kindColors: Record<string, string> = {
-                      file: "#d4d4d4", module: "#c586c0", namespace: "#c586c0", package: "#c586c0",
-                      class: "#4ec9b0", method: "#dcdcaa", property: "#9cdcfe", field: "#9cdcfe",
-                      constructor: "#dcdcaa", enum: "#b5cea8", interface: "#4ec9b0", function: "#dcdcaa",
-                      variable: "#9cdcfe", constant: "#569cd6", string: "#ce9178", number: "#b5cea8",
-                      boolean: "#569cd6", array: "#9cdcfe", object: "#4ec9b0", key: "#9cdcfe",
-                      null: "#569cd6", enummember: "#b5cea8", struct: "#4ec9b0", event: "#dcdcaa",
-                      operator: "#d4d4d4", typeparameter: "#4ec9b0", type: "#4ec9b0",
-                    };
-                    const kc = kindColors[sym.kind.toLowerCase()] ?? t.fg;
+                  {isExpanded && syms.slice(0, 20).map((sym, i) => {
+                    const kc = symbolKindColor(sym.kind);
                     return (
                       <div
-                        key={i}
+                        key={`${sym.name}-${sym.line}-${i}`}
                         className="vsc-file-item"
-                        style={{ display: "flex", alignItems: "center", padding: "2px 8px 2px 28px", cursor: "pointer", borderRadius: 3, minHeight: 22, gap: 6 }}
-                        onClick={() => openFile(filePath, fileName)}
+                        style={{ display: "flex", alignItems: "center", padding: "2px 8px 2px 36px", cursor: "pointer", borderRadius: 3, minHeight: 22, gap: 6 }}
+                        onClick={() => eventBus.emit(FileEvents.Open, { uri: filePath, label: fileName, line: sym.line, column: sym.column })}
                       >
-                        <span style={{ fontSize: 10, padding: "0 4px", borderRadius: 3, background: `${kc}18`, color: kc, fontWeight: 600, fontFamily: "monospace", flexShrink: 0, minWidth: 20, textAlign: "center" }}>
-                          {sym.kind.slice(0, 3).toUpperCase()}
-                        </span>
-                        <span style={{ fontSize: 12, color: t.fg, fontFamily: "'JetBrains Mono',monospace" }}>{sym.name}</span>
-                        <span style={{ fontSize: 10, color: t.fgDim, fontFamily: "monospace", marginLeft: "auto" }}>L{sym.line}</span>
+                        <span
+                          style={{ display: "inline-flex", alignItems: "center", flexShrink: 0, color: kc }}
+                          dangerouslySetInnerHTML={{ __html: symbolKindIcon(sym.kind) }}
+                          title={symbolKindLabel(sym.kind)}
+                        />
+                        <span style={{ fontSize: 12, color: t.fg, fontFamily: "'JetBrains Mono',monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sym.name}</span>
+                        <span style={{ fontSize: 10, color: t.fgDim, opacity: 0.6, marginLeft: "auto", flexShrink: 0 }}>{symbolKindLabel(sym.kind)}</span>
+                        <span style={{ fontSize: 10, color: t.fgDim, fontFamily: "monospace", flexShrink: 0 }}>L{sym.line}</span>
                       </div>
                     );
                   })}
+                  {isExpanded && syms.length > 20 && (
+                    <div className="vsc-file-item" style={{ padding: "3px 8px 3px 36px", fontSize: 11, color: t.fgDim, opacity: 0.7, cursor: "pointer" }}
+                      onClick={() => openFile(filePath, fileName)}>
+                      {syms.length - 20} more symbols…
+                    </div>
+                  )}
                 </div>
               );
             })}

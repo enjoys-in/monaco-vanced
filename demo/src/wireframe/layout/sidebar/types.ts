@@ -3,6 +3,7 @@
 import type { EventBus } from "@enjoys/monaco-vanced/core/event-bus";
 import type { WireframeAPIs, VirtualFile } from "../../types";
 import type { ExplorerIconAPI } from "../../../explorer";
+import type { ChatIndexerApi } from "../../../components/ai-chat/types";
 
 export interface ViewContext {
   files: VirtualFile[];
@@ -13,7 +14,7 @@ export interface ViewContext {
   vsixApi?: import("@enjoys/monaco-vanced/extensions/vsix-module").VSIXModuleAPI;
   authApi?: import("@enjoys/monaco-vanced/infrastructure/auth-module").AuthModuleAPI;
   marketplaceApi?: import("@enjoys/monaco-vanced/extensions/marketplace-module").MarketplaceModuleAPI;
-  indexerApi?: { query(q: { name?: string; kind?: string; file?: string }): { name: string; kind: string; path: string; line: number; column: number }[]; getFileSymbols(path: string): { name: string; kind: string; path: string; line: number; column: number }[]; isReady(): boolean };
+  indexerApi?: ChatIndexerApi;
 }
 
 // ── Plugin catalog — all 81 modules across 12 categories ────

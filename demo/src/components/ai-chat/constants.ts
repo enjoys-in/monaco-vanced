@@ -14,6 +14,44 @@ export const SymbolIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill=
 export const SelectionIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2h12v1H2V2zm0 3h12v1H2V5zm0 3h8v1H2V8zm0 3h10v1H2v-1z"/></svg>`;
 export const HashIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M3.5 2L2.5 8h3l-.5 3h-2l-.2 1h2l-.3 2h1l.3-2h2l-.3 2h1l.3-2h2l.2-1h-2l.5-3h2l.2-1h-2L7.7 2h-1L6.2 7h-2L4.5 2h-1zm3.2 5l-.5 3h-2l.5-3h2z"/></svg>`;
 
+// ── Symbol kind → codicon SVG icon (VS Code style) ───────────
+const S = (d: string) => `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">${d}</svg>`;
+const SYMBOL_ICONS: Record<string, string> = {
+  file:          S(`<path d="M13.71 4.29l-3-3L10 1H4L3 2v12l1 1h8l1-1V5l-.29-.71zM13 14H4V2h5v4h4v8z"/>`),
+  module:        S(`<path d="M8 1L1 4.5v7L8 15l7-3.5v-7L8 1zm0 1.12L13.15 5 8 7.88 2.85 5 8 2.12zM2 11V5.88l5.5 2.75V14L2 11zm6.5 3V8.63L14 5.88V11l-5.5 3z"/>`),
+  namespace:     S(`<path d="M8 1L1 4.5v7L8 15l7-3.5v-7L8 1zm0 1.12L13.15 5 8 7.88 2.85 5 8 2.12zM2 11V5.88l5.5 2.75V14L2 11zm6.5 3V8.63L14 5.88V11l-5.5 3z"/>`),
+  package:       S(`<path d="M8 1L1 4.5v7L8 15l7-3.5v-7L8 1zm0 1.12L13.15 5 8 7.88 2.85 5 8 2.12zM2 11V5.88l5.5 2.75V14L2 11zm6.5 3V8.63L14 5.88V11l-5.5 3z"/>`),
+  class:         S(`<path d="M11.34 3.3l-3.54-2.2h-.6L3.66 3.3l-.36.6v4.2l.36.6 3.54 2.2h.6l3.54-2.2.36-.6V3.9l-.36-.6zm-.7 4.5L8 9.6 5.36 7.8V4.2L8 2.4l2.64 1.8v3.6z"/><path d="M8.5 10.7v2.8l3.54-2.2.36-.6V8.5L8.5 10.7z"/><path d="M7.5 10.7L3.6 8.5v2.2l.36.6L7.5 13.5V10.7z"/>`),
+  method:        S(`<path d="M13.51 4l-5-3h-1l-5 3-.49.86v6l.49.85 5 3h1l5-3 .49-.85v-6L13.51 4zm-6 9.56l-4.5-2.7V5.7l4.5 2.45v5.41zM3.27 4.7L7.5 2.08l4.23 2.63L7.5 7.25 3.27 4.71zm9.23 6.16l-4.5 2.7V8.15l4.5-2.45v5.16z"/>`),
+  property:      S(`<path d="M2 3h2v1H2V3zm4 0h8v1H6V3zM2 6h2v1H2V6zm4 0h8v1H6V6zM2 9h2v1H2V9zm4 0h8v1H6V9zM2 12h2v1H2v-1zm4 0h8v1H6v-1z"/>`),
+  field:         S(`<path d="M2 3h2v1H2V3zm4 0h8v1H6V3zM2 6h2v1H2V6zm4 0h8v1H6V6zM2 9h2v1H2V9zm4 0h8v1H6V9zM2 12h2v1H2v-1zm4 0h8v1H6v-1z"/>`),
+  constructor:   S(`<path d="M13.51 4l-5-3h-1l-5 3-.49.86v6l.49.85 5 3h1l5-3 .49-.85v-6L13.51 4zm-6 9.56l-4.5-2.7V5.7l4.5 2.45v5.41zM3.27 4.7L7.5 2.08l4.23 2.63L7.5 7.25 3.27 4.71zm9.23 6.16l-4.5 2.7V8.15l4.5-2.45v5.16z"/>`),
+  enum:          S(`<path d="M14 3H8l-1 1v3l1 1h6l1-1V4l-1-1zm0 4H8V4h6v3zM7 8H1L0 9v3l1 1h6l1-1V9L7 8zm0 4H1V9h6v3zm7-1h-6l-1 1v3l1 1h6l1-1v-3l-1-1zm0 4H8v-3h6v3z"/>`),
+  interface:     S(`<path d="M11.496 4a3.49 3.49 0 00-3.46 3h-3.1a2 2 0 100 1h3.1a3.5 3.5 0 103.46-4zm0 6a2.5 2.5 0 110-5 2.5 2.5 0 010 5z"/>`),
+  function:      S(`<path d="M4.46 5h1.4l-.64 2.72H6.7l.14-.57h.71l-.14.57.62-.01-.18.7H7.3L6.8 10.4c-.17.71-.56 1.13-1.28 1.13-.16 0-.38-.03-.56-.07l.16-.67c.1.02.21.04.32.04.33 0 .47-.2.57-.6L6.5 8.41H5.07l.17-.7h1.41l.5-2.12a1.2 1.2 0 011.21-1.03c.17 0 .39.04.56.08l-.16.66a1.2 1.2 0 00-.3-.04c-.33 0-.47.2-.56.61L7.44 7.7h1.51l-.16.7H7.31l-.52 2z"/>`),
+  variable:      S(`<path d="M2 5h12v2H2V5zm3 4h6v2H5V9z"/>`),
+  constant:      S(`<path d="M4 6h8v1H4V6zm0 3h8v1H4V9z"/><rect x="3" y="2" width="10" height="12" rx="1" fill="none" stroke="currentColor" stroke-width="1"/>`),
+  string:        S(`<path d="M5.5 4A1.5 1.5 0 004 5.5v1A1.5 1.5 0 005.5 8h.25a.25.25 0 01.25.25V9a2 2 0 01-2 2h-.5v1H4a3 3 0 003-3V5.5A1.5 1.5 0 005.5 4zm5 0A1.5 1.5 0 009 5.5v1A1.5 1.5 0 0010.5 8h.25a.25.25 0 01.25.25V9a2 2 0 01-2 2h-.5v1h.5a3 3 0 003-3V5.5A1.5 1.5 0 0010.5 4z"/>`),
+  number:        S(`<path d="M4.42 7h1.95l.47-2.4h1L7.37 7h2l.47-2.4h1L10.37 7H12v1h-1.83l-.39 2H12v1h-2.42l-.47 2.4h-1l.47-2.4h-2l-.47 2.4h-1l.47-2.4H4v-1h1.83l.39-2H4v-1zm2.75 1l-.39 2h2l.39-2h-2z"/>`),
+  boolean:       S(`<path d="M5 3a5 5 0 000 10h6a5 5 0 000-10H5zm0 1h6a4 4 0 010 8H5a4 4 0 010-8zm6 2a2 2 0 100 4 2 2 0 000-4z"/>`),
+  array:         S(`<path d="M2 2h4v1H3v10h3v1H2V2zm8 0h4v12h-4v-1h3V3h-3V2z"/>`),
+  object:        S(`<path d="M2 3l1-1h3v1H3.6L3 3.6V7h2v1H3v3.4l.6.6H6v1H3l-1-1V9H1V7h1V3zm12 0l-1-1h-3v1h2.4l.6.6V7h-2v1h2v3.4l-.6.6H10v1h3l1-1V9h1V7h-1V3z"/>`),
+  key:           S(`<path d="M10 3a4 4 0 00-3.87 3H2v2h.5v2h2V8H6v.13A4 4 0 1010 3zm0 6a2 2 0 110-4 2 2 0 010 4z"/>`),
+  null:          S(`<path d="M3 3h10v10H3V3zm1 1v8h8V4H4zm2 3h4v2H6V7z"/>`),
+  enummember:    S(`<path d="M14 3H8l-1 1v3l1 1h6l1-1V4l-1-1zm0 4H8V4h6v3z"/>`),
+  struct:        S(`<path d="M1 2h14v3H1V2zm0 4.5h6.5V10H1V6.5zm7.5 0H15V10H8.5V6.5zM1 11.5h14v3H1v-3z"/>`),
+  event:         S(`<path d="M7.414 1L9 3.586V7l-1.707 1.707L9 10.414 7.414 12 4 8.586l2.293-2.293L5 5V1h2.414zM6 2v2.586l1.707 1.707L6 8l2 2 1.293-1.293L11 7V3.414L9.586 2H6z"/>`),
+  operator:      S(`<path d="M2 7h12v2H2V7zm3-4h6v2H5V3zm0 8h6v2H5v-2z"/>`),
+  typeparameter: S(`<path d="M3 3h10l1 1v3l-1 1H9v5H7V8H3L2 7V4l1-1zm0 4h10V4H3v3z"/>`),
+  type:          S(`<path d="M3 3h10l1 1v3l-1 1H9v5H7V8H3L2 7V4l1-1zm0 4h10V4H3v3z"/>`),
+  import:        S(`<path d="M8 1L1 4.5v7L8 15l7-3.5v-7L8 1zm0 1.12L13.15 5 8 7.88 2.85 5 8 2.12zM2 11V5.88l5.5 2.75V14L2 11zm6.5 3V8.63L14 5.88V11l-5.5 3z"/>`),
+};
+
+/** Get a VS Code-style codicon SVG for a symbol kind */
+export function symbolKindIcon(kind: string): string {
+  return SYMBOL_ICONS[kind.toLowerCase()] || SYMBOL_ICONS.variable;
+}
+
 // ── Symbol kind → color ──────────────────────────────────────
 const SYMBOL_COLORS: Record<string, string> = {
   file: "#d4d4d4", module: "#c586c0", namespace: "#c586c0", package: "#c586c0",

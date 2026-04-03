@@ -112,6 +112,21 @@
   50% { opacity: 0.4; }
 }
 
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ── Symbol highlight line (fade out) ──────────────────────── */
+.symbol-highlight-line {
+  background: rgba(255, 204, 0, 0.15) !important;
+  animation: symbol-highlight-fade 2s ease-out forwards;
+}
+@keyframes symbol-highlight-fade {
+  0% { background: rgba(255, 204, 0, 0.25); }
+  100% { background: transparent; }
+}
+
 /* ── Explorer enhancements ─────────────────────────────────── */
 .explorer-item { transition: background .08s ease; }
 .explorer-item:hover { background: rgba(255,255,255,0.04); }

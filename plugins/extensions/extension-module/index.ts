@@ -65,14 +65,14 @@ export function createExtensionPlugin(config: ExtensionConfig = {}): {
 
     enable(extensionId: string) {
       const ext = extensions.get(extensionId);
-      if (!ext) throw new Error(`Extension "${extensionId}" not found`);
+      if (!ext) return;
       ext.state = "enabled";
       ctx?.emit(ExtensionEvents.Enabled, { id: extensionId });
     },
 
     disable(extensionId: string) {
       const ext = extensions.get(extensionId);
-      if (!ext) throw new Error(`Extension "${extensionId}" not found`);
+      if (!ext) return;
       ext.state = "disabled";
       ctx?.emit(ExtensionEvents.Disabled, { id: extensionId });
     },

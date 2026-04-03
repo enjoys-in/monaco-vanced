@@ -11,6 +11,7 @@ import { VIEW_TITLES } from "./types";
 import { createRoot, type Root } from "react-dom/client";
 import { ThemeProvider } from "../../../components/theme";
 import { SidebarViews } from "../../../components/sidebar";
+import type { ChatIndexerApi } from "../../../components/ai-chat/types";
 
 export interface SidebarExtras {
   iconApi?: ExplorerIconAPI;
@@ -19,7 +20,7 @@ export interface SidebarExtras {
   authApi?: import("@enjoys/monaco-vanced/infrastructure/auth-module").AuthModuleAPI;
   marketplaceApi?: import("@enjoys/monaco-vanced/extensions/marketplace-module").MarketplaceModuleAPI;
   aiApi?: { chat(messages: { role: string; content: string }[], opts?: Record<string, unknown>): Promise<{ content: string; metadata?: Record<string, unknown> }>; abort(): void; getStatus(): string };
-  indexerApi?: { query(q: { query: string; kind?: string; path?: string }): { name: string; kind: string; path: string; line: number; column: number }[]; getFileSymbols(path: string): { name: string; kind: string; path: string; line: number; column: number }[]; isReady(): boolean };
+  indexerApi?: ChatIndexerApi;
 }
 
 export function wireSidebar(

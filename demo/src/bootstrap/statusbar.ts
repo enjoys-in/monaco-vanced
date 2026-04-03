@@ -141,19 +141,12 @@ export function wireStatusBar(deps: StatusBarDeps) {
   const indexerApi = apis.indexer;
   function updateSymbolCount() {
     if (!indexerApi?.isReady()) return;
-    const model = ide.editor.getModel();
-    if (!model) {
-      statusbarApi.update("symbol-count", { visible: false });
-      return;
-    }
-    const filePath = model.uri.path.replace(/^\/+/, "");
-    const langId = model.getLanguageId();
-    const symbols = indexerApi.getFileSymbols(filePath);
-    const count = symbols.length;
+    const allSymbols = indexerApi.query({ query: "" });
+    const total = allSymbols.length;
     statusbarApi.update("symbol-count", {
-      label: `[${langId} Importer]: Symbol: ${count}`,
-      tooltip: `${count} symbol${count !== 1 ? "s" : ""} in ${filePath} — Click to Search Symbols`,
-      visible: count > 0,
+      label: `$(symbol-method) Symbols: ${total}`,
+      tooltip: `${total} indexed symbol${total !== 1 ? "s" : ""} across workspace — Click to Search Symbols`,
+      visible: total > 0,
     });
   }
   ide.editor.onDidChangeModel(() => { updateSymbolCount(); });

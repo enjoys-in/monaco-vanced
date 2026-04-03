@@ -31,10 +31,10 @@ export function wireEditor(deps: EditorWiringDeps) {
   const { ide, eventBus, mockFs, models, DEMO_FILES, apis, elements } = deps;
   const { activityBarEl, statusBarEl, sidebarEl, breadcrumbEl } = elements;
 
-  // ── Wire file:open → switch Monaco model ─────────────────
+  // ── Wire file:open → switch Monaco model + reveal line ───
   eventBus.on(FileEvents.Open, (payload: unknown) => {
-    const { uri } = payload as { uri: string };
-    console.log("[monaco-vanced] file:open →", uri);
+    const { uri, line, column } = payload as { uri: string; line?: number; column?: number };
+    console.log("[monaco-vanced] file:open →", uri, line ? `L${line}` : "");
     const file = DEMO_FILES.find((f) => f.uri === uri);
     if (!file) return;
     let model = models.get(file.uri);
@@ -44,6 +44,24 @@ export function wireEditor(deps: EditorWiringDeps) {
       models.set(file.uri, model);
     }
     if (ide.editor.getModel() !== model) ide.editor.setModel(model);
+
+    // Reveal and highlight the target line if provided
+    if (line && line > 0) {
+      const col = column && column > 0 ? column : 1;
+      ide.editor.setPosition({ lineNumber: line, column: col });
+      ide.editor.revealLineInCenter(line);
+      // Highlight the line briefly
+      const decorations = ide.editor.createDecorationsCollection([{
+        range: new monaco.Range(line, 1, line, model.getLineMaxColumn(line)),
+        options: {
+          isWholeLine: true,
+          className: "symbol-highlight-line",
+          overviewRuler: { color: "#ffcc0066", position: monaco.editor.OverviewRulerLane.Full },
+        },
+      }]);
+      setTimeout(() => decorations.clear(), 2000);
+    }
+    ide.editor.focus();
   });
 
   // ── Wire editor content changes → mock FS + dirty tracking ──

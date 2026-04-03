@@ -6,7 +6,7 @@ import type { ChatMessage, AttachedSymbol, AttachedSelection, ChatEventBus } fro
 import { FileEvents } from "@enjoys/monaco-vanced/core/events";
 import {
   SparkleIcon, FileIcon, SelectionIcon,
-  symbolKindColor, symbolKindLabel, fileColor,
+  symbolKindColor, symbolKindLabel, symbolKindIcon, fileColor,
   renderContent, formatTime,
 } from "./constants";
 
@@ -145,8 +145,9 @@ function SymbolChip({ sym, tokens: t, onClick }: { sym: AttachedSymbol; tokens: 
       }}
       title={`Open ${sym.file}:${sym.line}`}
     >
-      <span style={{ color: symbolKindColor(sym.kind), fontWeight: 600, fontSize: 10 }}>{symbolKindLabel(sym.kind)}</span>
-      <span style={{ color: symbolKindColor(sym.kind) }}>{sym.name}</span>
+      <span dangerouslySetInnerHTML={{ __html: symbolKindIcon(sym.kind) }} style={{ display: "inline-flex", color: symbolKindColor(sym.kind), flexShrink: 0 }} />
+      <span style={{ color: symbolKindColor(sym.kind), fontWeight: 500 }}>{sym.name}</span>
+      <span style={{ fontSize: 10, color: t.fgDim }}>{symbolKindLabel(sym.kind)}</span>
     </span>
   );
 }

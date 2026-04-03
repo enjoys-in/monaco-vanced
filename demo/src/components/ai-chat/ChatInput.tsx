@@ -6,7 +6,7 @@ import type { AttachedSymbol, AttachedSelection, MentionItem, ChatIndexerApi, Ch
 import { FileEvents } from "@enjoys/monaco-vanced/core/events";
 import {
   SendIcon, StopIcon, AttachIcon, SelectionIcon, HashIcon, FileIcon, SymbolIcon,
-  symbolKindColor, symbolKindLabel, fileColor,
+  symbolKindColor, symbolKindLabel, symbolKindIcon, fileColor,
   SLASH_COMMANDS, getEditorSelectionDetail,
 } from "./constants";
 
@@ -196,7 +196,7 @@ export function ChatInput({
                 onClick={() => { const name = sym.file.split("/").pop() ?? sym.file; eventBus.emit(FileEvents.Open, { uri: sym.file, label: name, line: sym.line }); }}
                 title={`Open ${sym.file}:${sym.line}`}
               >
-                <span dangerouslySetInnerHTML={{ __html: SymbolIcon }} style={{ color: symbolKindColor(sym.kind), flexShrink: 0 }} />
+                <span dangerouslySetInnerHTML={{ __html: symbolKindIcon(sym.kind) }} style={{ color: symbolKindColor(sym.kind), flexShrink: 0 }} />
                 <span style={{ color: symbolKindColor(sym.kind), fontWeight: 500 }}>{sym.name}</span>
                 <span style={{ fontSize: 10, color: t.fgDim }}>{symbolKindLabel(sym.kind)}</span>
                 <span style={{ cursor: "pointer", color: t.fgDim, marginLeft: 2, fontSize: 14, lineHeight: 1 }} onClick={(e) => { e.stopPropagation(); onRemoveSymbol(key); }} title="Remove">×</span>
@@ -284,7 +284,7 @@ export function ChatInput({
                 {item.kind === "file" ? (
                   <span dangerouslySetInnerHTML={{ __html: FileIcon }} style={{ color: item.color, flexShrink: 0 }} />
                 ) : (
-                  <span dangerouslySetInnerHTML={{ __html: SymbolIcon }} style={{ color: item.color, flexShrink: 0 }} />
+                  <span dangerouslySetInnerHTML={{ __html: symbolKindIcon(item._sym?.kind ?? "variable") }} style={{ color: item.color, flexShrink: 0 }} />
                 )}
                 <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   <span style={{ color: item.kind === "symbol" ? item.color : t.fg }}>{item.label}</span>

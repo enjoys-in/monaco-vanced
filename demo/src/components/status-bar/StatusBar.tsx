@@ -13,6 +13,9 @@ const CODICONS: Record<string, string> = {
   "check": `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M14.431 3.323l-8.47 10-.79-.036-3.35-4.77.818-.574 2.978 4.24 8.051-9.506.764.646z"/></svg>`,
   "feedback": `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M6 1h4l.5.5V6l4.5 4.5-.5.5-4.5-4.5H6l-.5-.5V1.5L6 1z"/><path d="M1.5 9.5l.5-.5h4l.5.5v4L2 9.5z"/></svg>`,
   "bell": `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M13.377 10.573a7.63 7.63 0 01-.383-2.38V6.195a5.115 5.115 0 00-1.268-3.446 5.138 5.138 0 00-3.242-1.722c-.694-.072-1.4 0-2.07.227-.67.215-1.28.574-1.794 1.053a4.923 4.923 0 00-1.208 1.675 5.067 5.067 0 00-.431 2.022v2.2a7.61 7.61 0 01-.383 2.37L2 12H6a2 2 0 104 0h4l-.623-1.427zM8 14a1 1 0 01-1-1h2a1 1 0 01-1 1z"/></svg>`,
+  "plug": `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M5 1v3H4v2.05A4.48 4.48 0 007 10v1H6v2h4v-2H9v-1a4.48 4.48 0 003-3.95V4h-1V1h-2v3H7V1H5z"/></svg>`,
+  "loading~spin": `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style="animation:spin 1s linear infinite"><path d="M13.917 7A6.002 6.002 0 002.083 7H1.071a7.002 7.002 0 0113.858 0h-1.012z"/></svg>`,
+  "symbol-method": `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M13.51 4l-5-3h-1l-5 3-.49.86v6l.49.85 5 3h1l5-3 .49-.85v-6L13.51 4zm-6 9.56l-4.5-2.7V5.7l4.5 2.45v5.41zM3.27 4.7L7.5 2.08l4.23 2.63L7.5 7.25 3.27 4.71zm9.23 6.16l-4.5 2.7V8.15l4.5-2.45v5.16z"/></svg>`,
 };
 
 // ── Types ────────────────────────────────────────────────────
